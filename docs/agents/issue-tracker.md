@@ -13,6 +13,24 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Title prefixes
+
+Every issue title starts with a fixed prefix that records where it came from. `#NN` is the parent's issue number; the prefix is followed by one space and the human-readable name.
+
+| Issue                                   | Prefix                         | Example                                          |
+| --------------------------------------- | ------------------------------ | ------------------------------------------------ |
+| Wayfinder map                           | `[MAP]`                        | `[MAP] smq v1 스펙`                              |
+| Map ticket, `wayfinder:research`        | `[MAP #NN / RESEARCH]`         | `[MAP #1 / RESEARCH] RabbitMQ 핵심 기능 조사`    |
+| Map ticket, `wayfinder:grilling`        | `[MAP #NN / GRILLING]`         | `[MAP #1 / GRILLING] v1 기능 범위 확정`          |
+| Map ticket, `wayfinder:prototype`       | `[MAP #NN / PROTOTYPE]`        | `[MAP #1 / PROTOTYPE] 공개 Java API의 모양`      |
+| Map ticket, `wayfinder:task`            | `[MAP #NN / TASK]`             | `[MAP #1 / TASK] ...`                            |
+| Spec published from a map               | `[MAP #NN / SPEC]`             | `[MAP #1 / SPEC] smq v1`                         |
+| Ticket published from a spec            | `[SPEC #NN / TICKET-N]`        | `[SPEC #12 / TICKET-3] SQLite 저장소 구현`       |
+
+- `TICKET-N` numbers the spec's tickets in order from `1`, independent of GitHub issue numbers.
+- The prefix is part of the title, not a substitute for labels: keep applying the `wayfinder:*` and triage labels as usual.
+- When referring to an issue by name in prose, the name is the title without its prefix.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_

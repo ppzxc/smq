@@ -97,7 +97,7 @@ _Avoid_: 반납, release, requeue
 _Avoid_: NACK(requeue=false), 버리기
 
 **낡은 연산(Stale operation)**:
-메시지가 이미 다른 리스로 넘어간 뒤에 이전 리스를 근거로 시도한 ACK, NACK, reject, 연장. 효력이 없고 실패가 아니라 결과로 알려진다.
+메시지가 이미 다른 리스로 넘어갔거나 같은 리스로 이미 정산된 뒤에 그 리스를 근거로 시도한 ACK, NACK, reject, 연장. 효력이 없고 실패가 아니라 결과로 알려진다.
 _Avoid_: 만료된 ACK, 충돌
 
 ### 재시도와 dead letter

@@ -133,7 +133,7 @@ PGMQ의 `read_ct`, River와 Oban의 `attempt`는 모두 **클레임 문장 안�
 - Java: pgjdbc의 `PGConnection.getNotifications(int timeoutMillis)`는 알림이 올 때까지 최대 timeout만큼 블록한다(0이면 무한). 이전 문서에는 "드라이버가 비동기 알림을 받을 수 없으니 폴링해야 한다"는 설명이 남아 있지만, 현재는 timeout 오버로드를 쓰는 것이 맞다. 출처: https://jdbc.postgresql.org/documentation/publicapi/org/postgresql/PGConnection.html , https://jdbc.postgresql.org/documentation/server-prepare/ (Listen / Notify 절)
 - PGMQ는 INSERT 트리거로 `PG_NOTIFY('pgmq.q_<queue>.INSERT', NULL)`을 보내고, `notify_insert_throttle` 테이블로 기본 250ms 스로틀을 건다. 출처: https://github.com/pgmq/pgmq/blob/8efb078dbe7afe16c83be72e9fffefbb03ebd9e9/pgmq-extension/sql/pgmq.sql#L1775-L1806
 - PGMQ의 `read_with_poll`은 서버 측에서 `pg_sleep` 루프를 돈다(연결을 점유함). 출처: 같은 파일 #L551-L611
-- Que는 LISTEN 기반 locker가 잡을 워커에 배분하고 poller가 폴백 역할을 한다. 출처: https://github.com/que-rb/que/blob/57cfa4a4d4ad3f23a4f20972ff2c7f4ceed58d85/lib/que/poller.rb#L62
+- Que는 `listener.rb`에서 `LISTEN` 채널을 열고 `wait_for_notify(timeout)`으로 알림을 기다린다. 이와 별도로 `poller.rb`가 DB를 폴링하는 경로도 갖고 있다. 출처: https://github.com/que-rb/que/blob/57cfa4a4d4ad3f23a4f20972ff2c7f4ceed58d85/lib/que/listener.rb#L21 , #L57 , https://github.com/que-rb/que/blob/57cfa4a4d4ad3f23a4f20972ff2c7f4ceed58d85/lib/que/poller.rb#L62
 
 ### 3.2 SQLite: 프로세스 간 푸시는 없다
 
@@ -141,7 +141,7 @@ PGMQ의 `read_ct`, River와 Oban의 `attempt`는 모두 **클레임 문장 안�
 - **`PRAGMA data_version`**: 같은 연결에서 두 번 호출한 값이 다르면 그 사이에 **다른 연결이 커밋한 것**이다. 이 동작은 별도 프로세스의 연결에도 똑같이 적용된다고 문서에 명시되어 있다. 값은 연결마다 고유하므로 같은 연결에서 나온 값끼리만 비교할 수 있다. 이 쿼리는 테이블을 읽지 않으므로 가벼울 것으로 본다(판단). 그래서 **"가벼운 변경 감지 폴링 → 변경이 있으면 클레임 시도"**라는 2단계 폴링을 할 수 있다. 단점은 어떤 테이블이든 커밋이 있으면 값이 바뀐다는 것(큐를 구분하지 못함)이다. 출처: https://www.sqlite.org/pragma.html#pragma_data_version
 - **알림 아웃박스 테이블(River SQLite)**: SQLite에는 LISTEN/NOTIFY가 없으므로 River는 `NotifyMany`에서 `river_notification` 테이블에 행을 추가하고, Listener가 기본 50ms 간격으로 `id > lastID`인 행을 폴링한다. 소스 주석은 `lastID` 커서가 안전한 이유를 "SQLite가 writer를 직렬화하기 때문"이라고 밝힌다. 낮은 id를 삽입한 트랜잭션이 커밋하기 전까지 다른 트랜잭션은 더 높은 id를 커밋할 수 없다는 것이다. 그리고 "다중 writer DB에서는 성립하지 않는다"고 적는다. 즉 **같은 아웃박스 기법을 PG 시퀀스에 그대로 옮기면 알림이 누락될 수 있다.** 이것도 백엔드 경계 안에 숨겨야 하는 차이다. 출처: https://github.com/riverqueue/river/blob/436cbb72ffc7f0fcfe39a83bb8923739cf1b0fc6/riverdriver/riversqlite/river_sqlite_listener.go#L17-L46
 - 그 밖에 OS 파일 감시(WAL 파일 변경 감지)도 생각할 수 있지만, 1차 출처에서 보장하는 동작이 아니므로 이 조사에서는 후보로 두지 않는다.
-- 같은 프로세스 안에서는 백엔드와 무관하게 코어가 publish 직후 로컬 소비자를 직접 깨울 수 있다. Hangfire도 같은 프로세스의 enqueue 신호를 대기 핸들로 받는다(`GetWaitArrayForQueueSignals`, SqlServerJobQueue.cs L237).
+- 같은 프로세스 안에서는 백엔드와 무관하게 코어가 publish 직후 로컬 소비자를 직접 깨울 수 있다. Hangfire도 `(storage, queue)`별 `AutoResetEvent`를 정적 딕셔너리(`NewItemInQueueEvents`)에 두고, dequeue가 폴링 간격과 함께 이 핸들을 기다린다(같은 프로세스 한정). 출처: https://github.com/HangfireIO/Hangfire/blob/ad2f963ea9032e84de2c5233e11d52a88e26d3e4/src/Hangfire.SqlServer/SqlServerJobQueue.cs#L37 , #L325-L334
 
 ### 3.3 인메모리
 
@@ -169,7 +169,7 @@ PGMQ의 `read_ct`, River와 Oban의 `attempt`는 모두 **클레임 문장 안�
 |---|---|---|---|
 | 클레임 | `BEGIN IMMEDIATE` + `UPDATE ... WHERE id IN (SELECT ... LIMIT n) RETURNING` | `WITH c AS (SELECT ... FOR UPDATE SKIP LOCKED) UPDATE ... RETURNING` | 큐 락 + deque |
 | 동시 클레임 | writer 직렬화(경합 = `SQLITE_BUSY`, #4) | 행 락 + SKIP LOCKED로 병렬 | 락 직렬화 |
-| 결과 순서 | 보장 없음 → 메모리에서 정렬 | `ORDER BY`로 고정 가능(RETURNING 순서는 별도 확인 필요) | 직접 제어 |
+| 결과 순서 | 보장 없음 → 메모리에서 정렬 | `UPDATE ... RETURNING` 순서는 확인하지 않음 → 애플리케이션에서 정렬 권장 | 직접 제어 |
 | 리스 표현 | `visible_at` 컬럼(epoch ms, 호출자의 시계) | `visible_at` (서버 시계 가능) | in-flight 맵 |
 | 만료 회수 | 클레임 조건에 포함 | 클레임 조건에 포함 | 클레임할 때 lazy 회수 |
 | 펜싱 | `attempt`나 토큰 조건부 UPDATE | 같음 | 토큰 비교 |

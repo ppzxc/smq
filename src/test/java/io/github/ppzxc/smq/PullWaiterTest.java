@@ -95,7 +95,11 @@ class PullWaiterTest {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
         AtomicInteger attempts = new AtomicInteger();
         String result = waiter.await(Duration.ofSeconds(30), () -> {
-            if (attempts.incrementAndGet() == 3) {
+            int n = attempts.incrementAndGet();
+            if (n > 3) {
+                throw new AssertionError("닫힌 뒤에도 다시 꺼냈다");
+            }
+            if (n == 3) {
                 waiter.close();
             }
             return null;
@@ -109,7 +113,11 @@ class PullWaiterTest {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
         AtomicInteger attempts = new AtomicInteger();
         assertThrows(InterruptedException.class, () -> waiter.await(Duration.ofSeconds(30), () -> {
-            if (attempts.incrementAndGet() == 3) {
+            int n = attempts.incrementAndGet();
+            if (n > 3) {
+                throw new AssertionError("interrupt된 뒤에도 다시 꺼냈다");
+            }
+            if (n == 3) {
                 Thread.currentThread().interrupt();
             }
             return null;

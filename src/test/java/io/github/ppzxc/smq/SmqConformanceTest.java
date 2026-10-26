@@ -17,9 +17,14 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
-/** 공개 API만으로 작성한 적합성 스위트. 저장소 팩토리만 하위 클래스가 정한다. */
+/**
+ * 공개 API만으로 작성한 적합성 스위트. 저장소 팩토리만 하위 클래스가 정한다.
+ * 다시 꺼내기 루프가 잘못되어도 무한 반복 대신 실패하도록 시간 제한을 둔다.
+ */
+@Timeout(60)
 abstract class SmqConformanceTest {
 
     static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");

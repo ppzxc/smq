@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     `java-library`
     `maven-publish`
@@ -12,6 +14,21 @@ java {
     }
     withSourcesJar()
     withJavadocJar()
+}
+
+// 벤치 하네스. 배포 jar에는 들어가지 않고, main 출력과 sqlite-jdbc에만 의존한다.
+val benchmark: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets.main.get().output
+    runtimeClasspath += sourceSets.main.get().output
+}
+
+configurations[benchmark.implementationConfigurationName].extendsFrom(configurations.implementation.get())
+configurations[benchmark.runtimeOnlyConfigurationName].extendsFrom(configurations.runtimeOnly.get())
+
+// 러너·집계·비교기 같은 순수 로직은 test 소스셋에서 단위 테스트한다.
+sourceSets.test {
+    compileClasspath += benchmark.output
+    runtimeClasspath += benchmark.output
 }
 
 repositories {
@@ -30,6 +47,46 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.release = 25
 }
+
+val benchmarkBaseline = layout.projectDirectory.file("benchmark/baseline.json")
+
+fun JavaExec.benchmarkRunner(vararg extra: String) {
+    group = "benchmark"
+    classpath = benchmark.runtimeClasspath
+    mainClass = "io.github.ppzxc.smq.benchmark.BenchMain"
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+    args(*extra)
+}
+
+tasks.register<JavaExec>("benchmarkSmoke") {
+    description = "짧은 스모크 실행. 임계값 없이 하네스가 끝까지 도는지만 확인한다."
+    benchmarkRunner("--mode", "smoke")
+}
+
+tasks.register<JavaExec>("benchmark") {
+    description = "전체 벤치. 기준 환경에서 수동으로 돌린다. -Pbenchmark.args=\"...\"로 옵션을 더한다."
+    benchmarkRunner("--mode", "full", "--baseline", benchmarkBaseline.asFile.path,
+            "--output", layout.buildDirectory.file("benchmark/result.json").get().asFile.path)
+    (findProperty("benchmark.args") as String?)?.let { args(it.split(" ").filter(String::isNotBlank)) }
+}
+
+// benchmark 소스셋이 배포 jar와 소스 jar에 섞이지 않았는지 jar 내용으로 확인한다.
+val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
+    group = "verification"
+    val jars = tasks.jar.get().archiveFile
+    val sources = tasks.named<Jar>("sourcesJar").get().archiveFile
+    dependsOn(tasks.jar, tasks.named("sourcesJar"))
+    doLast {
+        listOf(jars.get().asFile, sources.get().asFile).forEach { jar ->
+            val entries = ZipFile(jar).use { z -> z.entries().toList().map { it.name } }
+            check(entries.any { it.endsWith("smq/Smq.class") || it.endsWith("smq/Smq.java") }) { "${jar.name}에 main 항목이 없다" }
+            val bad = entries.filter { it.contains("smq/benchmark/") }
+            check(bad.isEmpty()) { "${jar.name}에 benchmark 항목이 들어 있다: $bad" }
+        }
+    }
+}
+tasks.check { dependsOn(verifyJarExcludesBenchmark) }
 
 tasks.test {
     useJUnitPlatform()

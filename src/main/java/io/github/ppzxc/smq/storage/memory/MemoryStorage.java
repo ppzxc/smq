@@ -177,8 +177,13 @@ public final class MemoryStorage implements Storage {
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
         lock.lock();
         try {
+            TreeMap<Long, Entry> entries = require(queue);
+            if (optionsByQueue.get(queue).singleActiveConsumer()
+                    && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
+                return PullResult.empty();
+            }
             List<Entry> picked = new ArrayList<>();
-            for (Entry e : require(queue).values()) {
+            for (Entry e : entries.values()) {
                 if (isReady(e, now)) {
                     picked.add(e);
                     if (picked.size() == max) {
@@ -307,6 +312,10 @@ public final class MemoryStorage implements Storage {
     /** 리스가 없거나 기한이 지났으면 준비 상태다. 기한이 지나도 다시 꺼내기 전까지는 리스 토큰이 남아 있다. */
     private static boolean isReady(Entry e, Instant now) {
         return !isDelayed(e, now) && (e.leaseToken == null || !e.leaseDeadline.isAfter(now));
+    }
+
+    private static boolean isLeased(Entry e, Instant now) {
+        return e.leaseToken != null && e.leaseDeadline.isAfter(now);
     }
 
     private static boolean isDelayed(Entry e, Instant now) {

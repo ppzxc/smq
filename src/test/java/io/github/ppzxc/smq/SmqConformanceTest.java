@@ -918,46 +918,33 @@ abstract class SmqConformanceTest {
         int total = producers * perProducer;
         var seen = java.util.concurrent.ConcurrentHashMap.<String>newKeySet();
         var duplicates = new java.util.concurrent.atomic.AtomicInteger();
-        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
         var delivered = new java.util.concurrent.atomic.AtomicInteger();
-        List<Thread> threads = new ArrayList<>();
+        List<ThrowingRunnable> tasks = new ArrayList<>();
         for (int c = 0; c < consumers; c++) {
-            threads.add(Thread.ofPlatform().start(() -> {
-                try {
-                    while (delivered.get() < total) {
-                        Chunk chunk = q.pull(7, Duration.ofMillis(200));
-                        for (Message m : chunk.messages()) {
-                            if (!seen.add(text(m))) {
-                                duplicates.incrementAndGet();
-                            }
-                        }
-                        if (!chunk.isEmpty()) {
-                            q.settle(chunk.ackAll());
-                            delivered.addAndGet(chunk.messages().size());
+            tasks.add(() -> {
+                while (delivered.get() < total) {
+                    Chunk chunk = q.pull(7, Duration.ofMillis(200));
+                    for (Message m : chunk.messages()) {
+                        if (!seen.add(text(m))) {
+                            duplicates.incrementAndGet();
                         }
                     }
-                } catch (Throwable e) {
-                    failure.set(e);
+                    if (!chunk.isEmpty()) {
+                        q.settle(chunk.ackAll());
+                        delivered.addAndGet(chunk.messages().size());
+                    }
                 }
-            }));
+            });
         }
         for (int p = 0; p < producers; p++) {
             int id = p;
-            threads.add(Thread.ofPlatform().start(() -> {
-                try {
-                    for (int i = 0; i < perProducer; i++) {
-                        q.publish(msg(id + "-" + i));
-                    }
-                } catch (Throwable e) {
-                    failure.set(e);
+            tasks.add(() -> {
+                for (int i = 0; i < perProducer; i++) {
+                    q.publish(msg(id + "-" + i));
                 }
-            }));
+            });
         }
-        for (Thread t : threads) {
-            t.join(30_000);
-            assertFalse(t.isAlive());
-        }
-        assertNull(failure.get());
+        runConcurrently(tasks);
         assertEquals(0, duplicates.get());
         assertEquals(total, seen.size());
         assertEquals(new QueueCounts(0, 0, 0), q.counts());
@@ -1056,5 +1043,130 @@ abstract class SmqConformanceTest {
         Message moved = dead.pull(1, Duration.ZERO).messages().getFirst();
         assertEquals("rejected", moved.headers().get("smq-reason"));
         assertEquals("t-1", moved.headers().get("trace"));
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐는_리스_중인_청크가_있으면_같은_컨슈머가_다시_꺼내도_빈_청크다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b"), msg("c")));
+
+        Chunk first = q.pull(1, Duration.ZERO);
+        assertEquals(List.of("a"), first.messages().stream().map(SmqConformanceTest::text).toList());
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertTrue(q.pull(10, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(2, 1, 0), q.counts());
+    }
+
+    @Test
+    void 단일_활성_컨슈머가_아닌_큐는_리스_중에도_다음_청크를_받는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        q.publish(List.of(msg("a"), msg("b")));
+
+        assertFalse(q.pull(1, Duration.ZERO).isEmpty());
+        assertFalse(q.pull(1, Duration.ZERO).isEmpty());
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐는_정산하면_다음_꺼내기가_청크를_받는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b"), msg("c")));
+
+        Chunk first = q.pull(1, Duration.ZERO);
+        assertTrue(q.settle(first.ackAll()).allOk());
+        Chunk second = q.pull(1, Duration.ZERO);
+        assertEquals("b", text(second.messages().getFirst()));
+
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertTrue(q.settle(second.settle().nack(second.messages().getFirst().id()).build()).allOk());
+        Chunk again = q.pull(1, Duration.ZERO);
+        assertEquals("b", text(again.messages().getFirst()));
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐는_리스가_만료되면_다음_꺼내기가_청크를_받는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b")));
+
+        assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
+        clock.advance(Duration.ofSeconds(9));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        // 기한과 정확히 같은 시각에는 리스가 이미 끝난 것이다(기한 직전까지만 막는다).
+        clock.advance(Duration.ofSeconds(1));
+        assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐에서_여러_스레드가_동시에_꺼내도_리스_중인_청크는_하나다() throws Exception {
+        Smq smq = open(Duration.ofMinutes(10));
+        // 검사와 리스 부여가 한 단위가 아니면 아주 짧은 틈에서만 깨지므로, 새 큐로 여러 번 겨룬다.
+        for (int round = 0; round < ROUNDS; round++) {
+            Queue q = smq.declare("q" + round, QueueOptions.defaults().singleActiveConsumer(true));
+            q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d"), msg("e"), msg("f")));
+
+            var got = new java.util.concurrent.atomic.AtomicInteger();
+            ThrowingRunnable puller = () -> {
+                if (!q.pull(2, Duration.ZERO).isEmpty()) {
+                    got.incrementAndGet();
+                }
+            };
+            runConcurrently(Collections.nCopies(8, puller));
+            assertEquals(1, got.get(), "round " + round);
+            assertEquals(new QueueCounts(4, 2, 0), q.counts(), "round " + round);
+        }
+    }
+
+    private static final int ROUNDS = 300;
+
+    @Test
+    void 단일_활성_컨슈머_큐는_일부_ACK하고_나머지를_지연_없이_NACK하면_다음_꺼내기가_청크를_받는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b"), msg("c")));
+
+        Chunk first = q.pull(2, Duration.ZERO);
+        MessageId a = first.messages().getFirst().id();
+        assertTrue(q.settle(first.settle().ack(a).nack(first.messages().getLast().id()).build()).allOk());
+
+        Chunk next = q.pull(10, Duration.ZERO);
+        assertEquals(List.of("b", "c"), next.messages().stream().map(SmqConformanceTest::text).toList());
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐는_지연_NACK_직후에도_리스가_풀려_다음_꺼내기가_허용된다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b")));
+
+        Chunk first = q.pull(1, Duration.ZERO);
+        assertTrue(q.settle(first.nackAll(Duration.ofSeconds(5))).allOk());
+
+        Chunk next = q.pull(1, Duration.ZERO);
+        assertEquals("b", text(next.messages().getFirst()));
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    /** 모든 작업을 래치 뒤에서 동시에 시작해 끝날 때까지 기다리고, 작업이 던진 예외는 테스트 실패로 올린다. */
+    private static void runConcurrently(List<ThrowingRunnable> tasks) throws InterruptedException {
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        List<Thread> threads = new ArrayList<>();
+        for (ThrowingRunnable task : tasks) {
+            threads.add(Thread.ofPlatform().start(() -> {
+                try {
+                    start.await();
+                    task.run();
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            }));
+        }
+        start.countDown();
+        for (Thread t : threads) {
+            t.join(30_000);
+            assertFalse(t.isAlive());
+        }
+        assertNull(failure.get());
     }
 }

@@ -406,6 +406,17 @@ public final class SqliteStorage implements Storage {
         }
     }
 
+    private static boolean hasActiveLease(Connection c, long queueId, Instant now) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT 1 FROM message WHERE queue_id = ? AND lease_token IS NOT NULL AND lease_deadline > ? LIMIT 1")) {
+            ps.setLong(1, queueId);
+            ps.setLong(2, toNanos(now));
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
     private static Long findQueue(Connection c, String queue) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("SELECT id FROM queue WHERE name = ?")) {
             ps.setString(1, queue);
@@ -510,6 +521,9 @@ public final class SqliteStorage implements Storage {
         }
         return inTransaction(c -> {
             long queueId = requireQueue(c, queue);
+            if (readOptions(c, queue).singleActiveConsumer() && hasActiveLease(c, queueId, now)) {
+                return PullResult.empty();
+            }
             try (PreparedStatement peek = c.prepareStatement(SELECT_READY)) {
                 peek.setLong(1, queueId);
                 peek.setLong(2, toNanos(now));

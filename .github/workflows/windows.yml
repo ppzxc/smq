@@ -32,6 +32,16 @@ jobs:
         shell: bash
         run: ./gradlew check --no-daemon --stacktrace
 
+      - name: 테스트 수 요약
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(build/test-results/test/*.xml)
+          echo "클래스 ${#files[@]}개"
+          cat "${files[@]}" | grep -o '<testsuite [^>]*' | sed -E 's/.* tests="([0-9]+)" skipped="([0-9]+)" failures="([0-9]+)" errors="([0-9]+)".*/\1 \2 \3 \4/' \
+            | awk '{t+=$1;s+=$2;f+=$3;e+=$4} END {print "테스트 " t "개: 건너뜀 " s ", 실패 " f ", 오류 " e}'
+
       - name: 테스트 리포트 업로드
         if: failure()
         uses: actions/upload-artifact@v4

@@ -17,7 +17,7 @@ java {
 }
 
 // 벤치 하네스. 배포 jar에는 들어가지 않고, main 출력과 sqlite-jdbc에만 의존한다.
-val benchmark: SourceSet by sourceSets.creating {
+val benchmark: SourceSet = sourceSets.create("benchmark") {
     compileClasspath += sourceSets.main.get().output
     runtimeClasspath += sourceSets.main.get().output
 }

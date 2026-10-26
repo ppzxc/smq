@@ -128,6 +128,7 @@ _Avoid_: DLX, 실패 큐
 
 **Dead letter 이동(Dead-lettering)**:
 메시지를 원래 큐에서 지우고 dead letter 큐에 새 메시지로 넣는 일. 그래서 메시지 id와 전달 횟수가 새로 시작된다.
+옮겨진 메시지에는 `smq-original-queue`, `smq-original-message-id`, `smq-last-delivery-count`, `smq-moved-at`, `smq-reason`(`rejected` 또는 `max-deliveries`) 헤더가 붙는다. `smq-` 접두사는 시스템 예약이라, 같은 이름의 사용자 헤더는 시스템 값으로 덮어써진다.
 _Avoid_: 격리, 버리기
 
 **단일 활성 컨슈머(Single active consumer)**:

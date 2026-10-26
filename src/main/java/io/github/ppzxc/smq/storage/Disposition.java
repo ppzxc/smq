@@ -10,7 +10,9 @@ public record Disposition(MessageId id, Kind kind, Duration delay) {
 
     public enum Kind {
         ACK,
-        NACK
+        NACK,
+        /** 전달 횟수와 상관없이 dead letter 큐로 옮긴다. */
+        REJECT
     }
 
     public Disposition {

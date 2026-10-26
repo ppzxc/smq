@@ -50,6 +50,16 @@ class ComparatorTest {
     }
 
     @Test
+    void fourKbProfileHasScalingButNoFloor() {
+        Map<String, Double> r = new HashMap<>();
+        r.put("sqlite/S1/P4/proc1/POWER_LOSS/empty:msgPerSec", 10.0);
+        r.put("sqlite/S1/P4/proc4/POWER_LOSS/empty:msgPerSec", 6.0);
+        List<Check> c = Comparator.compare(r, Map.of());
+        assertEquals(Status.FAIL, find(c, "scaling S1 P4 POWER_LOSS proc4 >= 70% of proc1").status());
+        assertTrue(c.stream().noneMatch(x -> x.name().startsWith("floor S1 P4")), "P4에는 절대 하한이 없다");
+    }
+
+    @Test
     void depthMustKeepSeventyPercentOfEmpty() {
         Map<String, Double> r = new HashMap<>();
         r.put("sqlite/S1/P1/proc4/POWER_LOSS/empty:msgPerSec", 1000.0);

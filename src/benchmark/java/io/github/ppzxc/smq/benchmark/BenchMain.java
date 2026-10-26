@@ -64,6 +64,8 @@ public final class BenchMain {
         List<Comparator.Check> checks = Comparator.compare(results, baseline);
         System.out.println();
         System.out.print(Comparator.render(checks));
+        System.out.println();
+        System.out.print(ChunkTable.render(results));
         System.exit(Comparator.exitCode(checks));
     }
 

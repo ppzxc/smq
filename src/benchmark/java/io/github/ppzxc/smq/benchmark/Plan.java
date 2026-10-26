@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/** 어떤 조건을 돌릴지. 스펙의 측정 조건 표를 그대로 옮긴 것이다. */
+/** 어떤 조건을 돌릴지. 스펙의 측정 조건 표에 4KB(P4)를 더한 것이다. */
 final class Plan {
 
     static final long FULL_DURATION_MS = 10_000;
@@ -51,16 +51,21 @@ final class Plan {
                 : Collections.singletonList(null);
         List<Integer> processCounts = sqlite ? List.of(1, 4) : List.of(1);
         List<RunSpec> plan = new ArrayList<>();
-        // S1: P0은 1프로세스, 빈 큐만. P1~P3은 프로세스 {1,4} x 내구성 수준.
+        // S1: P0은 1프로세스, 빈 큐만. P1~P4는 프로세스 {1,4} x 내구성 수준.
         for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P0, 1, dur, 0, d, w));
-        for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3))
+        for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4))
             for (int n : processCounts)
                 for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, n, dur, 0, d, w));
+        // 단건(청크 1): 데이터 크기마다 S1 1프로세스 빈 큐(두 내구성)와 S2. P0은 위에서 S1을 이미 더했다.
+        for (Profile p : List.of(Profile.P2S, Profile.P3S, Profile.P4S))
+            for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, 1, dur, 0, d, w));
         // 100만 건 깊이는 P1에서만.
         for (int n : processCounts)
             for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, n, dur, deep, d, w));
-        // S2: P1~P3, 1프로세스, 빈 큐.
-        for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3)) plan.add(RunSpec.s2(storage, p, d, w));
+        // S2: P1~P4와 단건 프로파일(P0, P2S, P3S, P4S), 1프로세스, 빈 큐.
+        for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4, Profile.P0, Profile.P2S, Profile.P3S,
+                Profile.P4S))
+            plan.add(RunSpec.s2(storage, p, d, w));
         // S3: P1만.
         plan.add(RunSpec.s3(storage, Profile.P1, Topology.SAME_PROCESS, d, w));
         if (sqlite) plan.add(RunSpec.s3(storage, Profile.P1, Topology.CROSS_PROCESS, d, w));

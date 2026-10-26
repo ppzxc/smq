@@ -1,6 +1,8 @@
 package io.github.ppzxc.smq.benchmark;
 
 import io.github.ppzxc.smq.Durability;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -52,6 +54,18 @@ record RunSpec(Storage storage, Scenario scenario, Profile profile, int processe
         m.put("durationMs", durationMs);
         m.put("warmupMs", warmupMs);
         return Json.write(m);
+    }
+
+    /**
+     * 자식 JVM에 넘기는 명령행 인자. Windows의 ProcessBuilder는 인자 안의 큰따옴표를 지우므로, JSON을 큰따옴표도 공백도 없는
+     * Base64(URL 안전, 패딩 없음)로 감싼다.
+     */
+    String toArg() {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(toJson().getBytes(StandardCharsets.UTF_8));
+    }
+
+    static RunSpec fromArg(String arg) {
+        return fromJson(new String(Base64.getUrlDecoder().decode(arg), StandardCharsets.UTF_8));
     }
 
     static RunSpec fromJson(String json) {

@@ -12,7 +12,9 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -266,19 +268,47 @@ class SqliteSchemaTest {
     @Test
     void 꺼내기_대기_중에_버전이_바뀌면_예외가_pull_밖으로_전파된다() throws Exception {
         int supported = supportedVersion();
-        ExecutorService pool = Executors.newSingleThreadExecutor();
         try (Smq smq = Smq.sqlite(db()).open()) {
             Queue q = smq.declare("q", QueueOptions.defaults());
-            Future<Chunk> waiting = pool.submit(() -> q.pull(1, Duration.ofSeconds(30)));
-            Thread.sleep(200);
+            CompletableFuture<Chunk> waiting = new CompletableFuture<>();
+            Thread puller = Thread.ofPlatform().name("waiting-puller").start(() -> {
+                try {
+                    waiting.complete(q.pull(1, Duration.ofSeconds(30)));
+                } catch (Throwable t) {
+                    waiting.completeExceptionally(t);
+                }
+            });
+            try {
+                awaitParkedInChangeHint(puller);
 
-            jdbc(db(), "PRAGMA user_version = " + (supported + 1));
+                jdbc(db(), "PRAGMA user_version = " + (supported + 1));
 
-            ExecutionException e = assertThrows(ExecutionException.class, () -> waiting.get(10, TimeUnit.SECONDS));
-            assertInstanceOf(IncompatibleStorageException.class, e.getCause());
-        } finally {
-            pool.shutdownNow();
+                ExecutionException e = assertThrows(ExecutionException.class, () -> waiting.get(3, TimeUnit.SECONDS));
+                assertInstanceOf(IncompatibleStorageException.class, e.getCause());
+            } finally {
+                puller.interrupt();
+            }
         }
+    }
+
+    /**
+     * 꺼내기가 빈 결과를 한 번 받고 변경 힌트를 기다리는 자리에 멈출 때까지 기다린다. 고정 시간을 재지 않고
+     * 스레드가 힌트의 {@code await}에 있는지를 본다. 그 자리는 한 번 꺼내 본 뒤에만 닿으므로, 이후의 변경은 대기 중에 일어난 것이다.
+     */
+    private static void awaitParkedInChangeHint(Thread t) throws InterruptedException {
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (System.nanoTime() < deadline) {
+            for (StackTraceElement frame : t.getStackTrace()) {
+                if (frame.getClassName().endsWith("ChangeHint") && frame.getMethodName().equals("await")) {
+                    return;
+                }
+            }
+            if (!t.isAlive()) {
+                fail("꺼내기가 대기에 들어가기 전에 끝났다");
+            }
+            Thread.sleep(1);
+        }
+        fail("꺼내기가 10초 안에 변경 힌트 대기에 들어가지 않았다: " + Arrays.toString(t.getStackTrace()));
     }
 
     @Test

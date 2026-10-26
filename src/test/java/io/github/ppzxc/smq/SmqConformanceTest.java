@@ -1090,29 +1090,32 @@ abstract class SmqConformanceTest {
         assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
         clock.advance(Duration.ofSeconds(9));
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
-        clock.advance(Duration.ofSeconds(2));
+        // 기한과 정확히 같은 시각에는 리스가 이미 끝난 것이다(기한 직전까지만 막는다).
+        clock.advance(Duration.ofSeconds(1));
         assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
     }
 
     @Test
     void 단일_활성_컨슈머_큐에서_여러_스레드가_동시에_꺼내도_리스_중인_청크는_하나다() throws Exception {
-        Queue q = open(Duration.ofMinutes(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
-        List<OutgoingMessage> batch = new ArrayList<>();
-        for (int i = 0; i < 50; i++) {
-            batch.add(msg("m" + i));
-        }
-        q.publish(batch);
+        Smq smq = open(Duration.ofMinutes(10));
+        // 검사와 리스 부여가 한 단위가 아니면 아주 짧은 틈에서만 깨지므로, 새 큐로 여러 번 겨룬다.
+        for (int round = 0; round < ROUNDS; round++) {
+            Queue q = smq.declare("q" + round, QueueOptions.defaults().singleActiveConsumer(true));
+            q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d"), msg("e"), msg("f")));
 
-        var got = new java.util.concurrent.atomic.AtomicInteger();
-        ThrowingRunnable puller = () -> {
-            if (!q.pull(5, Duration.ZERO).isEmpty()) {
-                got.incrementAndGet();
-            }
-        };
-        runConcurrently(Collections.nCopies(8, puller));
-        assertEquals(1, got.get());
-        assertEquals(new QueueCounts(45, 5, 0), q.counts());
+            var got = new java.util.concurrent.atomic.AtomicInteger();
+            ThrowingRunnable puller = () -> {
+                if (!q.pull(2, Duration.ZERO).isEmpty()) {
+                    got.incrementAndGet();
+                }
+            };
+            runConcurrently(Collections.nCopies(8, puller));
+            assertEquals(1, got.get(), "round " + round);
+            assertEquals(new QueueCounts(4, 2, 0), q.counts(), "round " + round);
+        }
     }
+
+    private static final int ROUNDS = 300;
 
     @Test
     void 단일_활성_컨슈머_큐는_일부_ACK하고_나머지를_지연_없이_NACK하면_다음_꺼내기가_청크를_받는다() throws Exception {

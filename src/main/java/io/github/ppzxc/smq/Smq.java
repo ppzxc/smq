@@ -12,9 +12,9 @@ import java.util.function.Supplier;
 /** smq 진입점. 스레드 안전하고, 닫을 때 정산하지 않은 리스는 그대로 둔다. */
 public interface Smq extends AutoCloseable {
 
-    static Builder sqlite(Path path) {
+    static SqliteBuilder sqlite(Path path) {
         Objects.requireNonNull(path, "path");
-        return new Builder(() -> SqliteStorage.open(path));
+        return new SqliteBuilder(path);
     }
 
     static Builder inMemory() {
@@ -36,7 +36,7 @@ public interface Smq extends AutoCloseable {
     @Override
     void close();
 
-    final class Builder {
+    class Builder {
 
         private final Supplier<Storage> storage;
         private InstantSource clock = InstantSource.system();
@@ -56,8 +56,47 @@ public interface Smq extends AutoCloseable {
             return this;
         }
 
+        Storage openStorage() {
+            return storage.get();
+        }
+
         public Smq open() {
-            return new DefaultSmq(storage.get(), clock, leaseDuration);
+            return new DefaultSmq(openStorage(), clock, leaseDuration);
+        }
+    }
+
+    /** SQLite 저장소 전용 빌더. 내구성 수준은 여기에만 있다. */
+    final class SqliteBuilder extends Builder {
+
+        private final Path path;
+        private Durability durability = Durability.POWER_LOSS;
+
+        SqliteBuilder(Path path) {
+            super(null);
+            this.path = path;
+        }
+
+        /** 내구성 수준. 기본은 {@link Durability#POWER_LOSS}. */
+        public SqliteBuilder durability(Durability durability) {
+            this.durability = Objects.requireNonNull(durability, "durability");
+            return this;
+        }
+
+        @Override
+        public SqliteBuilder clock(InstantSource clock) {
+            super.clock(clock);
+            return this;
+        }
+
+        @Override
+        public SqliteBuilder leaseDuration(Duration leaseDuration) {
+            super.leaseDuration(leaseDuration);
+            return this;
+        }
+
+        @Override
+        Storage openStorage() {
+            return SqliteStorage.open(path, durability);
         }
     }
 }

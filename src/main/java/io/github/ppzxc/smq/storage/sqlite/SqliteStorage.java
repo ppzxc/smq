@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
+import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
@@ -71,9 +72,15 @@ public final class SqliteStorage implements Storage {
     }
 
     public static SqliteStorage open(Path path) {
+        return open(path, Durability.POWER_LOSS);
+    }
+
+    public static SqliteStorage open(Path path, Durability durability) {
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(BUSY_TIMEOUT_MILLIS);
-        config.setSynchronous(SQLiteConfig.SynchronousMode.FULL);
+        config.setSynchronous(durability == Durability.POWER_LOSS
+                ? SQLiteConfig.SynchronousMode.FULL
+                : SQLiteConfig.SynchronousMode.NORMAL);
         Connection connection = null;
         try {
             connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());

@@ -65,4 +65,28 @@ class SqliteSmqTest extends SmqConformanceTest {
             assertTrue(second.queue("q").settle(held.ackAll()).allOk());
         }
     }
+
+    @Test
+    void 빌더_durability는_SQLite_빌더에만_있고_기본은_POWER_LOSS다() throws Exception {
+        assertEquals(Smq.SqliteBuilder.class, Smq.sqlite(dir.resolve("a.db")).getClass());
+        assertEquals(Durability.class, Smq.SqliteBuilder.class.getMethod("durability", Durability.class)
+                .getParameterTypes()[0]);
+        assertThrows(NoSuchMethodException.class, () -> Smq.Builder.class.getMethod("durability", Durability.class));
+        assertThrows(NoSuchMethodException.class,
+                () -> Smq.inMemory().getClass().getMethod("durability", Durability.class));
+        assertEquals(Smq.SqliteBuilder.class, Smq.sqlite(dir.resolve("b.db")).clock(clock).getClass());
+        assertEquals(Smq.SqliteBuilder.class,
+                Smq.sqlite(dir.resolve("c.db")).leaseDuration(Duration.ofSeconds(1)).getClass());
+    }
+
+    @Test
+    void 두_내구성_수준_모두_발행과_꺼내기가_동작한다() throws Exception {
+        for (Durability d : Durability.values()) {
+            try (Smq smq = Smq.sqlite(dir.resolve(d + ".db")).durability(d).open()) {
+                Queue q = smq.declare("q", QueueOptions.defaults());
+                q.publish(msg("a"));
+                assertEquals(1, q.pull(1, Duration.ZERO).messages().size());
+            }
+        }
+    }
 }

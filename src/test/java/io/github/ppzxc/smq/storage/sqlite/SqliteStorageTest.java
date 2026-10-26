@@ -125,4 +125,25 @@ class SqliteStorageTest {
             assertEquals(0, s.counts("q", java.time.Instant.EPOCH).ready());
         }
     }
+
+    @Test
+    void POWER_LOSS는_synchronous_FULL로_연다() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), io.github.ppzxc.smq.Durability.POWER_LOSS)) {
+            assertEquals("2", s.inTransaction(c -> pragma(c, "synchronous")));
+        }
+    }
+
+    @Test
+    void PROCESS_CRASH는_synchronous_NORMAL로_연다() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), io.github.ppzxc.smq.Durability.PROCESS_CRASH)) {
+            assertEquals("1", s.inTransaction(c -> pragma(c, "synchronous")));
+        }
+    }
+
+    @Test
+    void 기본은_synchronous_FULL이다() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"))) {
+            assertEquals("2", s.inTransaction(c -> pragma(c, "synchronous")));
+        }
+    }
 }

@@ -1,6 +1,6 @@
 # 저장소 SPI는 큐 연산 단위로 자르고, 원자성은 저장소가 책임진다
 
-저장소 SPI는 `declare`, `delete`, `counts`, `publish`, `pull`, `settle`, `extend` 같은 큐 연산 단위로 둔다. 꺼낼 때 전달 횟수 증가, 리스 토큰 발급, dead letter 이동을 한 트랜잭션에서 하는 식의 원자성은 저장소마다 자기 메커니즘(SQLite의 `BEGIN IMMEDIATE`와 `UPDATE ... RETURNING`, PostgreSQL의 `FOR UPDATE SKIP LOCKED`, 인메모리의 락)으로 보장한다. 그래서 큐 의미론이 저장소마다 따로 구현되고, 같게 동작한다는 보증은 모든 저장소가 통과해야 하는 공통 적합성 테스트 스위트가 맡는다. 코어에는 저장소를 보지 않는 인자 검증, 시각 주입, 꺼내기 대기 루프만 남는다. SPI는 v1에서 외부에 공개하지 않는 내부 계약이다.
+저장소 SPI는 `declare`, `delete`, `counts`, `publish`, `pull`, `settle`, `extend` 같은 큐 연산 단위로 둔다. 꺼낼 때 전달 횟수 증가, 리스 토큰 발급, dead letter 이동을 한 트랜잭션에서 하는 식의 원자성은 저장소마다 자기 메커니즘(SQLite의 `BEGIN IMMEDIATE`와 `UPDATE ... RETURNING`, PostgreSQL의 `FOR UPDATE SKIP LOCKED`, 인메모리의 락)으로 보장한다. 그래서 큐 의미론이 저장소마다 따로 구현되고, 같게 동작한다는 보증은 모든 저장소가 통과해야 하는 공통 적합성 테스트 스위트가 맡는다. 코어에는 저장소를 보지 않는 인자 검증, 시각 주입, 꺼내기 대기 루프만 남는다. SPI는 v1에서 외부에 공개하지 않는 내부 계약이다. 예외로 `changeHint()`는 큐 연산이 아니라 꺼내기 대기자를 깨우기 위한 관측용 선택 메서드다. 힌트는 거짓 깨움과 누락을 허용하고 정확성은 여전히 `pull`과 폴링이 보증하므로, 저장소가 구현하지 않아도 된다.
 
 ## Considered Options
 

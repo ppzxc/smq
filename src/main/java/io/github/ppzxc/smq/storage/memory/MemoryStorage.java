@@ -9,6 +9,8 @@ import io.github.ppzxc.smq.QueueDeclarationConflictException;
 import io.github.ppzxc.smq.QueueInUseException;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
+import io.github.ppzxc.smq.storage.ChangeHint;
+import io.github.ppzxc.smq.storage.ConditionChangeHint;
 import io.github.ppzxc.smq.storage.DeadLetters;
 import io.github.ppzxc.smq.storage.Disposition;
 import io.github.ppzxc.smq.storage.Extended;
@@ -57,6 +59,7 @@ public final class MemoryStorage implements Storage {
     }
 
     private final ReentrantLock lock = new ReentrantLock();
+    private final ConditionChangeHint hint = new ConditionChangeHint();
     private final Map<String, TreeMap<Long, Entry>> queues = new HashMap<>();
     private final Map<String, QueueOptions> optionsByQueue = new LinkedHashMap<>();
     private long nextMessageId = 1;
@@ -319,6 +322,12 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
+    public Optional<ChangeHint> changeHint() {
+        return Optional.of(hint);
+    }
+
+    @Override
     public void close() {
+        // 해제할 자원이 없다. 기다리는 꺼내기는 코어가 닫으면서 깨운다.
     }
 }

@@ -14,18 +14,18 @@ import java.util.Objects;
 
 final class DefaultQueue implements Queue {
 
-    private static final long POLL_NANOS = Duration.ofMillis(5).toNanos();
-
     private final Storage storage;
     private final InstantSource clock;
     private final Duration defaultLease;
+    private final PullWaiter waiter;
     private final String name;
     private final QueueOptions options;
 
-    DefaultQueue(Storage storage, InstantSource clock, Duration defaultLease, String name, QueueOptions options) {
+    DefaultQueue(Storage storage, InstantSource clock, Duration defaultLease, PullWaiter waiter, String name, QueueOptions options) {
         this.storage = storage;
         this.clock = clock;
         this.defaultLease = defaultLease;
+        this.waiter = waiter;
         this.name = name;
         this.options = options;
     }
@@ -57,7 +57,9 @@ final class DefaultQueue implements Queue {
         if (converted.isEmpty()) {
             return List.of();
         }
-        return storage.publish(name, converted, clock.instant());
+        List<MessageId> ids = storage.publish(name, converted, clock.instant());
+        waiter.wake();
+        return ids;
     }
 
     @Override
@@ -79,19 +81,10 @@ final class DefaultQueue implements Queue {
             throw new IllegalArgumentException("wait must not be negative: " + wait);
         }
         Validation.positive(leaseDuration, "leaseDuration");
-        // wait는 주입한 시계가 아니라 실제 경과 시간으로 잰다.
-        long deadline = System.nanoTime() + wait.toNanos();
-        while (true) {
+        return waiter.await(wait, () -> {
             PullResult r = storage.pull(name, max, leaseDuration, clock.instant());
-            if (!r.messages().isEmpty()) {
-                return new Chunk(name, r.messages(), r.leaseDeadline(), r.token());
-            }
-            long remaining = deadline - System.nanoTime();
-            if (remaining <= 0) {
-                return new Chunk(name, List.of(), null, null);
-            }
-            Thread.sleep(Duration.ofNanos(Math.min(POLL_NANOS, remaining)));
-        }
+            return r.messages().isEmpty() ? null : new Chunk(name, r.messages(), r.leaseDeadline(), r.token());
+        }, () -> new Chunk(name, List.of(), null, null));
     }
 
     @Override
@@ -104,6 +97,8 @@ final class DefaultQueue implements Queue {
         for (Result r : storage.settle(settlement.token(), settlement.items(), clock.instant())) {
             byMessage.put(r.id(), r.outcome());
         }
+        // NACK은 메시지를 다시 준비로 돌릴 수 있다. 깨우기는 저장소가 아니라 코어가 맡는다.
+        waiter.wake();
         return new Outcomes(byMessage);
     }
 

@@ -10,11 +10,13 @@ final class DefaultSmq implements Smq {
     private final Storage storage;
     private final InstantSource clock;
     private final Duration leaseDuration;
+    private final PullWaiter waiter;
 
     DefaultSmq(Storage storage, InstantSource clock, Duration leaseDuration) {
         this.storage = storage;
         this.clock = clock;
         this.leaseDuration = leaseDuration;
+        this.waiter = new PullWaiter(storage.changeHint());
     }
 
     @Override
@@ -25,14 +27,14 @@ final class DefaultSmq implements Smq {
             throw new IllegalArgumentException("a queue cannot be its own dead letter queue: " + name);
         }
         storage.declare(name, options);
-        return new DefaultQueue(storage, clock, leaseDuration, name, options);
+        return new DefaultQueue(storage, clock, leaseDuration, waiter, name, options);
     }
 
     @Override
     public Queue queue(String name) {
         Validation.queueName(name);
         QueueOptions options = storage.options(name).orElseThrow(() -> new QueueNotFoundException(name));
-        return new DefaultQueue(storage, clock, leaseDuration, name, options);
+        return new DefaultQueue(storage, clock, leaseDuration, waiter, name, options);
     }
 
     @Override
@@ -43,6 +45,7 @@ final class DefaultSmq implements Smq {
 
     @Override
     public void close() {
+        waiter.close();
         storage.close();
     }
 }

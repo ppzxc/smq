@@ -7,11 +7,13 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -526,5 +528,150 @@ abstract class SmqConformanceTest {
         assertThrows(IllegalArgumentException.class, () -> q.extend(c, Duration.ZERO));
         assertThrows(IllegalArgumentException.class, () -> q.extend(c, null));
         assertThrows(NullPointerException.class, () -> q.extend(null, Duration.ofSeconds(1)));
+    }
+
+    @Test
+    void chunk_ack_id로_메시지_하나만_ACK한다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        Chunk c = q.pull(3, Duration.ZERO);
+        Outcomes r = q.settle(c.ack(ids.get(1)));
+        assertTrue(r.allOk());
+        assertEquals(Set.of(ids.get(1)), r.byMessage().keySet());
+
+        clock.advance(Duration.ofSeconds(10));
+        assertEquals(List.of(ids.get(0), ids.get(2)),
+                q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void settle_빌더로_ACK와_NACK을_섞고_ackRest로_마무리한다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d")));
+        Chunk c = q.pull(4, Duration.ZERO);
+        Outcomes r = q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).ackRest());
+        assertTrue(r.allOk());
+        assertEquals(Set.copyOf(ids), r.byMessage().keySet());
+
+        Chunk next = q.pull(10, Duration.ZERO);
+        assertEquals(List.of(ids.get(1)), next.messages().stream().map(Message::id).toList());
+        assertEquals(2, next.messages().getFirst().deliveryCount());
+    }
+
+    @Test
+    void build로_마무리하면_고른_메시지만_정산하고_나머지는_리스에_남는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(2, Duration.ZERO);
+        Outcomes r = q.settle(c.settle().ack(ids.get(0)).build());
+        assertEquals(Set.of(ids.get(0)), r.byMessage().keySet());
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+    }
+
+    @Test
+    void 지연_없이_NACK한_메시지는_자기_id_자리로_돌아가_다음_꺼내기에서_먼저_나온다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        Chunk c = q.pull(2, Duration.ZERO);
+        assertTrue(q.settle(c.settle().nack(ids.get(1)).ackRest()).allOk());
+        // 아직 꺼내지 않은 c보다 NACK한 b가 먼저다.
+        Chunk next = q.pull(10, Duration.ZERO);
+        assertEquals(List.of(ids.get(1), ids.get(2)), next.messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void 정산_빌더는_청크에_없거나_이미_고른_메시지를_거부한다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(1, Duration.ZERO);
+        assertThrows(IllegalArgumentException.class, () -> c.settle().ack(ids.get(1)));
+        assertThrows(IllegalArgumentException.class, () -> c.settle().ack(ids.get(0)).nack(ids.get(0)));
+    }
+
+    @Test
+    void 섞인_정산은_원자적이라_중간_상태가_다른_꺼내기에_보이지_않는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        for (int round = 0; round < 50; round++) {
+            List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+            Chunk c = q.pull(3, Duration.ZERO);
+            clock.advance(Duration.ofSeconds(10));
+            // 기한이 지난 리스라 3개 모두 준비로 센다. 정산 뒤에는 NACK한 b 하나만 남는다.
+            assertEquals(3, q.counts().ready());
+            AtomicBoolean done = new AtomicBoolean();
+            List<Long> seen = Collections.synchronizedList(new ArrayList<>());
+            Thread observer = new Thread(() -> {
+                while (!done.get()) {
+                    seen.add(q.counts().ready());
+                }
+            });
+            observer.start();
+            Outcomes r = q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).ackRest());
+            done.set(true);
+            observer.join();
+            assertTrue(r.allOk());
+            assertTrue(seen.stream().allMatch(n -> n == 3 || n == 1), "torn state: " + seen);
+            assertEquals(1, q.counts().ready());
+            Chunk drain = q.pull(10, Duration.ZERO);
+            assertTrue(q.settle(drain.ackAll()).allOk());
+        }
+    }
+
+    @Test
+    void 같은_Settlement_값으로_다시_settle하면_이미_반영된_메시지는_STALE이다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(2, Duration.ZERO);
+        Settlement s = c.settle().ack(ids.get(0)).nack(ids.get(1)).build();
+        assertTrue(q.settle(s).allOk());
+        Outcomes again = q.settle(s);
+        assertEquals(ids, again.stale());
+        // NACK한 메시지는 준비 상태로 남아 있고 두 번째 반영이 건드리지 않는다.
+        assertEquals(1, q.counts().ready());
+    }
+
+    @Test
+    void 같은_청크의_두_번째_ackRest는_앞서_NACK한_메시지를_지우지_않는다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        Chunk c = q.pull(3, Duration.ZERO);
+        assertTrue(q.settle(c.settle().nack(ids.get(1)).ack(ids.get(0)).build()).allOk());
+        Outcomes second = q.settle(c.settle().ackRest());
+        assertEquals(List.of(ids.get(0), ids.get(1)), second.stale());
+        assertEquals(Outcome.OK, second.byMessage().get(ids.get(2)));
+        assertEquals(List.of(ids.get(1)),
+                q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void 지연_없이_NACK되어_준비_상태인_메시지를_같은_리스로_연장해도_STALE이다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        MessageId id = q.publish(msg("a"));
+        Chunk c = q.pull(1, Duration.ZERO);
+        assertTrue(q.settle(c.settle().nack(id).build()).allOk());
+        assertEquals(List.of(id), q.extend(c, Duration.ofSeconds(10)).outcomes().stale());
+        // 연장이 효력이 없으니 메시지는 계속 준비 상태다.
+        assertEquals(1, q.counts().ready());
+    }
+
+    @Test
+    void 정산된_메시지에_같은_리스로_다시_정산하면_NACK도_STALE이다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        MessageId id = q.publish(msg("a"));
+        Chunk c = q.pull(1, Duration.ZERO);
+        assertTrue(q.settle(c.settle().nack(id).build()).allOk());
+        assertEquals(List.of(id), q.settle(c.settle().nack(id).build()).stale());
+        assertEquals(List.of(id), q.settle(c.ack(id)).stale());
+    }
+
+    @Test
+    void FIFO_순서_그리고_NACK_뒤_원래_자리로_복귀() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        ids = new ArrayList<>(ids);
+        ids.addAll(q.publish(List.of(msg("c"), msg("d"))));
+        Chunk c = q.pull(3, Duration.ZERO);
+        assertTrue(q.settle(c.settle().nack(ids.get(0)).ack(ids.get(1)).nack(ids.get(2)).build()).allOk());
+        assertEquals(List.of(ids.get(0), ids.get(2), ids.get(3)),
+                q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 }

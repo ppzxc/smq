@@ -46,9 +46,19 @@ public final class Chunk {
         return messages.stream().map(Message::id).toList();
     }
 
+    /** 메시지마다 다른 처리 결과를 고르는 정산 빌더. */
+    public Settlement.Builder settle() {
+        return new Settlement.Builder(this);
+    }
+
     /** 청크의 모든 메시지를 ACK하는 정산 값. */
     public Settlement ackAll() {
-        return new Settlement(queue, token, messageIds());
+        return settle().ackRest();
+    }
+
+    /** 메시지 하나만 ACK하는 정산 값. 청크는 정산 상태를 기억하지 않으므로 반영은 {@code queue.settle}이 한다. */
+    public Settlement ack(MessageId id) {
+        return settle().ack(id).build();
     }
 
     @Override

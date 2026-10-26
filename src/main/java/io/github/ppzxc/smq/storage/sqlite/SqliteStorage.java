@@ -373,9 +373,15 @@ public final class SqliteStorage implements Storage {
     public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {
         return inTransaction(c -> {
             List<Result> results = new ArrayList<>(items.size());
-            try (PreparedStatement ps = c.prepareStatement(
-                    "DELETE FROM message WHERE id = ? AND lease_token = ?")) {
+            try (PreparedStatement ack = c.prepareStatement("DELETE FROM message WHERE id = ? AND lease_token = ?");
+                    PreparedStatement nack = c.prepareStatement("""
+                            UPDATE message SET lease_token = NULL, lease_deadline = NULL
+                            WHERE id = ? AND lease_token = ?""")) {
                 for (Disposition d : items) {
+                    PreparedStatement ps = switch (d.kind()) {
+                        case ACK -> ack;
+                        case NACK -> nack;
+                    };
                     ps.setLong(1, d.id().value());
                     ps.setLong(2, token.value());
                     results.add(new Result(d.id(), ps.executeUpdate() == 1 ? Outcome.OK : Outcome.STALE));

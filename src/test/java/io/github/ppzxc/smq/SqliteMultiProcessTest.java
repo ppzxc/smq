@@ -129,9 +129,11 @@ class SqliteMultiProcessTest {
         assertTrue(receiver.ready.await(30, TimeUnit.SECONDS), "수신 JVM이 대기에 들어가지 않았다");
         try (Smq smq = Smq.sqlite(dir.resolve("smq.db")).leaseDuration(Duration.ofSeconds(120)).open()) {
             Queue q = smq.declare("q", QueueOptions.defaults());
-            for (int round = 0; round < 8; round++) {
-                // 폴링 간격이 1ms에서 상한 250ms까지 늘어날 시간(합 약 255ms)을 주고, 위상을 흩뜨린다.
-                Thread.sleep(600 + round * 37L);
+            for (int round = 0; round < 5; round++) {
+                // 폴링 간격은 1ms부터 두 배씩 커진다. 상한이 250ms가 아니라 1000ms로 느슨해져도 이 테스트가
+                // 실패하도록, 상한이 1000ms여도 간격이 그 값에 이를 만큼(1ms부터 두 배씩, 합 약 1s 이상) 기다리고
+                // 위상을 흩뜨린다.
+                Thread.sleep(1300 + round * 53L);
                 assertEquals(round, receiver.gotAtNanos.size());
                 long publishStart = System.nanoTime();
                 q.publish(OutgoingMessage.of(("r" + round).getBytes(StandardCharsets.UTF_8)));

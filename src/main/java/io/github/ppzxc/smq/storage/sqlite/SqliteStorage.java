@@ -59,6 +59,19 @@ public final class SqliteStorage implements Storage {
                     + " AND (lease_token IS NULL OR lease_deadline <= ?)"
                     + " ORDER BY id LIMIT ?";
 
+    /** 최대 전달 횟수에 도달하지 않은 준비 메시지. 꺼내기가 실제로 고르는 대상이다. */
+    private static final String SELECT_PULLABLE =
+            "SELECT id FROM message WHERE queue_id = ? AND (available_at IS NULL OR available_at <= ?)"
+                    + " AND (lease_token IS NULL OR lease_deadline <= ?) AND delivery_count < ?"
+                    + " ORDER BY id LIMIT ?";
+
+    /** 최대 전달 횟수에 도달한 준비 메시지. dead letter 큐로 옮길 대상이다. */
+    private static final String SELECT_EXHAUSTED =
+            "SELECT id, payload, headers, delivery_count FROM message WHERE queue_id = ?"
+                    + " AND (available_at IS NULL OR available_at <= ?)"
+                    + " AND (lease_token IS NULL OR lease_deadline <= ?) AND delivery_count >= ?"
+                    + " ORDER BY id LIMIT ?";
+
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
 
     @FunctionalInterface
@@ -340,14 +353,18 @@ public final class SqliteStorage implements Storage {
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
         return inTransaction(c -> {
             long queueId = requireQueue(c, queue);
-            try (PreparedStatement peek = c.prepareStatement(SELECT_READY)) {
+            QueueOptions options = readOptions(c, queue);
+            int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
+            boolean capped = options.maxDeliveries().isPresent() && moveExhausted(c, queue, queueId, options, limit, now);
+            try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE)) {
                 peek.setLong(1, queueId);
                 peek.setLong(2, toNanos(now));
                 peek.setLong(3, toNanos(now));
-                peek.setInt(4, 1);
+                peek.setInt(4, limit);
+                peek.setInt(5, 1);
                 try (ResultSet rs = peek.executeQuery()) {
                     if (!rs.next()) {
-                        return PullResult.empty();
+                        return capped ? PullResult.emptyMaybeMore() : PullResult.empty();
                     }
                 }
             }
@@ -361,7 +378,7 @@ public final class SqliteStorage implements Storage {
             List<Message> messages = new ArrayList<>();
             try (PreparedStatement ps = c.prepareStatement("""
                     UPDATE message SET lease_token = ?, lease_deadline = ?, delivery_count = delivery_count + 1
-                    WHERE id IN (""" + SELECT_READY + """
+                    WHERE id IN (""" + SELECT_PULLABLE + """
                     )
                     RETURNING id, payload, headers, delivery_count, published_at""")) {
                 ps.setLong(1, token);
@@ -369,7 +386,8 @@ public final class SqliteStorage implements Storage {
                 ps.setLong(3, queueId);
                 ps.setLong(4, toNanos(now));
                 ps.setLong(5, toNanos(now));
-                ps.setInt(6, max);
+                ps.setInt(6, limit);
+                ps.setInt(7, max);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         messages.add(new Message(new MessageId(rs.getLong(1)), rs.getBytes(2),
@@ -380,6 +398,55 @@ public final class SqliteStorage implements Storage {
             messages.sort((a, b) -> a.id().compareTo(b.id()));
             return new PullResult(new LeaseToken(token), deadline, messages);
         });
+    }
+
+    /**
+     * 최대 전달 횟수에 도달한 준비 메시지를 id 순서로 dead letter 큐에 새 메시지로 옮긴다(꺼내기 트랜잭션 안).
+     * 한 번에 옮기는 개수에는 상한이 있다.
+     *
+     * @return 상한에 걸려 남은 도달 메시지가 더 있으면 true
+     */
+    private static boolean moveExhausted(Connection c, String queue, long queueId, QueueOptions options, int limit,
+            Instant now) throws SQLException {
+        long dlqId = requireQueue(c, options.deadLetterQueue().orElseThrow());
+        List<Long> ids = new ArrayList<>();
+        List<byte[]> payloads = new ArrayList<>();
+        List<Map<String, String>> headers = new ArrayList<>();
+        List<Integer> counts = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement(SELECT_EXHAUSTED)) {
+            ps.setLong(1, queueId);
+            ps.setLong(2, toNanos(now));
+            ps.setLong(3, toNanos(now));
+            ps.setInt(4, limit);
+            ps.setInt(5, DeadLetters.MAX_MOVES_PER_PULL + 1);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ids.add(rs.getLong(1));
+                    payloads.add(rs.getBytes(2));
+                    headers.add(decodeHeaders(rs.getBytes(3)));
+                    counts.add(rs.getInt(4));
+                }
+            }
+        }
+        boolean capped = ids.size() > DeadLetters.MAX_MOVES_PER_PULL;
+        int moving = Math.min(ids.size(), DeadLetters.MAX_MOVES_PER_PULL);
+        try (PreparedStatement insert = c.prepareStatement("""
+                INSERT INTO message(queue_id, payload, headers, delivery_count, published_at)
+                VALUES (?, ?, ?, 0, ?)""");
+                PreparedStatement delete = c.prepareStatement("DELETE FROM message WHERE id = ?")) {
+            for (int i = 0; i < moving; i++) {
+                insert.setLong(1, dlqId);
+                insert.setBytes(2, payloads.get(i));
+                insert.setBytes(3, encodeHeaders(DeadLetters.headers(
+                        new DeadLetters.Origin(queue, new MessageId(ids.get(i)), headers.get(i), counts.get(i)),
+                        DeadLetters.Reason.MAX_DELIVERIES, now)));
+                insert.setLong(4, toNanos(now));
+                insert.executeUpdate();
+                delete.setLong(1, ids.get(i));
+                delete.executeUpdate();
+            }
+        }
+        return capped;
     }
 
     @Override

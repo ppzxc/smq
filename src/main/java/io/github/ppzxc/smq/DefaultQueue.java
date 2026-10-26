@@ -82,7 +82,11 @@ final class DefaultQueue implements Queue {
         }
         Validation.positive(leaseDuration, "leaseDuration");
         return waiter.await(wait, () -> {
-            PullResult r = storage.pull(name, max, leaseDuration, clock.instant());
+            PullResult r;
+            do {
+                r = storage.pull(name, max, leaseDuration, clock.instant());
+                // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다.
+            } while (r.messages().isEmpty() && r.maybeMore());
             return r.messages().isEmpty() ? null : new Chunk(name, r.messages(), r.leaseDeadline(), r.token());
         }, () -> new Chunk(name, List.of(), null, null));
     }

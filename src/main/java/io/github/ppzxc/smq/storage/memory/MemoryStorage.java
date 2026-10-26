@@ -177,17 +177,39 @@ public final class MemoryStorage implements Storage {
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
         lock.lock();
         try {
+            TreeMap<Long, Entry> queued = require(queue);
+            QueueOptions options = optionsByQueue.get(queue);
             List<Entry> picked = new ArrayList<>();
-            for (Entry e : require(queue).values()) {
-                if (isReady(e, now)) {
-                    picked.add(e);
-                    if (picked.size() == max) {
-                        break;
+            List<Entry> exhausted = new ArrayList<>();
+            boolean capped = false;
+            for (Entry e : queued.values()) {
+                if (picked.size() == max) {
+                    break;
+                }
+                if (!isReady(e, now)) {
+                    continue;
+                }
+                if (options.maxDeliveries().isPresent() && e.deliveryCount >= options.maxDeliveries().getAsInt()) {
+                    if (exhausted.size() < DeadLetters.MAX_MOVES_PER_PULL) {
+                        exhausted.add(e);
+                    } else {
+                        capped = true;
                     }
+                } else {
+                    picked.add(e);
+                }
+            }
+            if (!exhausted.isEmpty()) {
+                TreeMap<Long, Entry> dlq = queues.get(options.deadLetterQueue().orElseThrow());
+                for (Entry e : exhausted) {
+                    queued.remove(e.id.value());
+                    Entry moved = e.deadLettered(new MessageId(nextMessageId++), queue,
+                            DeadLetters.Reason.MAX_DELIVERIES, now);
+                    dlq.put(moved.id.value(), moved);
                 }
             }
             if (picked.isEmpty()) {
-                return PullResult.empty();
+                return capped ? PullResult.emptyMaybeMore() : PullResult.empty();
             }
             long token = nextLeaseToken++;
             Instant deadline = now.plus(lease);

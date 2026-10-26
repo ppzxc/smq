@@ -1057,4 +1057,126 @@ abstract class SmqConformanceTest {
         assertEquals("rejected", moved.headers().get("smq-reason"));
         assertEquals("t-1", moved.headers().get("trace"));
     }
+
+    @Test
+    void 최대_전달_횟수에_도달한_메시지는_다시_꺼낼_때_dead_letter_큐로_옮겨지고_꺼내기는_다음_메시지로_진행한다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(2, "dead"));
+        MessageId a = q.publish(msg("a").withHeaders(Map.of("trace", "t-1")));
+        MessageId b = q.publish(msg("b"));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().nack(a).build()).allOk());
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().nack(a).build()).allOk());
+        clock.advance(Duration.ofSeconds(3));
+
+        Chunk c = q.pull(1, Duration.ZERO);
+
+        assertEquals(List.of(b), c.messages().stream().map(Message::id).toList());
+        assertEquals(1, c.messages().getFirst().deliveryCount());
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+        assertEquals(new QueueCounts(1, 0, 0), dead.counts());
+        Message moved = dead.pull(1, Duration.ZERO).messages().getFirst();
+        assertEquals("a", text(moved));
+        assertEquals(Map.of("trace", "t-1",
+                "smq-original-queue", "q",
+                "smq-original-message-id", String.valueOf(a.value()),
+                "smq-last-delivery-count", "2",
+                "smq-moved-at", T0.plusSeconds(3).toString(),
+                "smq-reason", "max-deliveries"), moved.headers());
+    }
+
+    @Test
+    void 리스가_만료된_채_최대_전달_횟수에_도달한_메시지도_다음_꺼내기에서_옮겨진다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+        q.publish(msg("a"));
+        assertEquals(1, q.pull(1, Duration.ZERO).messages().size());
+        clock.advance(Duration.ofSeconds(10));
+
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+        assertEquals(new QueueCounts(1, 0, 0), dead.counts());
+    }
+
+    @Test
+    void 마지막_전달에서_ACK하면_정상적으로_성공하고_옮겨지지_않는다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(2, "dead"));
+        MessageId a = q.publish(msg("a"));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().nack(a).build()).allOk());
+        Chunk last = q.pull(1, Duration.ZERO);
+        assertEquals(2, last.messages().getFirst().deliveryCount());
+        clock.advance(Duration.ofSeconds(20));
+
+        assertTrue(q.settle(last.ackAll()).allOk());
+
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+        assertEquals(new QueueCounts(0, 0, 0), dead.counts());
+    }
+
+    @Test
+    void 마지막_전달에서_지연_NACK한_메시지는_지연이_끝나야_옮겨지고_그동안_지연됨으로_센다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+        q.publish(msg("a"));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(5))).allOk());
+
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(0, 0, 1), q.counts());
+        assertEquals(new QueueCounts(0, 0, 0), dead.counts());
+
+        clock.advance(Duration.ofSeconds(5));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+        assertEquals(new QueueCounts(1, 0, 0), dead.counts());
+    }
+
+    @Test
+    void dead_letter가_한_번에_옮기는_상한보다_많이_쌓여_있어도_pull_한_번이_남은_준비_메시지를_돌려준다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+        int poison = 1000;
+        List<OutgoingMessage> batch = new ArrayList<>();
+        for (int i = 0; i < poison; i++) {
+            batch.add(msg("p" + i));
+        }
+        q.publish(batch);
+        Chunk first = q.pull(poison, Duration.ZERO);
+        assertEquals(poison, first.messages().size());
+        assertTrue(q.settle(first.nackAll(Duration.ofSeconds(1))).allOk());
+        MessageId good = q.publish(msg("good"));
+        clock.advance(Duration.ofSeconds(1));
+
+        Chunk c = q.pull(1, Duration.ZERO);
+
+        assertEquals(List.of(good), c.messages().stream().map(Message::id).toList());
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+        assertEquals(new QueueCounts(poison, 0, 0), dead.counts());
+    }
+
+    @Test
+    void 상한보다_많이_쌓인_dead_letter_뒤에_준비_메시지가_없으면_pull은_다_옮기고_빈_청크를_돌려준다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+        int poison = 1000;
+        List<OutgoingMessage> batch = new ArrayList<>();
+        for (int i = 0; i < poison; i++) {
+            batch.add(msg("p" + i));
+        }
+        q.publish(batch);
+        assertEquals(poison, q.pull(poison, Duration.ZERO).messages().size());
+        clock.advance(Duration.ofSeconds(10));
+
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+        assertEquals(new QueueCounts(poison, 0, 0), dead.counts());
+    }
 }

@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
  * 꺼내기 한 번에 옮기는 dead letter 개수의 상한({@link DeadLetters#MAX_MOVES_PER_PULL})을 저장소 수준에서 못 박는다.
  * 코어는 남았다는 표시가 있으면 바로 다시 꺼내므로, 코어만 통과해서는 상한 경계가 드러나지 않는다.
  */
+@Order(1)
 class DeadLetterMoveCapTest {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");

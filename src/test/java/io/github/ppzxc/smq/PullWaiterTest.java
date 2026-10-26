@@ -8,8 +8,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
+@Order(1)
 class PullWaiterTest {
 
     /** 호출을 기록하고 기다리지 않고 바로 돌아오는 힌트. {@code beforeVersion}은 버전을 읽기 직전에 실행한다. */
@@ -88,6 +90,38 @@ class PullWaiterTest {
         List<Duration> awaits = awaitsUntilFifthAttempt(new PullWaiter(hint, false), hint);
         assertEquals(List.of(Duration.ofMillis(1), Duration.ofMillis(2), Duration.ofMillis(4),
                 Duration.ofMillis(8), Duration.ofMillis(16)), awaits);
+    }
+
+    @Test
+    void 바로_다시_꺼내라는_표시가_없고_시간이_다했으면_한_번만_꺼내고_빈_결과다() throws Exception {
+        PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
+        AtomicInteger attempts = new AtomicInteger();
+        String result = waiter.await(Duration.ZERO, () -> {
+            if (attempts.incrementAndGet() > 3) {
+                throw new AssertionError("표시가 없는데 다시 꺼냈다");
+            }
+            return null;
+        }, () -> "empty", () -> false);
+        assertEquals("empty", result);
+        assertEquals(1, attempts.get());
+    }
+
+    @Test
+    void 바로_다시_꺼내라는_표시가_있는_동안은_힌트를_기다리지_않고_표시가_없어지면_기다린다() throws Exception {
+        RecordingHint hint = new RecordingHint();
+        PullWaiter waiter = new PullWaiter(hint, true);
+        AtomicInteger attempts = new AtomicInteger();
+        String result = waiter.await(Duration.ofSeconds(30), () -> {
+            int n = attempts.incrementAndGet();
+            if (n > 10) {
+                throw new AssertionError("표시가 없어졌는데도 다시 꺼냈다");
+            }
+            return n == 5 ? "got" : null;
+        }, () -> "empty", () -> attempts.get() < 3);
+        assertEquals("got", result);
+        assertEquals(5, attempts.get());
+        // 3번째 시도부터 표시가 없으므로 3번째와 4번째 뒤에만 기다린다.
+        assertEquals(2, hint.awaits.size());
     }
 
     @Test

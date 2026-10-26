@@ -765,6 +765,7 @@ abstract class SmqConformanceTest {
             assertThrows(IllegalArgumentException.class, () -> q.extend(c, bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> builder(dir).leaseDuration(bad), String.valueOf(bad));
         }
+        assertThrows(IllegalArgumentException.class, () -> new OutgoingMessage(new byte[0], Map.of(), null));
         // 잘못된 인자는 아무것도 바꾸지 않는다.
         assertEquals(new QueueCounts(0, 1, 0), q.counts());
     }

@@ -44,7 +44,7 @@ public final class MemoryStorage implements Storage {
             this.payload = m.payload().clone();
             this.headers = Map.copyOf(m.headers());
             this.publishedAt = publishedAt;
-            this.availableAt = m.delay().isZero() ? null : publishedAt.plus(m.delay());
+            this.availableAt = m.availableAt(publishedAt);
         }
     }
 
@@ -125,7 +125,7 @@ public final class MemoryStorage implements Storage {
             long leased = 0;
             long delayed = 0;
             for (Entry e : require(queue).values()) {
-                if (e.availableAt != null && e.availableAt.isAfter(now)) {
+                if (isDelayed(e, now)) {
                     delayed++;
                 } else if (isReady(e, now)) {
                     ready++;
@@ -219,7 +219,7 @@ public final class MemoryStorage implements Storage {
                     case NACK -> {
                         e.leaseToken = null;
                         e.leaseDeadline = null;
-                        e.availableAt = d.delay().isZero() ? null : now.plus(d.delay());
+                        e.availableAt = d.availableAt(now);
                     }
                 }
                 return Outcome.OK;
@@ -261,10 +261,11 @@ public final class MemoryStorage implements Storage {
 
     /** 리스가 없거나 기한이 지났으면 준비 상태다. 기한이 지나도 다시 꺼내기 전까지는 리스 토큰이 남아 있다. */
     private static boolean isReady(Entry e, Instant now) {
-        if (e.availableAt != null && e.availableAt.isAfter(now)) {
-            return false;
-        }
-        return e.leaseToken == null || !e.leaseDeadline.isAfter(now);
+        return !isDelayed(e, now) && (e.leaseToken == null || !e.leaseDeadline.isAfter(now));
+    }
+
+    private static boolean isDelayed(Entry e, Instant now) {
+        return e.availableAt != null && e.availableAt.isAfter(now);
     }
 
     private TreeMap<Long, Entry> require(String queue) {

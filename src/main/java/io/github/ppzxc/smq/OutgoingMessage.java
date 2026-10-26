@@ -9,7 +9,7 @@ public record OutgoingMessage(byte[] payload, Map<String, String> headers, Durat
     public OutgoingMessage {
         payload = payload.clone();
         headers = Map.copyOf(headers);
-        if (delay.isNegative()) {
+        if (delay == null || delay.isNegative()) {
             throw new IllegalArgumentException("delay must not be negative: " + delay);
         }
     }

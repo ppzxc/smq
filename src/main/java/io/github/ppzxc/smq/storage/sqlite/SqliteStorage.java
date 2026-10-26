@@ -49,7 +49,7 @@ public final class SqliteStorage implements Storage {
 
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
     public static final int APPLICATION_ID = 0x534D5131;
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
     static final String SELECT_READY =
             "SELECT id FROM message WHERE queue_id = ? AND (available_at IS NULL OR available_at <= ?)"
@@ -318,11 +318,7 @@ public final class SqliteStorage implements Storage {
                     ps.setBytes(2, m.payload());
                     ps.setBytes(3, encodeHeaders(m.headers()));
                     ps.setLong(4, toNanos(now));
-                    if (m.delay().isZero()) {
-                        ps.setNull(5, java.sql.Types.INTEGER);
-                    } else {
-                        ps.setLong(5, toNanos(now.plus(m.delay())));
-                    }
+                    setInstantOrNull(ps, 5, m.availableAt(now));
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();
@@ -389,23 +385,22 @@ public final class SqliteStorage implements Storage {
                             UPDATE message SET lease_token = NULL, lease_deadline = NULL, available_at = ?
                             WHERE id = ? AND lease_token = ?""")) {
                 for (Disposition d : items) {
-                    PreparedStatement ps;
-                    int next = 1;
+                    int updated;
                     switch (d.kind()) {
-                        case ACK -> ps = ack;
-                        case NACK -> {
-                            ps = nack;
-                            if (d.delay().isZero()) {
-                                ps.setNull(next++, java.sql.Types.INTEGER);
-                            } else {
-                                ps.setLong(next++, toNanos(now.plus(d.delay())));
-                            }
+                        case ACK -> {
+                            ack.setLong(1, d.id().value());
+                            ack.setLong(2, token.value());
+                            updated = ack.executeUpdate();
                         }
-                        default -> throw new IllegalStateException();
+                        case NACK -> {
+                            setInstantOrNull(nack, 1, d.availableAt(now));
+                            nack.setLong(2, d.id().value());
+                            nack.setLong(3, token.value());
+                            updated = nack.executeUpdate();
+                        }
+                        default -> throw new IllegalStateException("unknown disposition: " + d.kind());
                     }
-                    ps.setLong(next++, d.id().value());
-                    ps.setLong(next, token.value());
-                    results.add(new Result(d.id(), ps.executeUpdate() == 1 ? Outcome.OK : Outcome.STALE));
+                    results.add(new Result(d.id(), updated == 1 ? Outcome.OK : Outcome.STALE));
                 }
             }
             return results;
@@ -447,6 +442,14 @@ public final class SqliteStorage implements Storage {
             } catch (SQLException ignored) {
                 // 닫기 실패는 무시한다.
             }
+        }
+    }
+
+    private static void setInstantOrNull(PreparedStatement ps, int index, Instant t) throws SQLException {
+        if (t == null) {
+            ps.setNull(index, java.sql.Types.INTEGER);
+        } else {
+            ps.setLong(index, toNanos(t));
         }
     }
 

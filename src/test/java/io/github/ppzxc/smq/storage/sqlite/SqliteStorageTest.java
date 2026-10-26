@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.QueueOptions;
+import io.github.ppzxc.smq.SmqStorageException;
+import io.github.ppzxc.smq.storage.NewMessage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -12,9 +14,11 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -140,6 +144,62 @@ class SqliteStorageTest {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.PROCESS_CRASH)) {
             assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
             assertEquals("1", s.inTransaction(c -> pragma(c, "synchronous")));
+        }
+    }
+
+    private static NewMessage message() {
+        return new NewMessage(new byte[] {1}, Map.of());
+    }
+
+    @Test
+    void 쓰기_락이_잠깐_잡혀_있다_풀리면_발행이_재시도로_성공한다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS, 20, 100);
+                Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            s.declare("q", QueueOptions.defaults());
+            st.execute("BEGIN IMMEDIATE");
+            Thread releaser = new Thread(() -> {
+                try {
+                    Thread.sleep(300);
+                    st.execute("COMMIT");
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            });
+            releaser.start();
+            assertEquals(1, s.publish("q", List.of(message()), Instant.EPOCH).size());
+            releaser.join();
+            assertEquals(1, s.counts("q", Instant.EPOCH).ready());
+        }
+    }
+
+    @Test
+    void 재시도로도_풀리지_않으면_SmqStorageException으로_올리고_아무것도_반영하지_않는다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3);
+                Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            s.declare("q", QueueOptions.defaults());
+            st.execute("BEGIN IMMEDIATE");
+            assertThrows(SmqStorageException.class, () -> s.publish("q", List.of(message()), Instant.EPOCH));
+            st.execute("ROLLBACK");
+            assertEquals(0, s.counts("q", Instant.EPOCH).ready());
+        }
+    }
+
+    @Test
+    void 빈_큐를_꺼내_보는_폴링은_다른_연결이_쓰기_락을_잡고_있어도_기다리지_않는다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS, 2000, 1);
+                Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            s.declare("q", QueueOptions.defaults());
+            st.execute("BEGIN IMMEDIATE");
+            long start = System.nanoTime();
+            assertTrue(s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH).messages().isEmpty());
+            assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 1000);
+            st.execute("ROLLBACK");
         }
     }
 

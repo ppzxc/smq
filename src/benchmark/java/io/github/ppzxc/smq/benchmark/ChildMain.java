@@ -12,10 +12,10 @@ public final class ChildMain {
 
     public static void main(String[] args) throws Exception {
         if (args.length != 4) {
-            System.err.println("사용법: ChildMain <specJson> <role> <dbPath> <startAtEpochMs>");
+            System.err.println("사용법: ChildMain <specArg> <role> <dbPath> <startAtEpochMs>");
             System.exit(2);
         }
-        RunSpec spec = RunSpec.fromJson(args[0]);
+        RunSpec spec = RunSpec.fromArg(args[0]);
         Role role = Role.valueOf(args[1]);
         Path db = Path.of(args[2]);
         long startAt = Long.parseLong(args[3]);

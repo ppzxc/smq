@@ -8,7 +8,7 @@
     "cpus": "24",
     "java": "25.0.3",
     "workDirFs": "xfs",
-    "caveat": "HP Smart Array P440ar 위 SATA 7200rpm HDD 6개 RAID 1+0(xfs). 컨트롤러 배터리 백업 쓰기 캐시 켜짐(1.8GB, 쓰기 90%), 디스크 자체 캐시 꺼짐. NVMe ext4가 아니다. 항목 값은 3회 측정의 중앙값이다.",
+    "caveat": "HP Smart Array P440ar 위 SATA 7200rpm HDD 6개 RAID 1+0(xfs). 컨트롤러 배터리 백업 쓰기 캐시 켜짐(1.8GB, 쓰기 90%), 디스크 자체 캐시 꺼짐. NVMe ext4가 아니다. 항목 값은 3회 측정의 중앙값이다. P4와 단건 프로파일(P2S, P3S, P4S, S2/P0)은 같은 장비에서 나중에 3회 재서 더했다.",
     "runs": "3"
   },
   "entries": {
@@ -36,6 +36,21 @@
     "sqlite/S3/P1/same-process/POWER_LOSS/empty:p50Ms": 5.694,
     "sqlite/S3/P1/same-process/POWER_LOSS/empty:p99Ms": 7.672,
     "sqlite/S3/P1/cross-process/POWER_LOSS/empty:p50Ms": 20.262,
-    "sqlite/S3/P1/cross-process/POWER_LOSS/empty:p99Ms": 37.677
+    "sqlite/S3/P1/cross-process/POWER_LOSS/empty:p99Ms": 37.677,
+    "sqlite/S2/P0/proc1/POWER_LOSS/empty:msgPerSec": 2767.756,
+    "sqlite/S2/P4S/proc1/POWER_LOSS/empty:msgPerSec": 2374.107,
+    "sqlite/S2/P3S/proc1/POWER_LOSS/empty:msgPerSec": 2195.073,
+    "sqlite/S2/P2S/proc1/POWER_LOSS/empty:msgPerSec": 2434.377,
+    "sqlite/S1/P4S/proc1/POWER_LOSS/empty:msgPerSec": 453.2,
+    "sqlite/S1/P4S/proc1/PROCESS_CRASH/empty:msgPerSec": 1029.808,
+    "sqlite/S1/P3S/proc1/POWER_LOSS/empty:msgPerSec": 444.847,
+    "sqlite/S1/P3S/proc1/PROCESS_CRASH/empty:msgPerSec": 936.659,
+    "sqlite/S1/P2S/proc1/POWER_LOSS/empty:msgPerSec": 473.055,
+    "sqlite/S1/P2S/proc1/PROCESS_CRASH/empty:msgPerSec": 1330.208,
+    "sqlite/S1/P4/proc1/POWER_LOSS/empty:msgPerSec": 10277.098,
+    "sqlite/S1/P4/proc1/PROCESS_CRASH/empty:msgPerSec": 10117.466,
+    "sqlite/S1/P4/proc4/POWER_LOSS/empty:msgPerSec": 7624.85,
+    "sqlite/S1/P4/proc4/PROCESS_CRASH/empty:msgPerSec": 8083.094,
+    "sqlite/S2/P4/proc1/POWER_LOSS/empty:msgPerSec": 16055.105
   }
 }

@@ -76,7 +76,7 @@ final class Runner {
         Path out = dir.resolve("child-" + index + ".out");
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         Process p = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED", "-cp",
-                System.getProperty("java.class.path"), ChildMain.class.getName(), spec.toJson(), role.name(),
+                System.getProperty("java.class.path"), ChildMain.class.getName(), spec.toArg(), role.name(),
                 db.toString(), String.valueOf(startAt))
                 .redirectOutput(out.toFile())
                 .redirectError(ProcessBuilder.Redirect.INHERIT)

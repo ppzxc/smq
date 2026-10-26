@@ -995,6 +995,23 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 다른_컨슈머가_다시_꺼간_메시지의_reject는_STALE이고_dead_letter_큐에_아무것도_넣지_않는다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().deadLetterQueue("dead"));
+        MessageId id = q.publish(msg("a"));
+        Chunk slow = q.pull(1, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(10));
+        Chunk fast = q.pull(1, Duration.ZERO);
+
+        assertEquals(List.of(id), q.settle(slow.settle().reject(id).build()).stale());
+
+        assertEquals(new QueueCounts(0, 0, 0), dead.counts());
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+        assertTrue(q.settle(fast.ackAll()).allOk());
+    }
+
+    @Test
     void dead_letter_큐가_없는_큐에서_reject하면_NoDeadLetterQueueException이고_섞인_정산_전체가_반영되지_않는다() throws Exception {
         Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
@@ -1009,6 +1026,21 @@ abstract class SmqConformanceTest {
         Chunk again = q.pull(10, Duration.ZERO);
         assertEquals(ids, again.messages().stream().map(Message::id).toList());
         assertTrue(again.messages().stream().allMatch(m -> m.deliveryCount() == 2));
+    }
+
+    @Test
+    void dead_letter_큐가_없는_큐에서도_다른_컨슈머가_다시_꺼간_메시지의_reject는_예외가_아니라_STALE이다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        MessageId id = q.publish(msg("a"));
+        Chunk slow = q.pull(1, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(10));
+        Chunk fast = q.pull(1, Duration.ZERO);
+
+        assertEquals(List.of(id), q.settle(slow.settle().reject(id).build()).stale());
+
+        // 효력이 없었으므로 fast의 리스는 그대로다.
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+        assertTrue(q.settle(fast.ackAll()).allOk());
     }
 
     @Test
@@ -1263,6 +1295,79 @@ abstract class SmqConformanceTest {
     private static final int ROUNDS = 300;
 
     @Test
+    void 여러_스레드가_동시에_꺼내도_같은_메시지가_두_리스에_묶이지_않는다() throws Exception {
+        Smq smq = open(Duration.ofMinutes(10));
+        // 경합은 아주 짧은 틈에서만 깨지므로, 라운드마다 새 큐로 여러 번 겨룬다.
+        for (int round = 0; round < ROUNDS; round++) {
+            Queue q = smq.declare("race" + round, QueueOptions.defaults());
+            q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d"), msg("e"), msg("f")));
+
+            List<Chunk> chunks = Collections.synchronizedList(new ArrayList<>());
+            ThrowingRunnable puller = () -> chunks.add(q.pull(2, Duration.ZERO));
+            runConcurrently(Collections.nCopies(8, puller));
+
+            List<MessageId> delivered = chunks.stream().flatMap(c -> c.messages().stream()).map(Message::id).toList();
+            assertEquals(6, delivered.size(), "round " + round + " " + delivered);
+            assertEquals(6, Set.copyOf(delivered).size(), "round " + round + " " + delivered);
+            assertTrue(chunks.stream().flatMap(c -> c.messages().stream()).allMatch(m -> m.deliveryCount() == 1),
+                    "round " + round);
+            assertEquals(new QueueCounts(0, 6, 0), q.counts(), "round " + round);
+        }
+    }
+
+    @Test
+    void 같은_청크를_동시에_정산하면_메시지마다_정확히_한_쪽만_OK다() throws Exception {
+        Smq smq = open(Duration.ofMinutes(10));
+        for (int round = 0; round < ROUNDS; round++) {
+            Queue q = smq.declare("settle" + round, QueueOptions.defaults());
+            q.publish(List.of(msg("a"), msg("b"), msg("c")));
+            Chunk chunk = q.pull(3, Duration.ZERO);
+
+            List<Outcomes> results = Collections.synchronizedList(new ArrayList<>());
+            ThrowingRunnable settler = () -> results.add(q.settle(chunk.ackAll()));
+            runConcurrently(Collections.nCopies(4, settler));
+
+            for (Message m : chunk.messages()) {
+                long ok = results.stream().filter(r -> r.byMessage().get(m.id()) == Outcome.OK).count();
+                assertEquals(1, ok, "round " + round + " " + m.id());
+            }
+            assertEquals(new QueueCounts(0, 0, 0), q.counts(), "round " + round);
+        }
+    }
+
+    @Test
+    void 여러_스레드가_동시에_발행해도_id는_겹치지_않고_모두_들어간다() throws Exception {
+        Smq smq = open();
+        for (int round = 0; round < ROUNDS; round++) {
+            Queue q = smq.declare("pub" + round, QueueOptions.defaults());
+            List<MessageId> ids = Collections.synchronizedList(new ArrayList<>());
+            ThrowingRunnable publisher = () -> ids.addAll(q.publish(List.of(msg("a"), msg("b"), msg("c"))));
+            runConcurrently(Collections.nCopies(4, publisher));
+
+            assertEquals(12, ids.size(), "round " + round);
+            assertEquals(12, Set.copyOf(ids).size(), "round " + round + " " + ids);
+            assertEquals(new QueueCounts(12, 0, 0), q.counts(), "round " + round);
+        }
+    }
+
+    @Test
+    void 여러_스레드가_동시에_연장해도_모두_OK이고_리스는_유지된다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        for (int round = 0; round < ROUNDS; round++) {
+            Queue q = smq.declare("ext" + round, QueueOptions.defaults());
+            q.publish(List.of(msg("a"), msg("b")));
+            Chunk chunk = q.pull(2, Duration.ZERO);
+
+            List<Extension> results = Collections.synchronizedList(new ArrayList<>());
+            ThrowingRunnable extender = () -> results.add(q.extend(chunk, Duration.ofSeconds(20)));
+            runConcurrently(Collections.nCopies(4, extender));
+
+            assertTrue(results.stream().allMatch(e -> e.outcomes().allOk()), "round " + round);
+            assertEquals(new QueueCounts(0, 2, 0), q.counts(), "round " + round);
+        }
+    }
+
+    @Test
     void 단일_활성_컨슈머_큐는_일부_ACK하고_나머지를_지연_없이_NACK하면_다음_꺼내기가_청크를_받는다() throws Exception {
         Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
         q.publish(List.of(msg("a"), msg("b"), msg("c")));
@@ -1287,13 +1392,35 @@ abstract class SmqConformanceTest {
         assertEquals("b", text(next.messages().getFirst()));
     }
 
+    @Test
+    void 만료된_리스를_연장하는_쪽과_다시_꺼내는_쪽이_동시에_겨루면_한_쪽만_성공한다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        for (int round = 0; round < ROUNDS; round++) {
+            Queue q = smq.declare("expire" + round, QueueOptions.defaults());
+            q.publish(msg("a"));
+            Chunk old = q.pull(1, Duration.ZERO);
+            clock.advance(Duration.ofSeconds(10));
+
+            var extension = new java.util.concurrent.atomic.AtomicReference<Extension>();
+            var again = new java.util.concurrent.atomic.AtomicReference<Chunk>();
+            runConcurrently(List.of(
+                    () -> extension.set(q.extend(old, Duration.ofSeconds(100))),
+                    () -> again.set(q.pull(1, Duration.ZERO))));
+
+            // 연장이 먼저면 아직 리스 중이라 꺼낼 수 없고, 꺼내기가 먼저면 이전 리스는 STALE이다.
+            boolean extended = extension.get().outcomes().allOk();
+            boolean pulled = !again.get().isEmpty();
+            assertTrue(extended ^ pulled, "round " + round + " extended=" + extended + " pulled=" + pulled);
+        }
+    }
+
     @FunctionalInterface
-    private interface ThrowingRunnable {
+    interface ThrowingRunnable {
         void run() throws Exception;
     }
 
     /** 모든 작업을 래치 뒤에서 동시에 시작해 끝날 때까지 기다리고, 작업이 던진 예외는 테스트 실패로 올린다. */
-    private static void runConcurrently(List<ThrowingRunnable> tasks) throws InterruptedException {
+    static void runConcurrently(List<ThrowingRunnable> tasks) throws InterruptedException {
         var start = new java.util.concurrent.CountDownLatch(1);
         var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
         List<Thread> threads = new ArrayList<>();

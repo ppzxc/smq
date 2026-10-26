@@ -16,8 +16,24 @@ _Avoid_: 청크(발행하는 쪽에서)
 꺼낸 청크에 대해 컨슈머가 갖는 기한부 점유. 기한 안에 ACK/NACK되지 않은 메시지는 다시 꺼낼 수 있게 된다.
 _Avoid_: 가시성 타임아웃, 잠금
 
+**전달(Delivery)**:
+메시지가 청크에 담겨 컨슈머에게 한 번 꺼내지는 일. 결과가 ACK든 NACK든 리스 만료든 한 번의 전달이다.
+_Avoid_: 시도(attempt), 소비
+
+**전달 횟수(Delivery count)**:
+메시지가 지금까지 전달된 횟수. 재전달 한도와 중복 판단의 근거가 된다.
+_Avoid_: 재시도 횟수, read count
+
+**낡은 연산(Stale operation)**:
+메시지가 이미 다른 리스로 넘어간 뒤에 이전 리스를 근거로 시도한 ACK, NACK, reject, 연장. 효력이 없고 실패가 아니라 결과로 알려진다.
+_Avoid_: 만료된 ACK, 충돌
+
+**Reject**:
+컨슈머가 재시도해도 소용없다고 판단한 메시지를 전달 횟수와 상관없이 바로 dead letter 큐로 보내는 일.
+_Avoid_: NACK(requeue=false), 버리기
+
 **Dead letter 큐(Dead letter queue)**:
-최대 전달 횟수를 넘긴 메시지가 옮겨지는 큐. 그 자체로 평범한 큐다.
+최대 전달 횟수를 넘겼거나 reject된 메시지가 옮겨지는 큐. 그 자체로 평범한 큐다.
 _Avoid_: DLX, 실패 큐
 
 **단일 활성 컨슈머(Single active consumer)**:

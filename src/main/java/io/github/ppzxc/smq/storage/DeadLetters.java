@@ -23,7 +23,8 @@ public final class DeadLetters {
     /** dead letter 이동의 이유. {@link #value()}가 {@code smq-reason} 헤더 값이다. */
     public enum Reason {
         REJECTED("rejected"),
-                MAX_DELIVERIES("max-deliveries");
+        /** 최대 전달 횟수 도달 이동. */
+        MAX_DELIVERIES("max-deliveries");
 
         private final String value;
 

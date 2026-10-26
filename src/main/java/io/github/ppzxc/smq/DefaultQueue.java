@@ -81,14 +81,13 @@ final class DefaultQueue implements Queue {
             throw new IllegalArgumentException("wait must not be negative: " + wait);
         }
         Validation.positive(leaseDuration, "leaseDuration");
+        boolean[] deadLettersRemain = new boolean[1];
         return waiter.await(wait, () -> {
-            PullResult r;
-            do {
-                r = storage.pull(name, max, leaseDuration, clock.instant());
-                // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다.
-            } while (r.messages().isEmpty() && r.maybeMore());
+            PullResult r = storage.pull(name, max, leaseDuration, clock.instant());
+            // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다(닫힘과 interrupt는 대기 루프가 확인한다).
+            deadLettersRemain[0] = r.messages().isEmpty() && r.deadLettersRemain();
             return r.messages().isEmpty() ? null : new Chunk(name, r.messages(), r.leaseDeadline(), r.token());
-        }, () -> new Chunk(name, List.of(), null, null));
+        }, () -> new Chunk(name, List.of(), null, null), () -> deadLettersRemain[0]);
     }
 
     @Override

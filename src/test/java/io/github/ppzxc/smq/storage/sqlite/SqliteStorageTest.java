@@ -86,27 +86,30 @@ class SqliteStorageTest {
     }
 
     @Test
-    void 꺼내기_쿼리는_인덱스를_탄다() throws Exception {
+    void 꺼내기가_쓰는_쿼리는_인덱스를_탄다() throws Exception {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
-            List<String> plan = s.inTransaction(c -> {
-                List<String> rows = new ArrayList<>();
-                try (var ps = c.prepareStatement("EXPLAIN QUERY PLAN " + SqliteStorage.SELECT_READY);
-                        ) {
-                    ps.setLong(1, 1);
-                    ps.setLong(2, 0);
-                    ps.setInt(3, 10);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            rows.add(rs.getString("detail"));
+            for (String sql : List.of(SqliteStorage.SELECT_PULLABLE, SqliteStorage.SELECT_EXHAUSTED)) {
+                List<String> plan = s.inTransaction(c -> {
+                    List<String> rows = new ArrayList<>();
+                    try (var ps = c.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
+                        ps.setLong(1, 1);
+                        ps.setLong(2, 0);
+                        ps.setLong(3, 0);
+                        ps.setInt(4, 3);
+                        ps.setInt(5, 10);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                rows.add(rs.getString("detail"));
+                            }
                         }
                     }
-                }
-                return rows;
-            });
-            String joined = String.join("\n", plan);
-            assertTrue(joined.contains("USING INDEX") || joined.contains("USING COVERING INDEX"), joined);
-            assertFalse(joined.contains("TEMP B-TREE"), joined);
-            assertFalse(joined.contains("SCAN message"), joined);
+                    return rows;
+                });
+                String joined = String.join("\n", plan);
+                assertTrue(joined.contains("USING INDEX") || joined.contains("USING COVERING INDEX"), joined);
+                assertFalse(joined.contains("TEMP B-TREE"), joined);
+                assertFalse(joined.contains("SCAN message"), joined);
+            }
         }
     }
 

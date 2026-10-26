@@ -181,21 +181,23 @@ public final class MemoryStorage implements Storage {
             QueueOptions options = optionsByQueue.get(queue);
             List<Entry> picked = new ArrayList<>();
             List<Entry> exhausted = new ArrayList<>();
-            boolean capped = false;
+            boolean deadLettersRemain = false;
+            boolean moves = options.maxDeliveries().isPresent();
             for (Entry e : queued.values()) {
-                if (picked.size() == max) {
+                // 소진 메시지를 옮기려면 청크가 차도 끝까지 훑어야 한다. 옮길 일이 없는 큐는 청크가 차면 멈춘다.
+                if (picked.size() == max && !moves) {
                     break;
                 }
                 if (!isReady(e, now)) {
                     continue;
                 }
-                if (options.maxDeliveries().isPresent() && e.deliveryCount >= options.maxDeliveries().getAsInt()) {
+                if (moves && e.deliveryCount >= options.maxDeliveries().getAsInt()) {
                     if (exhausted.size() < DeadLetters.MAX_MOVES_PER_PULL) {
                         exhausted.add(e);
                     } else {
-                        capped = true;
+                        deadLettersRemain = true;
                     }
-                } else {
+                } else if (picked.size() < max) {
                     picked.add(e);
                 }
             }
@@ -209,7 +211,7 @@ public final class MemoryStorage implements Storage {
                 }
             }
             if (picked.isEmpty()) {
-                return capped ? PullResult.emptyMaybeMore() : PullResult.empty();
+                return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
             }
             long token = nextLeaseToken++;
             Instant deadline = now.plus(lease);
@@ -220,7 +222,7 @@ public final class MemoryStorage implements Storage {
                 e.deliveryCount++;
                 messages.add(new Message(e.id, e.payload, e.headers, e.deliveryCount, e.publishedAt));
             }
-            return new PullResult(new LeaseToken(token), deadline, messages);
+            return PullResult.of(new LeaseToken(token), deadline, messages);
         } finally {
             lock.unlock();
         }

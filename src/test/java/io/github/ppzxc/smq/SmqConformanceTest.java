@@ -1179,4 +1179,22 @@ abstract class SmqConformanceTest {
         assertEquals(new QueueCounts(0, 0, 0), q.counts());
         assertEquals(new QueueCounts(poison, 0, 0), dead.counts());
     }
+
+    @Test
+    void 청크가_차도_뒤쪽의_도달_메시지는_같은_꺼내기에서_옮겨진다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+        MessageId normal = q.publish(OutgoingMessage.of("normal".getBytes(StandardCharsets.UTF_8))
+                .withDelay(Duration.ofSeconds(5)));
+        q.publish(msg("poison"));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(1))).allOk());
+        clock.advance(Duration.ofSeconds(5));
+
+        Chunk c = q.pull(1, Duration.ZERO);
+
+        assertEquals(List.of(normal), c.messages().stream().map(Message::id).toList());
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+        assertEquals(new QueueCounts(1, 0, 0), dead.counts());
+    }
 }

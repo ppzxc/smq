@@ -7,11 +7,13 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -595,8 +597,8 @@ abstract class SmqConformanceTest {
             clock.advance(Duration.ofSeconds(10));
             // 기한이 지난 리스라 3개 모두 준비로 센다. 정산 뒤에는 NACK한 b 하나만 남는다.
             assertEquals(3, q.counts().ready());
-            java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
-            List<Long> seen = java.util.Collections.synchronizedList(new ArrayList<>());
+            AtomicBoolean done = new AtomicBoolean();
+            List<Long> seen = Collections.synchronizedList(new ArrayList<>());
             Thread observer = new Thread(() -> {
                 while (!done.get()) {
                     seen.add(q.counts().ready());
@@ -659,5 +661,17 @@ abstract class SmqConformanceTest {
         assertTrue(q.settle(c.settle().nack(id).build()).allOk());
         assertEquals(List.of(id), q.settle(c.settle().nack(id).build()).stale());
         assertEquals(List.of(id), q.settle(c.ack(id)).stale());
+    }
+
+    @Test
+    void FIFO_순서_그리고_NACK_뒤_원래_자리로_복귀() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        ids = new ArrayList<>(ids);
+        ids.addAll(q.publish(List.of(msg("c"), msg("d"))));
+        Chunk c = q.pull(3, Duration.ZERO);
+        assertTrue(q.settle(c.settle().nack(ids.get(0)).ack(ids.get(1)).nack(ids.get(2)).build()).allOk());
+        assertEquals(List.of(ids.get(0), ids.get(2), ids.get(3)),
+                q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 }

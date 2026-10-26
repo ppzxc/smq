@@ -378,7 +378,10 @@ public final class SqliteStorage implements Storage {
                             UPDATE message SET lease_token = NULL, lease_deadline = NULL
                             WHERE id = ? AND lease_token = ?""")) {
                 for (Disposition d : items) {
-                    PreparedStatement ps = d.kind() == Disposition.Kind.ACK ? ack : nack;
+                    PreparedStatement ps = switch (d.kind()) {
+                        case ACK -> ack;
+                        case NACK -> nack;
+                    };
                     ps.setLong(1, d.id().value());
                     ps.setLong(2, token.value());
                     results.add(new Result(d.id(), ps.executeUpdate() == 1 ? Outcome.OK : Outcome.STALE));

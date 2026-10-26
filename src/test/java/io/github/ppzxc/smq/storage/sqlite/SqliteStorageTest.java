@@ -150,6 +150,9 @@ class SqliteStorageTest {
         }
     }
 
+    /** 시도 횟수 제한이 풀리면 재시도가 끝나지 않으므로, 실패 경로 테스트가 멈추지 않고 실패하게 하는 한도. */
+    private static final Duration RETRY_EXHAUST_LIMIT = Duration.ofSeconds(10);
+
     private static NewMessage message() {
         return new NewMessage(new byte[] {1}, Map.of());
     }
@@ -185,7 +188,8 @@ class SqliteStorageTest {
                 Statement st = other.createStatement()) {
             s.declare("q", QueueOptions.defaults());
             st.execute("BEGIN IMMEDIATE");
-            assertThrows(SmqStorageException.class, () -> s.publish("q", List.of(message()), Instant.EPOCH));
+            assertThrows(SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> s.publish("q", List.of(message()), Instant.EPOCH)));
             st.execute("ROLLBACK");
             assertEquals(0, s.counts("q", Instant.EPOCH).ready());
         }
@@ -247,7 +251,7 @@ class SqliteStorageTest {
             s.publish("q", List.of(message()), Instant.EPOCH);
             st.execute("BEGIN IMMEDIATE");
             assertThrows(SmqStorageException.class,
-                    () -> s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH));
+                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH)));
             st.execute("ROLLBACK");
             assertEquals(new QueueCounts(1, 0, 0), s.counts("q", Instant.EPOCH));
         }
@@ -283,7 +287,8 @@ class SqliteStorageTest {
             PullResult pulled = s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH);
             Disposition ack = new Disposition(pulled.messages().get(0).id(), Disposition.Kind.ACK);
             st.execute("BEGIN IMMEDIATE");
-            assertThrows(SmqStorageException.class, () -> s.settle(pulled.token(), List.of(ack), Instant.EPOCH));
+            assertThrows(SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> s.settle(pulled.token(), List.of(ack), Instant.EPOCH)));
             st.execute("ROLLBACK");
             assertEquals(new QueueCounts(0, 1, 0), s.counts("q", Instant.EPOCH));
         }

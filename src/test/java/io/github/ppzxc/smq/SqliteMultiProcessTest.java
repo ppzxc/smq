@@ -15,7 +15,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,8 +39,8 @@ class SqliteMultiProcessTest {
     private final class Worker {
         final Process process;
         final ConcurrentLinkedQueue<String> lines = new ConcurrentLinkedQueue<>();
-        final CountDownLatch published = new CountDownLatch(1);
-        final AtomicLong publishedAtNanos = new AtomicLong();
+        final ConcurrentLinkedQueue<Long> gotAtNanos = new ConcurrentLinkedQueue<>();
+        final CountDownLatch ready = new CountDownLatch(1);
         final Thread reader;
 
         Worker(String name, int count, String mode) throws IOException {
@@ -56,9 +55,10 @@ class SqliteMultiProcessTest {
                         new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = in.readLine()) != null) {
-                        if (line.equals("PUBLISHED")) {
-                            publishedAtNanos.set(System.nanoTime());
-                            published.countDown();
+                        if (line.equals("READY")) {
+                            ready.countDown();
+                        } else if (line.startsWith("GOT ")) {
+                            gotAtNanos.add(System.nanoTime());
                         }
                         lines.add(line);
                     }
@@ -85,7 +85,7 @@ class SqliteMultiProcessTest {
     @Test
     void 여러_JVM이_발행하고_꺼내도_메시지가_두_번_묶이거나_사라지지_않는다() throws Exception {
         for (int i = 0; i < WORKERS; i++) {
-            new Worker("w" + i, PER_WORKER, "consume");
+            new Worker("w" + i, PER_WORKER, "pull");
         }
         int total = WORKERS * PER_WORKER;
         long deadline = System.nanoTime() + Duration.ofSeconds(90).toNanos();
@@ -115,21 +115,37 @@ class SqliteMultiProcessTest {
         }
     }
 
+    /**
+     * 수신 JVM은 긴 꺼내기 하나로 기다려 폴링 간격을 상한(250ms)까지 늘려 둔다. 발행 시각은 수신 JVM이 대기 중임을
+     * 확인하고 폴링 간격이 상한에 이를 만큼 기다린 뒤, 발행 직전에 잰다. 그래서 지연에는 JVM 기동이 섞이지 않고,
+     * 발행 시간과 폴링 간격 한 번(상한 250ms)과 출력 전달만 남는다. 매 회가 0 이상이며 상한에 같은 크기의 여유를
+     * 더한 값 이하여야 한다(최댓값 기준, 중앙값으로 완화하지 않는다). 위상이 달라지도록 회마다 기다림을 조금씩 바꾼다.
+     */
     @Test
-    void 기다리던_꺼내기가_다른_프로세스의_발행을_폴링_백오프_상한_안팎에_받는다() throws Exception {
+    void 기다리던_꺼내기가_다른_프로세스의_발행을_폴링_간격_상한_안에_받는다() throws Exception {
+        Duration upperBound = Duration.ofMillis(250);
+        Duration slack = Duration.ofMillis(250);
+        Worker receiver = new Worker("recv", 0, "pull-wait");
+        assertTrue(receiver.ready.await(30, TimeUnit.SECONDS), "수신 JVM이 대기에 들어가지 않았다");
         try (Smq smq = Smq.sqlite(dir.resolve("smq.db")).leaseDuration(Duration.ofSeconds(120)).open()) {
             Queue q = smq.declare("q", QueueOptions.defaults());
-            // 먼저 기다리기 시작한 꺼내기가 백오프 상한(250ms)에 이른 뒤에 다른 JVM이 발행한다.
-            Worker publisher = new Worker("remote", 1, "publish-only");
-            Chunk chunk = q.pull(1, Duration.ofSeconds(60));
-            long receivedAt = System.nanoTime();
-            assertEquals(1, chunk.messages().size());
-            assertEquals("remote-0", new String(chunk.messages().getFirst().payload(), StandardCharsets.UTF_8));
-            assertTrue(publisher.published.await(10, TimeUnit.SECONDS));
-            // 상한은 250ms다. 느린 CI에서 흔들리지 않도록 넉넉한 여유를 둔다.
-            long lagMillis = TimeUnit.NANOSECONDS.toMillis(receivedAt - publisher.publishedAtNanos.get());
-            assertTrue(lagMillis < 1500, "발행 알림 뒤 " + lagMillis + "ms에 받았다");
-            publisher.stop();
+            for (int round = 0; round < 8; round++) {
+                // 폴링 간격이 1ms에서 상한 250ms까지 늘어날 시간(합 약 255ms)을 주고, 위상을 흩뜨린다.
+                Thread.sleep(600 + round * 37L);
+                assertEquals(round, receiver.gotAtNanos.size());
+                long publishStart = System.nanoTime();
+                q.publish(OutgoingMessage.of(("r" + round).getBytes(StandardCharsets.UTF_8)));
+                long deadline = publishStart + Duration.ofSeconds(10).toNanos();
+                while (receiver.gotAtNanos.size() <= round) {
+                    assertTrue(System.nanoTime() < deadline, "수신 JVM이 " + round + "번째 메시지를 받지 못했다");
+                    Thread.sleep(1);
+                }
+                long lagMillis = TimeUnit.NANOSECONDS.toMillis(
+                        ((Long[]) receiver.gotAtNanos.toArray(new Long[0]))[round] - publishStart);
+                assertTrue(lagMillis >= 0, round + "회: 발행보다 먼저 받았다(" + lagMillis + "ms)");
+                assertTrue(lagMillis <= upperBound.plus(slack).toMillis(),
+                        round + "회: 발행 뒤 " + lagMillis + "ms에 받았다");
+            }
         }
     }
 }

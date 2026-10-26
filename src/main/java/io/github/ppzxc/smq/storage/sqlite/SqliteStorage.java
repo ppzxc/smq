@@ -54,13 +54,18 @@ public final class SqliteStorage implements Storage {
     public static final int APPLICATION_ID = 0x534D5131;
     public static final int SCHEMA_VERSION = 2;
 
+    /** 꺼낼 수 있는 메시지의 시각 조건. 지연이 끝났고 리스가 없거나 만료됐다. 자리표시자 둘은 모두 현재 시각이다. */
+    private static final String READY_TIME_CONDITION =
+            "(available_at IS NULL OR available_at <= ?) AND (lease_token IS NULL OR lease_deadline <= ?)";
+
     static final String SELECT_READY =
-            "SELECT id FROM message WHERE queue_id = ? AND (available_at IS NULL OR available_at <= ?)"
-                    + " AND (lease_token IS NULL OR lease_deadline <= ?)"
+            "SELECT id FROM message WHERE queue_id = ? AND " + READY_TIME_CONDITION
                     + " ORDER BY id LIMIT ?";
 
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
     private static final int MAX_ATTEMPTS = 5;
+    /** SQLite 기본 결과 코드 {@code SQLITE_BUSY}. */
+    private static final int SQLITE_BUSY = 5;
 
     @FunctionalInterface
     interface TxBody<T> {
@@ -187,7 +192,7 @@ public final class SqliteStorage implements Storage {
                     if (!isBusy(e) || attempt >= maxAttempts) {
                         throw new SmqStorageException("sqlite operation failed", e);
                     }
-                    backoff(attempt, e);
+                    retryDelay(attempt, e);
                 }
             }
         } finally {
@@ -212,11 +217,12 @@ public final class SqliteStorage implements Storage {
     }
 
     private static boolean isBusy(SQLException e) {
-        // 확장 결과 코드의 아래 8비트가 기본 결과 코드다. SQLITE_BUSY=5.
-        return (e.getErrorCode() & 0xFF) == 5;
+        // 확장 결과 코드의 아래 8비트가 기본 결과 코드다.
+        return (e.getErrorCode() & 0xFF) == SQLITE_BUSY;
     }
 
-    private static void backoff(int attempt, SQLException cause) {
+    /** {@code SQLITE_BUSY} 재시도 사이의 대기. 폴링 간격과는 무관하다. */
+    private static void retryDelay(int attempt, SQLException cause) {
         try {
             Thread.sleep(10L * attempt);
         } catch (InterruptedException ie) {
@@ -393,13 +399,17 @@ public final class SqliteStorage implements Storage {
     private boolean anyReady(String queue, Instant now) {
         lock.lock();
         try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT EXISTS(SELECT 1 FROM message m WHERE m.queue_id = (SELECT id FROM queue WHERE name = ?1)"
-                        + " AND (m.available_at IS NULL OR m.available_at <= ?2)"
-                        + " AND (m.lease_token IS NULL OR m.lease_deadline <= ?2)), "
-                        + "EXISTS(SELECT 1 FROM queue WHERE name = ?1)")) {
+                "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
+                        + " AND " + READY_TIME_CONDITION + "), "
+                        + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
             ps.setString(1, queue);
             ps.setLong(2, toNanos(now));
+            ps.setLong(3, toNanos(now));
+            ps.setString(4, queue);
             try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return true; // 일어날 수 없지만, 모르면 쓰기 경로가 확인하게 한다.
+                }
                 return rs.getInt(1) == 1 || rs.getInt(2) == 0;
             }
         } catch (SQLException e) {

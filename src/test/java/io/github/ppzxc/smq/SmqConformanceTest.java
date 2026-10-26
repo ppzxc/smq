@@ -1057,4 +1057,89 @@ abstract class SmqConformanceTest {
         assertEquals("rejected", moved.headers().get("smq-reason"));
         assertEquals("t-1", moved.headers().get("trace"));
     }
+
+    @Test
+    void 단일_활성_컨슈머_큐는_리스_중인_청크가_있으면_같은_컨슈머가_다시_꺼내도_빈_청크다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b"), msg("c")));
+
+        Chunk first = q.pull(1, Duration.ZERO);
+        assertEquals(List.of("a"), first.messages().stream().map(SmqConformanceTest::text).toList());
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertTrue(q.pull(10, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(2, 1, 0), q.counts());
+    }
+
+    @Test
+    void 단일_활성_컨슈머가_아닌_큐는_리스_중에도_다음_청크를_받는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        q.publish(List.of(msg("a"), msg("b")));
+
+        assertFalse(q.pull(1, Duration.ZERO).isEmpty());
+        assertFalse(q.pull(1, Duration.ZERO).isEmpty());
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐는_정산하면_다음_꺼내기가_청크를_받는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b"), msg("c")));
+
+        Chunk first = q.pull(1, Duration.ZERO);
+        assertTrue(q.settle(first.ackAll()).allOk());
+        Chunk second = q.pull(1, Duration.ZERO);
+        assertEquals("b", text(second.messages().getFirst()));
+
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertTrue(q.settle(second.nackAll(Duration.ZERO)).allOk());
+        Chunk again = q.pull(1, Duration.ZERO);
+        assertEquals("b", text(again.messages().getFirst()));
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐는_리스가_만료되면_다음_꺼내기가_청크를_받는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b")));
+
+        assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
+        clock.advance(Duration.ofSeconds(9));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(2));
+        assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
+    }
+
+    @Test
+    void 단일_활성_컨슈머_큐에서_여러_스레드가_동시에_꺼내도_리스_중인_청크는_하나다() throws Exception {
+        Queue q = open(Duration.ofMinutes(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        List<OutgoingMessage> batch = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
+            batch.add(msg("m" + i));
+        }
+        q.publish(batch);
+
+        int threads = 8;
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var got = new java.util.concurrent.atomic.AtomicInteger();
+        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        List<Thread> workers = new ArrayList<>();
+        for (int t = 0; t < threads; t++) {
+            workers.add(Thread.ofPlatform().start(() -> {
+                try {
+                    start.await();
+                    if (!q.pull(5, Duration.ZERO).isEmpty()) {
+                        got.incrementAndGet();
+                    }
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            }));
+        }
+        start.countDown();
+        for (Thread t : workers) {
+            t.join(30_000);
+            assertFalse(t.isAlive());
+        }
+        assertNull(failure.get());
+        assertEquals(1, got.get());
+        assertEquals(new QueueCounts(45, 5, 0), q.counts());
+    }
 }

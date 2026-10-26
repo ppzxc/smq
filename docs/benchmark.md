@@ -38,7 +38,9 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 1. 베어메탈 Linux에서, 로컬 NVMe의 ext4 위 체크아웃을 쓴다. 작업 디렉터리가 tmpfs나 네트워크 파일 시스템이면 fsync 비용이 맞지 않으므로 `--work-dir`로 NVMe ext4 경로를 준다. 결과 파일의 `environment.workDirFs`에 파일 시스템 종류가 남는다.
 2. 다른 부하가 없는 상태에서 `./gradlew benchmark`를 돌린다. 인메모리 진단값이 필요하면 `./gradlew benchmark -Pbenchmark.args="--storage memory"`를 따로 돌린다(JVM 힙은 100만 건 깊이를 담을 만큼 필요하다).
 3. 그런 장비가 없으면 WSL2 ext4에서 재도 된다. 이때 결과 파일의 `environment.caveat`에 "fsync 비용을 과소평가할 수 있다"는 경고가 자동으로 들어간다. 결과를 공유할 때 이 경고를 함께 적는다.
-4. 첫 기준선을 정할 때는 `build/benchmark/result.json`을 `benchmark/baseline.json`으로 복사해 커밋한다. 하한이 터무니없으면 그때 한 번만 조정한다. 릴리스 전에는 같은 환경에서 다시 돌려 PASS를 확인한다.
+4. 기준선은 같은 장비에서 3회 재서 항목별 중앙값으로 만든다. 4프로세스 PROCESS_CRASH 항목은 회차 편차가 커서 한 번 값으로는 흔들린다. 현재 기준선과 릴리스 전 절차는 `benchmark/README.md`에 있다. 새 기준선을 정할 때는 그 결과를 `benchmark/baseline.json`으로 복사해 커밋한다. 하한이 터무니없으면 그때 한 번만 조정한다. 릴리스 전에는 같은 환경에서 다시 돌려 PASS를 확인한다.
+
+Windows는 지원 대상이 아니다. 하네스가 자식 JVM에 JSON을 명령행 인자로 넘기는데 Windows의 `ProcessBuilder`가 인자의 큰따옴표를 지워 자식이 실패한다. 측정값도 Linux 기준선과 비교할 수 없다.
 
 ## 결과와 기준선 파일 형식
 

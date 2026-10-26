@@ -113,4 +113,15 @@ class SqliteStorageTest {
         SqliteStorage.open(db).close();
         assertTrue(Files.exists(db));
     }
+
+    @Test
+    void 발행_배치_중간에_실패하면_저장소가_하나도_반영하지_않는다() throws Exception {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"))) {
+            s.declare("q", QueueOptions.defaults());
+            var ok = new io.github.ppzxc.smq.storage.NewMessage(new byte[] {1}, java.util.Map.of());
+            var bad = new io.github.ppzxc.smq.storage.NewMessage(null, java.util.Map.of());
+            assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), java.time.Instant.EPOCH));
+            assertEquals(0, s.counts("q", java.time.Instant.EPOCH).ready());
+        }
+    }
 }

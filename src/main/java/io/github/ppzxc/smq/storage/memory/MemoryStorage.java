@@ -90,11 +90,17 @@ public final class MemoryStorage implements Storage {
         lock.lock();
         try {
             TreeMap<Long, Entry> messages = require(queue);
-            List<MessageId> ids = new ArrayList<>(batch.size());
+            // 항목을 모두 만든 뒤에 반영해서, 중간에 실패해도 일부만 들어가지 않게 한다.
+            List<Entry> entries = new ArrayList<>(batch.size());
+            long next = nextMessageId;
             for (NewMessage m : batch) {
-                MessageId id = new MessageId(nextMessageId++);
-                messages.put(id.value(), new Entry(id, m, now));
-                ids.add(id);
+                entries.add(new Entry(new MessageId(next++), m, now));
+            }
+            nextMessageId = next;
+            List<MessageId> ids = new ArrayList<>(entries.size());
+            for (Entry e : entries) {
+                messages.put(e.id.value(), e);
+                ids.add(e.id);
             }
             return ids;
         } finally {

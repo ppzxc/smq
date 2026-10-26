@@ -6,6 +6,7 @@ import io.github.ppzxc.smq.MessageId;
 public record Disposition(MessageId id, Kind kind) {
 
     public enum Kind {
-        ACK
+        ACK,
+        NACK
     }
 }

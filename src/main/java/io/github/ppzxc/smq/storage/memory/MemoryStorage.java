@@ -209,7 +209,13 @@ public final class MemoryStorage implements Storage {
                 if (!holds(e, token)) {
                     return Outcome.STALE;
                 }
-                messages.remove(d.id().value());
+                switch (d.kind()) {
+                    case ACK -> messages.remove(d.id().value());
+                    case NACK -> {
+                        e.leaseToken = null;
+                        e.leaseDeadline = null;
+                    }
+                }
                 return Outcome.OK;
             }
         }

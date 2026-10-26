@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 발행을 마치면 {@code PUBLISHED}를, 꺼내 정산한 메시지마다 {@code GOT <payload>}를 표준 출력에 한 줄씩 쓴다.
  * {@code pull}이면 표준 입력이 닫힐 때까지 짧은 대기로 꺼낸다. {@code pull-wait}는 긴 대기 하나로 폴링 간격이
  * 상한까지 늘어난 상태를 만든다(프로세스를 죽여서 끝낸다). 발행 뒤 꺼내기 직전에 {@code READY}를 쓴다.
+ * 다섯 번째 인자(선택)는 리스 시간(초)이며 기본은 120이다.
  */
 public final class MultiProcessWorker {
 
@@ -22,6 +23,7 @@ public final class MultiProcessWorker {
         int count = Integer.parseInt(args[2]);
         boolean pull = args[3].startsWith("pull");
         Duration wait = args[3].equals("pull-wait") ? Duration.ofSeconds(60) : Duration.ofMillis(100);
+        long leaseSeconds = args.length > 4 ? Long.parseLong(args[4]) : 120;
         AtomicBoolean stop = new AtomicBoolean();
         Thread stdin = new Thread(() -> {
             try {
@@ -35,7 +37,7 @@ public final class MultiProcessWorker {
         });
         stdin.setDaemon(true);
         stdin.start();
-        try (Smq smq = Smq.sqlite(db).leaseDuration(Duration.ofSeconds(120)).open()) {
+        try (Smq smq = Smq.sqlite(db).leaseDuration(Duration.ofSeconds(leaseSeconds)).open()) {
             Queue q = smq.declare("q", QueueOptions.defaults());
             for (int i = 0; i < count; i++) {
                 q.publish(OutgoingMessage.of((name + "-" + i).getBytes(StandardCharsets.UTF_8)));

@@ -1,0 +1,41 @@
+# Windows(로컬 NTFS) 검증 잡. ADR 0006: 지원 선언 전에 check 통과를 계속 확인한다.
+# 성능 측정은 러너가 불안정해서 넣지 않는다. 기준선은 수동으로 잰다.
+name: Windows
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: ./gradlew check
+        shell: bash
+        run: ./gradlew check --no-daemon --stacktrace
+
+      - name: 테스트 리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-reports
+          path: build/reports/tests
+          if-no-files-found: ignore

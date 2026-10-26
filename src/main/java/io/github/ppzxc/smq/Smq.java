@@ -1,4 +1,4 @@
-package kr.nanoit.smq;
+package io.github.ppzxc.smq;
 
 public final class Smq {
 

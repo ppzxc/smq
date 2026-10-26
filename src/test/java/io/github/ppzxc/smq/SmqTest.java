@@ -1,4 +1,4 @@
-package kr.nanoit.smq;
+package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

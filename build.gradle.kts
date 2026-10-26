@@ -3,7 +3,7 @@ plugins {
     `maven-publish`
 }
 
-group = "kr.nanoit"
+group = "io.github.ppzxc"
 version = "0.1.0-SNAPSHOT"
 
 java {

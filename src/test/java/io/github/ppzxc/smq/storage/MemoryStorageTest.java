@@ -22,7 +22,7 @@ class MemoryStorageTest {
     }
 
     @Test
-    void 변경_힌트는_발행하면_기다리던_스레드를_즉시_깨운다() throws Exception {
+    void 변경_힌트는_wake하면_기다리던_스레드를_즉시_깨운다() throws Exception {
         MemoryStorage s = new MemoryStorage();
         s.declare("q", QueueOptions.defaults());
         ChangeHint hint = s.changeHint().orElseThrow();
@@ -36,7 +36,7 @@ class MemoryStorageTest {
             }
         });
         Thread.sleep(100);
-        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of())), Instant.EPOCH);
+        hint.wake();
         assertTrue(woke.await(2, java.util.concurrent.TimeUnit.SECONDS));
     }
 
@@ -46,7 +46,7 @@ class MemoryStorageTest {
         s.declare("q", QueueOptions.defaults());
         ChangeHint hint = s.changeHint().orElseThrow();
         long seen = hint.version();
-        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of())), Instant.EPOCH);
+        hint.wake();
         long start = System.nanoTime();
         hint.await(seen, java.time.Duration.ofSeconds(30));
         assertTrue(java.time.Duration.ofNanos(System.nanoTime() - start).toMillis() < 1000);

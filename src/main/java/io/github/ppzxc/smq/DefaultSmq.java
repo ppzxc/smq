@@ -1,6 +1,5 @@
 package io.github.ppzxc.smq;
 
-import io.github.ppzxc.smq.storage.ConditionChangeHint;
 import io.github.ppzxc.smq.storage.Storage;
 import java.time.Duration;
 import java.time.InstantSource;
@@ -17,7 +16,7 @@ final class DefaultSmq implements Smq {
         this.storage = storage;
         this.clock = clock;
         this.leaseDuration = leaseDuration;
-        this.waiter = new PullWaiter(storage.changeHint().orElseGet(ConditionChangeHint::new));
+        this.waiter = new PullWaiter(storage.changeHint());
     }
 
     @Override

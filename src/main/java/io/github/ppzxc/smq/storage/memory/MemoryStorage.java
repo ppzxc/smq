@@ -159,7 +159,6 @@ public final class MemoryStorage implements Storage {
                 messages.put(e.id.value(), e);
                 ids.add(e.id);
             }
-            hint.wake();
             return ids;
         } finally {
             lock.unlock();
@@ -205,7 +204,6 @@ public final class MemoryStorage implements Storage {
             for (Disposition d : items) {
                 results.add(new Result(d.id(), settleOne(token, d, now)));
             }
-            hint.wake();
             return results;
         } finally {
             lock.unlock();
@@ -288,6 +286,6 @@ public final class MemoryStorage implements Storage {
 
     @Override
     public void close() {
-        hint.wake();
+        // 해제할 자원이 없다. 기다리는 꺼내기는 코어가 닫으면서 깨운다.
     }
 }

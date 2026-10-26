@@ -97,6 +97,8 @@ final class DefaultQueue implements Queue {
         for (Result r : storage.settle(settlement.token(), settlement.items(), clock.instant())) {
             byMessage.put(r.id(), r.outcome());
         }
+        // NACK은 메시지를 다시 준비로 돌릴 수 있다. 깨우기는 저장소가 아니라 코어가 맡는다.
+        waiter.wake();
         return new Outcomes(byMessage);
     }
 

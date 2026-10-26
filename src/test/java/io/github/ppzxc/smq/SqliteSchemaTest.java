@@ -266,6 +266,21 @@ class SqliteSchemaTest {
     }
 
     @Test
+    void 버전이_바뀐_것을_본_인스턴스는_되돌아와도_빈_큐의_꺼내기에서도_계속_실패한다() throws Exception {
+        int supported = supportedVersion();
+        try (Smq smq = Smq.sqlite(db()).open()) {
+            Queue q = smq.declare("q", QueueOptions.defaults());
+
+            jdbc(db(), "PRAGMA user_version = " + (supported + 1));
+            assertThrows(IncompatibleStorageException.class, q::counts);
+            jdbc(db(), "PRAGMA user_version = " + supported);
+
+            // 큐가 비어 있어도 꺼내기가 빈 청크로 넘어가면 안 된다.
+            assertThrows(IncompatibleStorageException.class, () -> q.pull(1, Duration.ZERO));
+        }
+    }
+
+    @Test
     void 꺼내기_대기_중에_버전이_바뀌면_예외가_pull_밖으로_전파된다() throws Exception {
         int supported = supportedVersion();
         try (Smq smq = Smq.sqlite(db()).open()) {

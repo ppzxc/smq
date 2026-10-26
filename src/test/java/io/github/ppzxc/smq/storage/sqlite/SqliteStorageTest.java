@@ -326,4 +326,82 @@ class SqliteStorageTest {
         }
     }
 
+    // ---- 열기 경로의 BUSY 재시도: 스키마 판정 트랜잭션과 WAL 전환 ----
+
+    @Test
+    void 쓰기_락이_잠깐_잡혀_있다_풀리면_새_파일_열기가_재시도로_성공한다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            st.execute("BEGIN IMMEDIATE");
+            List<Thread> threads = new ArrayList<>();
+            releaseAfter(st, 300, threads);
+            try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS, 20, 100)) {
+                s.declare("q", QueueOptions.defaults());
+                assertTrue(s.exists("q"));
+            }
+            threads.get(0).join();
+        }
+    }
+
+    @Test
+    void 재시도로도_풀리지_않으면_새_파일_열기는_SmqStorageException이고_파일은_망가지지_않는다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            st.execute("BEGIN IMMEDIATE");
+            assertThrows(SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
+            st.execute("ROLLBACK");
+        }
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
+            s.declare("q", QueueOptions.defaults());
+        }
+    }
+
+    /** WAL이 아닌 저널 모드의 smq 파일을 만든다. WAL 전환은 읽는 연결이 하나라도 있으면 BUSY다. */
+    private Path rollbackJournalFile() throws Exception {
+        Path db = dir.resolve("smq.db");
+        SqliteStorage.open(db, Durability.POWER_LOSS).close();
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db); Statement st = c.createStatement()) {
+            st.execute("PRAGMA journal_mode = DELETE");
+        }
+        return db;
+    }
+
+    private static void holdReadTransaction(Statement st) throws SQLException {
+        st.execute("BEGIN");
+        try (ResultSet rs = st.executeQuery("SELECT count(*) FROM sqlite_schema")) {
+            rs.next();
+        }
+    }
+
+    @Test
+    void 읽는_연결이_잠깐_있다_없어지면_저널_모드가_WAL이_아닌_파일_열기가_재시도로_성공하고_WAL이_된다() throws Exception {
+        Path db = rollbackJournalFile();
+        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            holdReadTransaction(st);
+            List<Thread> threads = new ArrayList<>();
+            releaseAfter(st, 300, threads);
+            try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS, 20, 100)) {
+                threads.get(0).join();
+                try (Connection fresh = DriverManager.getConnection("jdbc:sqlite:" + db)) {
+                    assertEquals("wal", pragma(fresh, "journal_mode"));
+                }
+            }
+        }
+    }
+
+    @Test
+    void 읽는_연결이_계속_있으면_저널_모드가_WAL이_아닌_파일_열기는_SmqStorageException이다() throws Exception {
+        Path db = rollbackJournalFile();
+        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            holdReadTransaction(st);
+            assertThrows(SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
+            st.execute("ROLLBACK");
+        }
+    }
 }

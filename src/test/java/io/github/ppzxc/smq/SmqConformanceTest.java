@@ -1393,6 +1393,33 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 단일_활성_컨슈머_큐는_리스_중이면_최대_전달_횟수에_도달한_준비_메시지도_옮기지_않고_리스가_끝나면_옮긴다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead").singleActiveConsumer(true));
+        MessageId x = q.publish(msg("x"));
+        q.publish(msg("y"));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(5))).allOk());
+        // x는 지연 중이라 y가 리스를 받는다(10초).
+        Chunk holding = q.pull(1, Duration.ZERO);
+        assertEquals("y", text(holding.messages().getFirst()));
+
+        // 지연이 끝나 x는 도달한 준비 메시지지만, y의 리스가 살아 있으므로 빈 청크이고 옮기지 않는다.
+        clock.advance(Duration.ofSeconds(6));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(1, 1, 0), q.counts());
+        assertEquals(new QueueCounts(0, 0, 0), dead.counts());
+
+        // 리스가 끝나면 다음 꺼내기가 x와 y를 옮긴다.
+        clock.advance(Duration.ofSeconds(4));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+        assertEquals(new QueueCounts(2, 0, 0), dead.counts());
+        assertEquals(x.value(), Long.parseLong(
+                dead.pull(1, Duration.ZERO).messages().getFirst().headers().get("smq-original-message-id")));
+    }
+
+    @Test
     void 만료된_리스를_연장하는_쪽과_다시_꺼내는_쪽이_동시에_겨루면_한_쪽만_성공한다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         for (int round = 0; round < ROUNDS; round++) {

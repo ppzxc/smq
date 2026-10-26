@@ -779,4 +779,99 @@ abstract class SmqConformanceTest {
         // 잘못된 인자는 아무것도 바꾸지 않는다.
         assertEquals(new QueueCounts(0, 1, 0), q.counts());
     }
+
+    @Test
+    void reject한_메시지는_dead_letter_큐로_옮겨지고_payload와_헤더를_유지하며_smq_헤더를_갖는다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("orders.dead", QueueOptions.defaults());
+        Queue q = smq.declare("orders", QueueOptions.defaults().deadLetterQueue("orders.dead"));
+        MessageId id = q.publish(msg("poison").withHeaders(Map.of("trace", "t-1")));
+        q.settle(q.pull(1, Duration.ZERO).settle().nack(id).build());
+        Chunk c = q.pull(1, Duration.ZERO);
+        assertEquals(2, c.messages().getFirst().deliveryCount());
+        clock.advance(Duration.ofSeconds(5));
+
+        assertTrue(q.settle(c.settle().reject(id).build()).allOk());
+
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+        assertEquals(new QueueCounts(1, 0, 0), dead.counts());
+        Message moved = dead.pull(1, Duration.ZERO).messages().getFirst();
+        assertEquals("poison", text(moved));
+        assertNotEquals(id, moved.id());
+        assertEquals(1, moved.deliveryCount());
+        assertEquals(Map.of("trace", "t-1",
+                "smq-original-queue", "orders",
+                "smq-original-message-id", String.valueOf(id.value()),
+                "smq-last-delivery-count", "2",
+                "smq-moved-at", T0.plusSeconds(5).toString(),
+                "smq-reason", "rejected"), moved.headers());
+    }
+
+    @Test
+    void reject한_메시지의_이전_리스로_다시_정산하면_STALE이다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().deadLetterQueue("dead"));
+        MessageId id = q.publish(msg("a"));
+        Chunk c = q.pull(1, Duration.ZERO);
+        assertTrue(q.settle(c.settle().reject(id).build()).allOk());
+        assertEquals(Outcome.STALE, q.settle(c.settle().reject(id).build()).byMessage().get(id));
+        assertEquals(new QueueCounts(1, 0, 0), smq.queue("dead").counts());
+    }
+
+    @Test
+    void dead_letter_큐가_없는_큐에서_reject하면_NoDeadLetterQueueException이고_섞인_정산_전체가_반영되지_않는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        Chunk c = q.pull(3, Duration.ZERO);
+
+        NoDeadLetterQueueException e = assertThrows(NoDeadLetterQueueException.class,
+                () -> q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).reject(ids.get(2)).build()));
+        assertEquals("q", e.queue());
+
+        assertEquals(new QueueCounts(0, 3, 0), q.counts());
+        clock.advance(Duration.ofSeconds(10));
+        Chunk again = q.pull(10, Duration.ZERO);
+        assertEquals(ids, again.messages().stream().map(Message::id).toList());
+        assertTrue(again.messages().stream().allMatch(m -> m.deliveryCount() == 2));
+    }
+
+    @Test
+    void dead_letter_큐는_평범한_큐라_꺼내고_정산하고_연쇄로_dead_letter를_둘_수_있다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue last = smq.declare("last", QueueOptions.defaults());
+        Queue middle = smq.declare("middle", QueueOptions.defaults().deadLetterQueue("last"));
+        Queue q = smq.declare("q", QueueOptions.defaults().deadLetterQueue("middle"));
+        MessageId id = q.publish(msg("a"));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().reject(id).build()).allOk());
+
+        Chunk inMiddle = middle.pull(1, Duration.ZERO);
+        Message m = inMiddle.messages().getFirst();
+        assertEquals("q", m.headers().get("smq-original-queue"));
+        assertTrue(middle.settle(inMiddle.settle().reject(m.id()).build()).allOk());
+
+        Chunk lastChunk = last.pull(1, Duration.ZERO);
+        Message end = lastChunk.messages().getFirst();
+        assertEquals("a", text(end));
+        assertEquals("middle", end.headers().get("smq-original-queue"));
+        assertEquals(String.valueOf(m.id().value()), end.headers().get("smq-original-message-id"));
+        assertEquals("rejected", end.headers().get("smq-reason"));
+
+        assertThrows(NoDeadLetterQueueException.class,
+                () -> last.settle(lastChunk.settle().reject(end.id()).build()));
+        assertTrue(last.settle(lastChunk.ackAll()).allOk());
+    }
+
+    @Test
+    void smq_접두사는_예약이라_같은_이름의_사용자_헤더는_시스템_값으로_덮어써진다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().deadLetterQueue("dead"));
+        MessageId id = q.publish(msg("a").withHeaders(Map.of("smq-reason", "mine", "trace", "t-1")));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().reject(id).build()).allOk());
+
+        Message moved = dead.pull(1, Duration.ZERO).messages().getFirst();
+        assertEquals("rejected", moved.headers().get("smq-reason"));
+        assertEquals("t-1", moved.headers().get("trace"));
+    }
 }

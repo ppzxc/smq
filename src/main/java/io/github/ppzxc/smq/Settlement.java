@@ -60,6 +60,11 @@ public final class Settlement {
             return put(new Disposition(id, Disposition.Kind.NACK, Validation.positive(delay, "delay")));
         }
 
+        /** 전달 횟수와 상관없이 메시지를 그 큐의 dead letter 큐로 옮긴다. dead letter 큐가 없으면 정산 전체가 반영되지 않는다. */
+        public Builder reject(MessageId id) {
+            return put(new Disposition(id, Disposition.Kind.REJECT));
+        }
+
         private Builder put(Disposition d) {
             if (!chunkIds.contains(d.id())) {
                 throw new IllegalArgumentException("message is not in the chunk: " + d.id());

@@ -4,6 +4,7 @@ import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
+import io.github.ppzxc.smq.NoDeadLetterQueueException;
 import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueDeclarationConflictException;
@@ -11,6 +12,7 @@ import io.github.ppzxc.smq.QueueInUseException;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.SmqStorageException;
+import io.github.ppzxc.smq.storage.DeadLetters;
 import io.github.ppzxc.smq.storage.Disposition;
 import io.github.ppzxc.smq.storage.Extended;
 import io.github.ppzxc.smq.storage.LeaseToken;
@@ -385,6 +387,13 @@ public final class SqliteStorage implements Storage {
         return inTransaction(c -> {
             List<Result> results = new ArrayList<>(items.size());
             try (PreparedStatement ack = c.prepareStatement("DELETE FROM message WHERE id = ? AND lease_token = ?");
+                    PreparedStatement find = c.prepareStatement("""
+                            SELECT m.queue_id, q.name, q.dead_letter_queue_id, m.payload, m.headers, m.delivery_count
+                            FROM message m JOIN queue q ON q.id = m.queue_id
+                            WHERE m.id = ? AND m.lease_token = ?""");
+                    PreparedStatement insert = c.prepareStatement("""
+                            INSERT INTO message(queue_id, payload, headers, delivery_count, published_at)
+                            VALUES (?, ?, ?, 0, ?)""");
                     PreparedStatement nack = c.prepareStatement("""
                             UPDATE message SET lease_token = NULL, lease_deadline = NULL, available_at = ?
                             WHERE id = ? AND lease_token = ?""")) {
@@ -402,6 +411,7 @@ public final class SqliteStorage implements Storage {
                             nack.setLong(3, token.value());
                             updated = nack.executeUpdate();
                         }
+                        case REJECT -> updated = reject(find, insert, ack, token, d, now);
                         default -> throw new IllegalStateException("unknown disposition: " + d.kind());
                     }
                     results.add(new Result(d.id(), updated == 1 ? Outcome.OK : Outcome.STALE));
@@ -409,6 +419,40 @@ public final class SqliteStorage implements Storage {
             }
             return results;
         });
+    }
+
+    /** 이동은 dead letter 큐에 새 메시지를 넣고 원래 메시지를 지우는 일이다. 예외는 트랜잭션 전체를 되돌린다. */
+    private static int reject(PreparedStatement find, PreparedStatement insert, PreparedStatement delete,
+            LeaseToken token, Disposition d, Instant now) throws SQLException {
+        find.setLong(1, d.id().value());
+        find.setLong(2, token.value());
+        String queueName;
+        long dlqId;
+        byte[] payload;
+        Map<String, String> headers;
+        int deliveryCount;
+        try (ResultSet rs = find.executeQuery()) {
+            if (!rs.next()) {
+                return 0;
+            }
+            queueName = rs.getString(2);
+            dlqId = rs.getLong(3);
+            if (rs.wasNull()) {
+                throw new NoDeadLetterQueueException(queueName);
+            }
+            payload = rs.getBytes(4);
+            headers = decodeHeaders(rs.getBytes(5));
+            deliveryCount = rs.getInt(6);
+        }
+        insert.setLong(1, dlqId);
+        insert.setBytes(2, payload);
+        insert.setBytes(3, encodeHeaders(DeadLetters.headers(
+                new DeadLetters.Origin(queueName, d.id(), headers, deliveryCount), DeadLetters.Reason.REJECTED, now)));
+        insert.setLong(4, toNanos(now));
+        insert.executeUpdate();
+        delete.setLong(1, d.id().value());
+        delete.setLong(2, token.value());
+        return delete.executeUpdate();
     }
 
     @Override

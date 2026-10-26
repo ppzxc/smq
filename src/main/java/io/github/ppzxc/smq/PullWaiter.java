@@ -5,6 +5,7 @@ import io.github.ppzxc.smq.storage.ConditionChangeHint;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -52,6 +53,14 @@ final class PullWaiter {
      * @param empty 시간이 다했거나 닫혔을 때의 빈 결과
      */
     <T> T await(Duration wait, Supplier<T> attempt, Supplier<T> empty) throws InterruptedException {
+        return await(wait, attempt, empty, () -> false);
+    }
+
+    /**
+     * @param retryNow 비어 돌아온 직후 true이면 기다리지 않고 바로 다시 꺼낸다. 그 사이에도 닫힘과 interrupt를 확인한다.
+     */
+    <T> T await(Duration wait, Supplier<T> attempt, Supplier<T> empty, BooleanSupplier retryNow)
+            throws InterruptedException {
         long deadline = System.nanoTime() + wait.toNanos();
         long pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
         while (true) {
@@ -74,6 +83,12 @@ final class PullWaiter {
             }
             if (result != null) {
                 return result;
+            }
+            if (retryNow.getAsBoolean()) {
+                if (Thread.interrupted()) {
+                    throw new InterruptedException();
+                }
+                continue;
             }
             long remaining = deadline - System.nanoTime();
             if (remaining <= 0) {

@@ -89,4 +89,39 @@ class PullWaiterTest {
         assertEquals(List.of(Duration.ofMillis(1), Duration.ofMillis(2), Duration.ofMillis(4),
                 Duration.ofMillis(8), Duration.ofMillis(16)), awaits);
     }
+
+    @Test
+    void 바로_다시_꺼내라는_표시가_계속되어도_닫히면_멈춘다() throws Exception {
+        PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
+        AtomicInteger attempts = new AtomicInteger();
+        String result = waiter.await(Duration.ofSeconds(30), () -> {
+            int n = attempts.incrementAndGet();
+            if (n > 3) {
+                throw new AssertionError("닫힌 뒤에도 다시 꺼냈다");
+            }
+            if (n == 3) {
+                waiter.close();
+            }
+            return null;
+        }, () -> "empty", () -> true);
+        assertEquals("empty", result);
+        assertEquals(3, attempts.get());
+    }
+
+    @Test
+    void 바로_다시_꺼내라는_표시가_계속되어도_interrupt되면_InterruptedException() {
+        PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
+        AtomicInteger attempts = new AtomicInteger();
+        assertThrows(InterruptedException.class, () -> waiter.await(Duration.ofSeconds(30), () -> {
+            int n = attempts.incrementAndGet();
+            if (n > 3) {
+                throw new AssertionError("interrupt된 뒤에도 다시 꺼냈다");
+            }
+            if (n == 3) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }, () -> "empty", () -> true));
+        assertEquals(3, attempts.get());
+    }
 }

@@ -178,21 +178,44 @@ public final class MemoryStorage implements Storage {
         lock.lock();
         try {
             TreeMap<Long, Entry> entries = require(queue);
-            if (optionsByQueue.get(queue).singleActiveConsumer()
-                    && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
+            QueueOptions options = optionsByQueue.get(queue);
+            // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
+            if (options.singleActiveConsumer() && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
                 return PullResult.empty();
             }
             List<Entry> picked = new ArrayList<>();
+            List<Entry> exhausted = new ArrayList<>();
+            boolean deadLettersRemain = false;
+            boolean moves = options.maxDeliveries().isPresent();
             for (Entry e : entries.values()) {
-                if (isReady(e, now)) {
-                    picked.add(e);
-                    if (picked.size() == max) {
-                        break;
+                // 소진 메시지를 옮기려면 청크가 차도 끝까지 훑어야 한다. 옮길 일이 없는 큐는 청크가 차면 멈춘다.
+                if (picked.size() == max && !moves) {
+                    break;
+                }
+                if (!isReady(e, now)) {
+                    continue;
+                }
+                if (moves && e.deliveryCount >= options.maxDeliveries().getAsInt()) {
+                    if (exhausted.size() < DeadLetters.MAX_MOVES_PER_PULL) {
+                        exhausted.add(e);
+                    } else {
+                        deadLettersRemain = true;
                     }
+                } else if (picked.size() < max) {
+                    picked.add(e);
+                }
+            }
+            if (!exhausted.isEmpty()) {
+                TreeMap<Long, Entry> dlq = queues.get(options.deadLetterQueue().orElseThrow());
+                for (Entry e : exhausted) {
+                    entries.remove(e.id.value());
+                    Entry moved = e.deadLettered(new MessageId(nextMessageId++), queue,
+                            DeadLetters.Reason.MAX_DELIVERIES, now);
+                    dlq.put(moved.id.value(), moved);
                 }
             }
             if (picked.isEmpty()) {
-                return PullResult.empty();
+                return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
             }
             long token = nextLeaseToken++;
             Instant deadline = now.plus(lease);
@@ -203,7 +226,7 @@ public final class MemoryStorage implements Storage {
                 e.deliveryCount++;
                 messages.add(new Message(e.id, e.payload, e.headers, e.deliveryCount, e.publishedAt));
             }
-            return new PullResult(new LeaseToken(token), deadline, messages);
+            return PullResult.of(new LeaseToken(token), deadline, messages);
         } finally {
             lock.unlock();
         }

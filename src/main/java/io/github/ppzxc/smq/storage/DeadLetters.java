@@ -17,10 +17,13 @@ public final class DeadLetters {
     public static final String MOVED_AT = "smq-moved-at";
     public static final String REASON = "smq-reason";
 
+    /** 꺼내기 한 번에 옮기는 dead letter 개수의 상한. 쓰기 락을 오래 쥐지 않으려는 구현 세부 값이다. */
+    public static final int MAX_MOVES_PER_PULL = 100;
+
     /** dead letter 이동의 이유. {@link #value()}가 {@code smq-reason} 헤더 값이다. */
     public enum Reason {
         REJECTED("rejected"),
-        /** 최대 전달 횟수 도달 이동(#29)이 쓸 값. 헤더 값 규칙을 한 곳에 모아 두려고 미리 정의했다. */
+        /** 최대 전달 횟수 도달 이동. */
         MAX_DELIVERIES("max-deliveries");
 
         private final String value;

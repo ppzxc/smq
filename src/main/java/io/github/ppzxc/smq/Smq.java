@@ -21,11 +21,17 @@ public interface Smq extends AutoCloseable {
         return new Builder(MemoryStorage::new);
     }
 
-    /** 큐를 선언하고(이미 있으면 그대로) 돌려준다. */
+    /**
+     * 큐를 선언하고 돌려준다. 같은 옵션으로 다시 선언하면 그대로 돌려주고, 다른 옵션이면
+     * {@link QueueDeclarationConflictException}을 던진다. 지정한 dead letter 큐는 이미 있어야 한다.
+     */
     Queue declare(String name, QueueOptions options);
 
     /** 선언된 큐를 돌려준다. 없으면 {@link QueueNotFoundException}. */
     Queue queue(String name);
+
+    /** 큐를 메시지째 지운다. 지웠으면 true, 없었으면 false. */
+    boolean delete(String name);
 
     @Override
     void close();

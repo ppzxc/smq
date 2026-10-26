@@ -6,6 +6,7 @@ import io.github.ppzxc.smq.QueueOptions;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 큐 연산 단위의 저장소 SPI(내부 계약). 각 연산의 원자성은 저장소가 책임지고, 시각은 코어가 {@code now}로 넘긴다.
@@ -17,6 +18,12 @@ public interface Storage extends AutoCloseable {
     void declare(String queue, QueueOptions options);
 
     boolean exists(String queue);
+
+    /** 큐를 메시지째 지운다. 지웠으면 true, 없었으면 false. */
+    boolean delete(String queue);
+
+    /** 선언된 큐의 옵션. 큐가 없으면 비어 있다. */
+    Optional<QueueOptions> options(String queue);
 
     QueueCounts counts(String queue, Instant now);
 

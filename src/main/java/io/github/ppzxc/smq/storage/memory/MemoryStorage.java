@@ -3,11 +3,13 @@ package io.github.ppzxc.smq.storage.memory;
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
 import io.github.ppzxc.smq.Outcome;
+import io.github.ppzxc.smq.NoDeadLetterQueueException;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueDeclarationConflictException;
 import io.github.ppzxc.smq.QueueInUseException;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
+import io.github.ppzxc.smq.storage.DeadLetters;
 import io.github.ppzxc.smq.storage.Disposition;
 import io.github.ppzxc.smq.storage.Extended;
 import io.github.ppzxc.smq.storage.LeaseToken;
@@ -197,6 +199,7 @@ public final class MemoryStorage implements Storage {
     public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {
         lock.lock();
         try {
+            requireDeadLetterQueues(token, items);
             List<Result> results = new ArrayList<>(items.size());
             for (Disposition d : items) {
                 results.add(new Result(d.id(), settleOne(token, d, now)));
@@ -207,8 +210,27 @@ public final class MemoryStorage implements Storage {
         }
     }
 
+    /** 아무것도 바꾸기 전에 확인해서, 실패하면 정산 전체가 반영되지 않게 한다. */
+    private void requireDeadLetterQueues(LeaseToken token, List<Disposition> items) {
+        for (Disposition d : items) {
+            if (d.kind() != Disposition.Kind.REJECT) {
+                continue;
+            }
+            for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
+                Entry e = q.getValue().get(d.id().value());
+                if (e != null) {
+                    if (holds(e, token) && optionsByQueue.get(q.getKey()).deadLetterQueue().isEmpty()) {
+                        throw new NoDeadLetterQueueException(q.getKey());
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     private Outcome settleOne(LeaseToken token, Disposition d, Instant now) {
-        for (TreeMap<Long, Entry> messages : queues.values()) {
+        for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
+            TreeMap<Long, Entry> messages = q.getValue();
             Entry e = messages.get(d.id().value());
             if (e != null) {
                 if (!holds(e, token)) {
@@ -216,6 +238,15 @@ public final class MemoryStorage implements Storage {
                 }
                 switch (d.kind()) {
                     case ACK -> messages.remove(d.id().value());
+                    case REJECT -> {
+                        messages.remove(d.id().value());
+                        String dlq = optionsByQueue.get(q.getKey()).deadLetterQueue().orElseThrow();
+                        Entry moved = new Entry(new MessageId(nextMessageId++),
+                                new NewMessage(e.payload, DeadLetters.headers(e.headers, q.getKey(), e.id,
+                                        e.deliveryCount, now, DeadLetters.REASON_REJECTED)),
+                                now);
+                        queues.get(dlq).put(moved.id.value(), moved);
+                    }
                     case NACK -> {
                         e.leaseToken = null;
                         e.leaseDeadline = null;

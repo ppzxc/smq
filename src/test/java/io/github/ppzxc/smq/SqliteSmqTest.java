@@ -4,13 +4,32 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.InstantSource;
 import org.junit.jupiter.api.Test;
 
 class SqliteSmqTest extends SmqConformanceTest {
 
     @Override
-    Smq.Builder builder(Path dir) {
-        return Smq.sqlite(dir.resolve("smq.db"));
+    TestBuilder builder(Path dir) {
+        Smq.SqliteBuilder b = Smq.sqlite(dir.resolve("smq.db"));
+        return new TestBuilder() {
+            @Override
+            public TestBuilder clock(InstantSource clock) {
+                b.clock(clock);
+                return this;
+            }
+
+            @Override
+            public TestBuilder leaseDuration(Duration leaseDuration) {
+                b.leaseDuration(leaseDuration);
+                return this;
+            }
+
+            @Override
+            public Smq open() {
+                return b.open();
+            }
+        };
     }
 
     @Test
@@ -67,16 +86,14 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
-    void 빌더_durability는_SQLite_빌더에만_있고_기본은_POWER_LOSS다() throws Exception {
-        assertEquals(Smq.SqliteBuilder.class, Smq.sqlite(dir.resolve("a.db")).getClass());
-        assertEquals(Durability.class, Smq.SqliteBuilder.class.getMethod("durability", Durability.class)
-                .getParameterTypes()[0]);
-        assertThrows(NoSuchMethodException.class, () -> Smq.Builder.class.getMethod("durability", Durability.class));
-        assertThrows(NoSuchMethodException.class,
-                () -> Smq.inMemory().getClass().getMethod("durability", Durability.class));
-        assertEquals(Smq.SqliteBuilder.class, Smq.sqlite(dir.resolve("b.db")).clock(clock).getClass());
-        assertEquals(Smq.SqliteBuilder.class,
-                Smq.sqlite(dir.resolve("c.db")).leaseDuration(Duration.ofSeconds(1)).getClass());
+    void 호출_순서와_상관없이_durability와_공용_설정을_체인할_수_있다() {
+        try (Smq a = Smq.sqlite(dir.resolve("a.db")).clock(clock).durability(Durability.PROCESS_CRASH)
+                .leaseDuration(Duration.ofSeconds(1)).open();
+                Smq b = Smq.sqlite(dir.resolve("b.db")).durability(Durability.PROCESS_CRASH).clock(clock)
+                        .leaseDuration(Duration.ofSeconds(1)).open()) {
+            assertNotNull(a.declare("q", QueueOptions.defaults()));
+            assertNotNull(b.declare("q", QueueOptions.defaults()));
+        }
     }
 
     @Test

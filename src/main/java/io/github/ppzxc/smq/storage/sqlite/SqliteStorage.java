@@ -71,13 +71,10 @@ public final class SqliteStorage implements Storage {
         this.connection = connection;
     }
 
-    public static SqliteStorage open(Path path) {
-        return open(path, Durability.POWER_LOSS);
-    }
-
     public static SqliteStorage open(Path path, Durability durability) {
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(BUSY_TIMEOUT_MILLIS);
+        // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
         config.setSynchronous(durability == Durability.POWER_LOSS
                 ? SQLiteConfig.SynchronousMode.FULL
                 : SQLiteConfig.SynchronousMode.NORMAL);

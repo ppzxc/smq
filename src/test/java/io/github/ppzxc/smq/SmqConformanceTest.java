@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.InstantSource;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,7 +30,16 @@ abstract class SmqConformanceTest {
     final MutableClock clock = new MutableClock(T0);
     private final List<Smq> opened = new ArrayList<>();
 
-    abstract Smq.Builder builder(Path dir);
+    /** 저장소별 빌더를 같은 모양으로 다루게 하는 테스트용 어댑터. */
+    interface TestBuilder {
+        TestBuilder clock(InstantSource clock);
+
+        TestBuilder leaseDuration(Duration leaseDuration);
+
+        Smq open();
+    }
+
+    abstract TestBuilder builder(Path dir);
 
     Smq open(Duration lease) {
         Smq smq = builder(dir).clock(clock).leaseDuration(lease).open();

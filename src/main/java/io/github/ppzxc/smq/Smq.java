@@ -1,13 +1,11 @@
 package io.github.ppzxc.smq;
 
-import io.github.ppzxc.smq.storage.Storage;
 import io.github.ppzxc.smq.storage.memory.MemoryStorage;
 import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.InstantSource;
 import java.util.Objects;
-import java.util.function.Supplier;
 
 /** smq 진입점. 스레드 안전하고, 닫을 때 정산하지 않은 리스는 그대로 둔다. */
 public interface Smq extends AutoCloseable {
@@ -18,7 +16,7 @@ public interface Smq extends AutoCloseable {
     }
 
     static Builder inMemory() {
-        return new Builder(MemoryStorage::new);
+        return new Builder();
     }
 
     /**
@@ -36,43 +34,36 @@ public interface Smq extends AutoCloseable {
     @Override
     void close();
 
-    class Builder {
+    /** 인메모리 저장소용 빌더. */
+    final class Builder {
 
-        private final Supplier<Storage> storage;
-        private InstantSource clock = InstantSource.system();
-        private Duration leaseDuration = Duration.ofSeconds(30);
+        private final BuilderSettings settings = new BuilderSettings();
 
-        Builder(Supplier<Storage> storage) {
-            this.storage = storage;
-        }
+        Builder() {}
 
         public Builder clock(InstantSource clock) {
-            this.clock = Objects.requireNonNull(clock, "clock");
+            settings.clock(clock);
             return this;
         }
 
         public Builder leaseDuration(Duration leaseDuration) {
-            this.leaseDuration = Validation.positive(leaseDuration, "leaseDuration");
+            settings.leaseDuration(leaseDuration);
             return this;
         }
 
-        Storage openStorage() {
-            return storage.get();
-        }
-
         public Smq open() {
-            return new DefaultSmq(openStorage(), clock, leaseDuration);
+            return settings.open(new MemoryStorage());
         }
     }
 
-    /** SQLite 저장소 전용 빌더. 내구성 수준은 여기에만 있다. */
-    final class SqliteBuilder extends Builder {
+    /** SQLite 저장소용 빌더. 내구성 수준은 여기에만 있다. */
+    final class SqliteBuilder {
 
+        private final BuilderSettings settings = new BuilderSettings();
         private final Path path;
         private Durability durability = Durability.POWER_LOSS;
 
         SqliteBuilder(Path path) {
-            super(null);
             this.path = path;
         }
 
@@ -82,21 +73,18 @@ public interface Smq extends AutoCloseable {
             return this;
         }
 
-        @Override
         public SqliteBuilder clock(InstantSource clock) {
-            super.clock(clock);
+            settings.clock(clock);
             return this;
         }
 
-        @Override
         public SqliteBuilder leaseDuration(Duration leaseDuration) {
-            super.leaseDuration(leaseDuration);
+            settings.leaseDuration(leaseDuration);
             return this;
         }
 
-        @Override
-        Storage openStorage() {
-            return SqliteStorage.open(path, durability);
+        public Smq open() {
+            return settings.open(SqliteStorage.open(path, durability));
         }
     }
 }

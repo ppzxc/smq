@@ -2,6 +2,7 @@ package io.github.ppzxc.smq.storage.sqlite;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -30,7 +32,7 @@ class SqliteStorageTest {
     @Test
     void 새_파일에_스키마_v1과_표식을_기록한다() throws Exception {
         Path db = dir.resolve("smq.db");
-        SqliteStorage.open(db).close();
+        SqliteStorage.open(db, Durability.POWER_LOSS).close();
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db)) {
             assertEquals(String.valueOf(SqliteStorage.APPLICATION_ID), pragma(c, "application_id"));
             assertEquals("2", pragma(c, "user_version"));
@@ -41,10 +43,10 @@ class SqliteStorageTest {
     @Test
     void 다시_열어도_같은_파일로_열린다() throws Exception {
         Path db = dir.resolve("smq.db");
-        try (SqliteStorage s = SqliteStorage.open(db)) {
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
             s.declare("q", QueueOptions.defaults());
         }
-        try (SqliteStorage s = SqliteStorage.open(db)) {
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
             assertTrue(s.exists("q"));
         }
     }
@@ -55,12 +57,12 @@ class SqliteStorageTest {
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db); Statement s = c.createStatement()) {
             s.execute("CREATE TABLE foreign_table(x)");
         }
-        assertThrows(IncompatibleStorageException.class, () -> SqliteStorage.open(db));
+        assertThrows(IncompatibleStorageException.class, () -> SqliteStorage.open(db, Durability.POWER_LOSS));
     }
 
     @Test
     void 연결은_WAL_synchronous_FULL_busy_timeout을_쓴다() throws Exception {
-        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"))) {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
             assertEquals("2", s.inTransaction(c -> pragma(c, "synchronous")));
             assertTrue(Integer.parseInt(s.inTransaction(c -> pragma(c, "busy_timeout"))) >= 5000);
@@ -70,7 +72,7 @@ class SqliteStorageTest {
     @Test
     void 쓰기_트랜잭션은_BEGIN_IMMEDIATE로_시작한다() throws Exception {
         Path db = dir.resolve("smq.db");
-        try (SqliteStorage s = SqliteStorage.open(db)) {
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
             s.inTransaction(c -> {
                 // 즉시 쓰기 락을 잡았으므로 다른 연결의 쓰기는 busy가 된다
                 try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db + "?busy_timeout=0");
@@ -85,7 +87,7 @@ class SqliteStorageTest {
 
     @Test
     void 꺼내기_쿼리는_인덱스를_탄다() throws Exception {
-        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"))) {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             List<String> plan = s.inTransaction(c -> {
                 List<String> rows = new ArrayList<>();
                 try (var ps = c.prepareStatement("EXPLAIN QUERY PLAN " + SqliteStorage.SELECT_READY);
@@ -111,39 +113,34 @@ class SqliteStorageTest {
     @Test
     void 파일이_생성된다() throws Exception {
         Path db = dir.resolve("smq.db");
-        SqliteStorage.open(db).close();
+        SqliteStorage.open(db, Durability.POWER_LOSS).close();
         assertTrue(Files.exists(db));
     }
 
     @Test
     void 발행_배치_중간에_실패하면_저장소가_하나도_반영하지_않는다() throws Exception {
-        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"))) {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             s.declare("q", QueueOptions.defaults());
             var ok = new io.github.ppzxc.smq.storage.NewMessage(new byte[] {1}, java.util.Map.of());
             var bad = new io.github.ppzxc.smq.storage.NewMessage(null, java.util.Map.of());
-            assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), java.time.Instant.EPOCH));
-            assertEquals(0, s.counts("q", java.time.Instant.EPOCH).ready());
+            assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), Instant.EPOCH));
+            assertEquals(0, s.counts("q", Instant.EPOCH).ready());
         }
     }
 
     @Test
     void POWER_LOSS는_synchronous_FULL로_연다() {
-        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), io.github.ppzxc.smq.Durability.POWER_LOSS)) {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             assertEquals("2", s.inTransaction(c -> pragma(c, "synchronous")));
         }
     }
 
     @Test
-    void PROCESS_CRASH는_synchronous_NORMAL로_연다() {
-        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), io.github.ppzxc.smq.Durability.PROCESS_CRASH)) {
+    void PROCESS_CRASH는_WAL과_함께_synchronous_NORMAL로_연다() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.PROCESS_CRASH)) {
+            assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
             assertEquals("1", s.inTransaction(c -> pragma(c, "synchronous")));
         }
     }
 
-    @Test
-    void 기본은_synchronous_FULL이다() {
-        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"))) {
-            assertEquals("2", s.inTransaction(c -> pragma(c, "synchronous")));
-        }
-    }
 }

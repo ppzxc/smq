@@ -37,12 +37,14 @@ public final class MemoryStorage implements Storage {
         int deliveryCount;
         Long leaseToken;
         Instant leaseDeadline;
+        Instant availableAt;
 
         Entry(MessageId id, NewMessage m, Instant publishedAt) {
             this.id = id;
             this.payload = m.payload().clone();
             this.headers = Map.copyOf(m.headers());
             this.publishedAt = publishedAt;
+            this.availableAt = m.delay().isZero() ? null : publishedAt.plus(m.delay());
         }
     }
 
@@ -121,14 +123,17 @@ public final class MemoryStorage implements Storage {
         try {
             long ready = 0;
             long leased = 0;
+            long delayed = 0;
             for (Entry e : require(queue).values()) {
-                if (isReady(e, now)) {
+                if (e.availableAt != null && e.availableAt.isAfter(now)) {
+                    delayed++;
+                } else if (isReady(e, now)) {
                     ready++;
                 } else {
                     leased++;
                 }
             }
-            return new QueueCounts(ready, leased, 0);
+            return new QueueCounts(ready, leased, delayed);
         } finally {
             lock.unlock();
         }
@@ -194,7 +199,7 @@ public final class MemoryStorage implements Storage {
         try {
             List<Result> results = new ArrayList<>(items.size());
             for (Disposition d : items) {
-                results.add(new Result(d.id(), settleOne(token, d)));
+                results.add(new Result(d.id(), settleOne(token, d, now)));
             }
             return results;
         } finally {
@@ -202,7 +207,7 @@ public final class MemoryStorage implements Storage {
         }
     }
 
-    private Outcome settleOne(LeaseToken token, Disposition d) {
+    private Outcome settleOne(LeaseToken token, Disposition d, Instant now) {
         for (TreeMap<Long, Entry> messages : queues.values()) {
             Entry e = messages.get(d.id().value());
             if (e != null) {
@@ -214,6 +219,7 @@ public final class MemoryStorage implements Storage {
                     case NACK -> {
                         e.leaseToken = null;
                         e.leaseDeadline = null;
+                        e.availableAt = d.delay().isZero() ? null : now.plus(d.delay());
                     }
                 }
                 return Outcome.OK;
@@ -255,6 +261,9 @@ public final class MemoryStorage implements Storage {
 
     /** 리스가 없거나 기한이 지났으면 준비 상태다. 기한이 지나도 다시 꺼내기 전까지는 리스 토큰이 남아 있다. */
     private static boolean isReady(Entry e, Instant now) {
+        if (e.availableAt != null && e.availableAt.isAfter(now)) {
+            return false;
+        }
         return e.leaseToken == null || !e.leaseDeadline.isAfter(now);
     }
 

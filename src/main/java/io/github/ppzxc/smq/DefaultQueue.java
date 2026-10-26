@@ -51,7 +51,7 @@ final class DefaultQueue implements Queue {
         List<NewMessage> converted = batch.stream()
                 .map(m -> {
                     Objects.requireNonNull(m, "batch element");
-                    return new NewMessage(m.payload(), m.headers());
+                    return new NewMessage(m.payload(), m.headers(), m.delay());
                 })
                 .toList();
         if (converted.isEmpty()) {

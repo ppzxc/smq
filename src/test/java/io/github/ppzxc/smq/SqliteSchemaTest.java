@@ -111,9 +111,25 @@ class SqliteSchemaTest {
 
     @Test
     void 다른_표식이_있는_파일은_테이블이_없어도_거부한다() throws Exception {
+        int supported = supportedVersion();
         jdbc(db(), "PRAGMA application_id = 12345");
 
-        assertThrows(IncompatibleStorageException.class, () -> Smq.sqlite(db()).open());
+        IncompatibleStorageException e = assertThrows(IncompatibleStorageException.class,
+                () -> Smq.sqlite(db()).open());
+
+        assertTrue(e.getMessage().contains("application_id=12345"), e.getMessage());
+        assertTrue(e.getMessage().contains("supported " + supported), e.getMessage());
+    }
+
+    @Test
+    void 다른_표식이_있으면_user_version이_지원하는_버전과_같아도_거부한다() throws Exception {
+        int supported = supportedVersion();
+        jdbc(db(), "PRAGMA application_id = 12345", "PRAGMA user_version = " + supported);
+
+        IncompatibleStorageException e = assertThrows(IncompatibleStorageException.class,
+                () -> Smq.sqlite(db()).open());
+
+        assertTrue(e.getMessage().contains("application_id=12345"), e.getMessage());
     }
 
     @Test
@@ -174,6 +190,7 @@ class SqliteSchemaTest {
         public static void main(String[] args) throws Exception {
             Path db = Path.of(args[0]);
             Path go = Path.of(args[1]);
+            Files.createFile(Path.of(args[1] + ".ready." + args[2])); // 준비됐음을 부모에게 알린다.
             while (!Files.exists(go)) {
                 Thread.sleep(1);
             }
@@ -197,7 +214,17 @@ class SqliteSchemaTest {
                         .redirectOutput(dir.resolve("child" + i + ".log").toFile())
                         .start());
             }
-            Thread.sleep(1500); // 모두 신호를 기다리는 상태가 되게 한다.
+            // 모든 자식이 준비 신호 파일을 만들 때까지 기다린 뒤 한꺼번에 출발시킨다.
+            long giveUp = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+            for (int i = 0; i < processes; i++) {
+                Path ready = dir.resolve("go.ready.m" + i);
+                while (!Files.exists(ready)) {
+                    assertTrue(children.get(i).isAlive(), "child " + i + " exited early: "
+                            + Files.readString(dir.resolve("child" + i + ".log")));
+                    assertTrue(System.nanoTime() < giveUp, "child " + i + " never got ready");
+                    Thread.sleep(5);
+                }
+            }
             Files.createFile(go);
             for (int i = 0; i < processes; i++) {
                 Process child = children.get(i);
@@ -227,7 +254,10 @@ class SqliteSchemaTest {
 
             // 버전이 되돌아와도 그 인스턴스는 영구히 실패한 상태다.
             jdbc(db(), "PRAGMA user_version = " + supported);
-            assertThrows(IncompatibleStorageException.class, () -> q.publish(msg("b")));
+            IncompatibleStorageException again = assertThrows(IncompatibleStorageException.class,
+                    () -> q.publish(msg("b")));
+            assertTrue(again.getMessage().contains("found " + supported), again.getMessage());
+            assertTrue(again.getMessage().contains("supported " + supported), again.getMessage());
             assertThrows(IncompatibleStorageException.class, () -> smq.declare("other", QueueOptions.defaults()));
             assertThrows(IncompatibleStorageException.class, () -> q.pull(1, Duration.ZERO));
         }

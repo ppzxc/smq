@@ -674,4 +674,99 @@ abstract class SmqConformanceTest {
         assertEquals(List.of(ids.get(0), ids.get(2), ids.get(3)),
                 q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
+
+    @Test
+    void withDelay로_발행한_메시지는_지연이_지나야_꺼낼_수_있다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        MessageId id = q.publish(msg("a").withDelay(Duration.ofSeconds(10)));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(9));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(1));
+        assertEquals(List.of(id), q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void nack_id_지연은_지연이_지나야_다시_꺼낼_수_있다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(2, Duration.ZERO);
+        assertTrue(q.settle(c.settle().nack(ids.get(0), Duration.ofSeconds(5)).ackRest()).allOk());
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(List.of(ids.get(0)), q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void nackRest_지연은_고르지_않은_나머지를_지연_NACK한다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        Chunk c = q.pull(3, Duration.ZERO);
+        assertTrue(q.settle(c.settle().ack(ids.get(0)).nackRest(Duration.ofSeconds(5))).allOk());
+        assertTrue(q.pull(10, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(List.of(ids.get(1), ids.get(2)),
+                q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void nackAll_지연은_청크_전체를_지연_NACK한다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(2, Duration.ZERO);
+        assertTrue(q.settle(c.nackAll(Duration.ofSeconds(5))).allOk());
+        assertTrue(q.pull(10, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(ids, q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void 지연이_끝난_메시지는_자기_id_자리로_들어가_더_큰_id의_준비_메시지보다_먼저_나온다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        MessageId delayed = q.publish(msg("a").withDelay(Duration.ofSeconds(5)));
+        MessageId nacked = q.publish(msg("b"));
+        MessageId ready = q.publish(msg("c"));
+        Chunk first = q.pull(1, Duration.ZERO);
+        assertEquals(List.of(nacked), first.messages().stream().map(Message::id).toList());
+        assertTrue(q.settle(first.settle().nack(nacked, Duration.ofSeconds(5)).build()).allOk());
+        assertEquals(List.of(ready), q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(List.of(delayed, nacked),
+                q.pull(2, Duration.ZERO).messages().stream().map(Message::id).toList());
+    }
+
+    @Test
+    void counts는_지연됨_개수를_돌려주고_지연이_끝나면_준비로_센다() throws Exception {
+        Queue q = open(Duration.ofSeconds(60)).declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        q.publish(msg("d").withDelay(Duration.ofSeconds(10)));
+        assertEquals(new QueueCounts(3, 0, 1), q.counts());
+        Chunk c = q.pull(2, Duration.ZERO);
+        assertEquals(new QueueCounts(1, 2, 1), q.counts());
+        assertTrue(q.settle(c.settle().nack(ids.get(0), Duration.ofSeconds(5)).ackRest()).allOk());
+        assertEquals(new QueueCounts(1, 0, 2), q.counts());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(new QueueCounts(2, 0, 1), q.counts());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(new QueueCounts(3, 0, 0), q.counts());
+    }
+
+    @Test
+    void 지연과_리스_시간은_양수여야_한다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        MessageId id = q.publish(msg("a"));
+        Chunk c = q.pull(1, Duration.ZERO);
+        for (Duration bad : new Duration[] {Duration.ZERO, Duration.ofSeconds(-1), null}) {
+            assertThrows(IllegalArgumentException.class, () -> msg("a").withDelay(bad), String.valueOf(bad));
+            assertThrows(IllegalArgumentException.class, () -> c.settle().nack(id, bad), String.valueOf(bad));
+            assertThrows(IllegalArgumentException.class, () -> c.settle().nackRest(bad), String.valueOf(bad));
+            assertThrows(IllegalArgumentException.class, () -> c.nackAll(bad), String.valueOf(bad));
+            assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ZERO, bad), String.valueOf(bad));
+            assertThrows(IllegalArgumentException.class, () -> q.extend(c, bad), String.valueOf(bad));
+            assertThrows(IllegalArgumentException.class, () -> builder(dir).leaseDuration(bad), String.valueOf(bad));
+        }
+        assertThrows(IllegalArgumentException.class, () -> new OutgoingMessage(new byte[0], Map.of(), null));
+        // 잘못된 인자는 아무것도 바꾸지 않는다.
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+    }
 }

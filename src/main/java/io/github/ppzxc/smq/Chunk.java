@@ -1,6 +1,7 @@
 package io.github.ppzxc.smq;
 
 import io.github.ppzxc.smq.storage.LeaseToken;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -54,6 +55,11 @@ public final class Chunk {
     /** 청크의 모든 메시지를 ACK하는 정산 값. */
     public Settlement ackAll() {
         return settle().ackRest();
+    }
+
+    /** 청크의 모든 메시지를 {@code delay} 지연 NACK하는 정산 값. */
+    public Settlement nackAll(Duration delay) {
+        return settle().nackRest(delay);
     }
 
     /** 메시지 하나만 ACK하는 정산 값. 청크는 정산 상태를 기억하지 않으므로 반영은 {@code queue.settle}이 한다. */

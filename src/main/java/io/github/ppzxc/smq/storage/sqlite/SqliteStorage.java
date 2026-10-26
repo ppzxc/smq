@@ -49,10 +49,11 @@ public final class SqliteStorage implements Storage {
 
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
     public static final int APPLICATION_ID = 0x534D5131;
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
     static final String SELECT_READY =
-            "SELECT id FROM message WHERE queue_id = ? AND (lease_token IS NULL OR lease_deadline <= ?)"
+            "SELECT id FROM message WHERE queue_id = ? AND (available_at IS NULL OR available_at <= ?)"
+                    + " AND (lease_token IS NULL OR lease_deadline <= ?)"
                     + " ORDER BY id LIMIT ?";
 
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
@@ -118,7 +119,8 @@ public final class SqliteStorage implements Storage {
                           delivery_count INTEGER NOT NULL DEFAULT 0,
                           published_at INTEGER NOT NULL,
                           lease_token INTEGER,
-                          lease_deadline INTEGER
+                          lease_deadline INTEGER,
+                          available_at INTEGER
                         )""");
                 s.execute("CREATE INDEX message_ready ON message(queue_id, id)");
                 s.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)");
@@ -289,13 +291,15 @@ public final class SqliteStorage implements Storage {
         return inTransaction(c -> {
             long queueId = requireQueue(c, queue);
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT COALESCE(SUM(lease_token IS NULL OR lease_deadline <= ?1), 0),
-                           COALESCE(SUM(lease_token IS NOT NULL AND lease_deadline > ?1), 0)
-                    FROM message WHERE queue_id = ?2""")) {
+                    SELECT COALESCE(SUM(NOT delayed AND (lease_token IS NULL OR lease_deadline <= ?1)), 0),
+                           COALESCE(SUM(NOT delayed AND lease_token IS NOT NULL AND lease_deadline > ?1), 0),
+                           COALESCE(SUM(delayed), 0)
+                    FROM (SELECT lease_token, lease_deadline, COALESCE(available_at > ?1, 0) AS delayed
+                          FROM message WHERE queue_id = ?2)""")) {
                 ps.setLong(1, toNanos(now));
                 ps.setLong(2, queueId);
                 try (ResultSet rs = ps.executeQuery()) {
-                    return new QueueCounts(rs.getLong(1), rs.getLong(2), 0);
+                    return new QueueCounts(rs.getLong(1), rs.getLong(2), rs.getLong(3));
                 }
             }
         });
@@ -307,13 +311,14 @@ public final class SqliteStorage implements Storage {
             long queueId = requireQueue(c, queue);
             List<MessageId> ids = new ArrayList<>(batch.size());
             try (PreparedStatement ps = c.prepareStatement(
-                    "INSERT INTO message(queue_id, payload, headers, published_at) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO message(queue_id, payload, headers, published_at, available_at) VALUES (?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS)) {
                 for (NewMessage m : batch) {
                     ps.setLong(1, queueId);
                     ps.setBytes(2, m.payload());
                     ps.setBytes(3, encodeHeaders(m.headers()));
                     ps.setLong(4, toNanos(now));
+                    setInstantOrNull(ps, 5, m.availableAt(now));
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();
@@ -332,7 +337,8 @@ public final class SqliteStorage implements Storage {
             try (PreparedStatement peek = c.prepareStatement(SELECT_READY)) {
                 peek.setLong(1, queueId);
                 peek.setLong(2, toNanos(now));
-                peek.setInt(3, 1);
+                peek.setLong(3, toNanos(now));
+                peek.setInt(4, 1);
                 try (ResultSet rs = peek.executeQuery()) {
                     if (!rs.next()) {
                         return PullResult.empty();
@@ -356,7 +362,8 @@ public final class SqliteStorage implements Storage {
                 ps.setLong(2, toNanos(deadline));
                 ps.setLong(3, queueId);
                 ps.setLong(4, toNanos(now));
-                ps.setInt(5, max);
+                ps.setLong(5, toNanos(now));
+                ps.setInt(6, max);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         messages.add(new Message(new MessageId(rs.getLong(1)), rs.getBytes(2),
@@ -375,16 +382,25 @@ public final class SqliteStorage implements Storage {
             List<Result> results = new ArrayList<>(items.size());
             try (PreparedStatement ack = c.prepareStatement("DELETE FROM message WHERE id = ? AND lease_token = ?");
                     PreparedStatement nack = c.prepareStatement("""
-                            UPDATE message SET lease_token = NULL, lease_deadline = NULL
+                            UPDATE message SET lease_token = NULL, lease_deadline = NULL, available_at = ?
                             WHERE id = ? AND lease_token = ?""")) {
                 for (Disposition d : items) {
-                    PreparedStatement ps = switch (d.kind()) {
-                        case ACK -> ack;
-                        case NACK -> nack;
-                    };
-                    ps.setLong(1, d.id().value());
-                    ps.setLong(2, token.value());
-                    results.add(new Result(d.id(), ps.executeUpdate() == 1 ? Outcome.OK : Outcome.STALE));
+                    int updated;
+                    switch (d.kind()) {
+                        case ACK -> {
+                            ack.setLong(1, d.id().value());
+                            ack.setLong(2, token.value());
+                            updated = ack.executeUpdate();
+                        }
+                        case NACK -> {
+                            setInstantOrNull(nack, 1, d.availableAt(now));
+                            nack.setLong(2, d.id().value());
+                            nack.setLong(3, token.value());
+                            updated = nack.executeUpdate();
+                        }
+                        default -> throw new IllegalStateException("unknown disposition: " + d.kind());
+                    }
+                    results.add(new Result(d.id(), updated == 1 ? Outcome.OK : Outcome.STALE));
                 }
             }
             return results;
@@ -426,6 +442,14 @@ public final class SqliteStorage implements Storage {
             } catch (SQLException ignored) {
                 // 닫기 실패는 무시한다.
             }
+        }
+    }
+
+    private static void setInstantOrNull(PreparedStatement ps, int index, Instant t) throws SQLException {
+        if (t == null) {
+            ps.setNull(index, java.sql.Types.INTEGER);
+        } else {
+            ps.setLong(index, toNanos(t));
         }
     }
 

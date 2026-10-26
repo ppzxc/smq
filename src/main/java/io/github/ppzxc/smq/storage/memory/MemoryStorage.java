@@ -177,13 +177,13 @@ public final class MemoryStorage implements Storage {
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
         lock.lock();
         try {
-            TreeMap<Long, Entry> queued = require(queue);
+            TreeMap<Long, Entry> entries = require(queue);
             if (optionsByQueue.get(queue).singleActiveConsumer()
-                    && queued.values().stream().anyMatch(e -> isLeased(e, now))) {
+                    && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
                 return PullResult.empty();
             }
             List<Entry> picked = new ArrayList<>();
-            for (Entry e : queued.values()) {
+            for (Entry e : entries.values()) {
                 if (isReady(e, now)) {
                     picked.add(e);
                     if (picked.size() == max) {

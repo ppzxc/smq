@@ -56,7 +56,7 @@ public final class Chunk {
         return settle().ackRest();
     }
 
-    /** 메시지 하나만 ACK하는 정산 값. */
+    /** 메시지 하나만 ACK하는 정산 값. 청크는 정산 상태를 기억하지 않으므로 반영은 {@code queue.settle}이 한다. */
     public Settlement ack(MessageId id) {
         return settle().ack(id).build();
     }

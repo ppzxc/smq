@@ -43,10 +43,13 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.locks.ReentrantLock;
 import org.sqlite.SQLiteConfig;
+import org.sqlite.SQLiteErrorCode;
+import org.sqlite.SQLiteException;
 
 /**
  * SQLite 파일 하나를 쓰는 저장소. 모든 연산은 {@link #inTransaction}이라는 하나의 쓰기 트랜잭션 경로를 거친다.
- * 이후 트랜잭션마다 하는 일(스키마 버전 확인, {@code SQLITE_BUSY} 재시도)은 그 한 곳에 넣는다.
+ * 트랜잭션마다 하는 스키마 버전 확인은 이미 그 경로에 있다. {@code SQLITE_BUSY} 재시도는 아직 없고
+ * (이슈 #33), 생기면 같은 경로에 들어간다.
  */
 public final class SqliteStorage implements Storage {
 
@@ -66,8 +69,21 @@ public final class SqliteStorage implements Storage {
         T apply(Connection connection) throws SQLException;
     }
 
+    /** 한 단계 낮은 버전의 스키마를 한 단계 올린다. 호출한 쪽의 {@code BEGIN IMMEDIATE} 트랜잭션 안에서 돈다. */
+    @FunctionalInterface
+    interface Migration {
+        void apply(Connection connection) throws SQLException;
+    }
+
+    /** 키는 올리기 전의 버전이다. 스키마 버전이 처음 하나뿐이라 아직 비어 있다. */
+    private static final Map<Integer, Migration> MIGRATIONS = Map.of();
+
     private final Connection connection;
     private final ReentrantLock lock = new ReentrantLock();
+    /** 열 때 판정한 스키마 버전. 열기가 끝난 뒤 {@link #inTransaction}이 이 값과 파일의 버전을 비교한다. */
+    private volatile int openedVersion;
+    /** 버전이 달라진 것을 한 번 보면 이 저장소는 영구히 실패한 상태다. */
+    private volatile boolean failed;
 
     private SqliteStorage(Connection connection) {
         this.connection = connection;
@@ -84,14 +100,16 @@ public final class SqliteStorage implements Storage {
         try {
             connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
             SqliteStorage storage = new SqliteStorage(connection);
-            storage.inTransaction(SqliteStorage::ensureSchema);
+            int version = storage.runInTransaction(SqliteStorage::establishSchema, false);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
-            try (Statement s = connection.createStatement()) {
-                s.execute("PRAGMA journal_mode = WAL");
-            }
+            enableWal(connection);
+            storage.openedVersion = version;
             return storage;
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
+            if (isNotADatabase(e)) {
+                throw notSmq("not a SQLite file");
+            }
             if (e instanceof RuntimeException re) {
                 throw re;
             }
@@ -99,7 +117,42 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static Void ensureSchema(Connection c) throws SQLException {
+    private static boolean isNotADatabase(Throwable t) {
+        for (; t != null; t = t.getCause()) {
+            if (t instanceof SQLiteException se
+                    && se.getResultCode() == SQLiteErrorCode.SQLITE_NOTADB) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 저널 모드 전환은 다른 연결이 쓰는 중이면 busy 핸들러 없이 바로 {@code SQLITE_BUSY}로 실패할 수 있다.
+     * 새 파일을 여러 프로세스가 동시에 열 때 생기므로 제한 시간 안에서 다시 시도한다.
+     */
+    private static void enableWal(Connection c) throws SQLException {
+        long giveUp = System.nanoTime() + Duration.ofMillis(BUSY_TIMEOUT_MILLIS).toNanos();
+        while (true) {
+            try (Statement s = c.createStatement()) {
+                s.execute("PRAGMA journal_mode = WAL");
+                return;
+            } catch (SQLException e) {
+                if (e.getErrorCode() != SQLiteErrorCode.SQLITE_BUSY.code || System.nanoTime() > giveUp) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+    }
+
+    /** 열 때의 판정. 생성이나 업그레이드를 했으면 그 뒤의 버전을, 그대로 열면 파일의 버전을 돌려준다. */
+    private static int establishSchema(Connection c) throws SQLException {
         int applicationId = pragmaInt(c, "application_id");
         int version = pragmaInt(c, "user_version");
         boolean empty;
@@ -134,16 +187,44 @@ public final class SqliteStorage implements Storage {
                 s.execute("PRAGMA application_id = " + APPLICATION_ID);
                 s.execute("PRAGMA user_version = " + SCHEMA_VERSION);
             }
-            return null;
+            return SCHEMA_VERSION;
         }
         if (applicationId != APPLICATION_ID) {
-            throw new IncompatibleStorageException("not an smq database (application_id=" + applicationId + ")");
+            throw notSmq("application_id=" + applicationId);
         }
-        if (version != SCHEMA_VERSION) {
-            throw new IncompatibleStorageException(
-                    "unsupported schema version: found " + version + ", supported " + SCHEMA_VERSION);
+        if (version > SCHEMA_VERSION) {
+            throw unsupported(version);
         }
-        return null;
+        if (version < SCHEMA_VERSION) {
+            upgrade(c, version);
+        }
+        return SCHEMA_VERSION;
+    }
+
+    /** 한 단계씩 올린다. DDL, 데이터 변환, 버전 올리기가 호출한 쪽의 트랜잭션 하나에 들어간다. */
+    private static void upgrade(Connection c, int from) throws SQLException {
+        for (int version = from; version < SCHEMA_VERSION; version++) {
+            Migration migration = MIGRATIONS.get(version);
+            if (migration == null) {
+                throw unsupported(from);
+            }
+            migration.apply(c);
+            try (Statement s = c.createStatement()) {
+                s.execute("PRAGMA user_version = " + (version + 1));
+            }
+        }
+    }
+
+    private static IncompatibleStorageException unsupported(int found) {
+        return versionMismatch("unsupported schema version", found);
+    }
+
+    private static IncompatibleStorageException versionMismatch(String what, int found) {
+        return new IncompatibleStorageException(what + ": found " + found + ", supported " + SCHEMA_VERSION);
+    }
+
+    private static IncompatibleStorageException notSmq(String reason) {
+        return new IncompatibleStorageException("not an smq database (" + reason + "), supported " + SCHEMA_VERSION);
     }
 
     private static int pragmaInt(Connection c, String name) throws SQLException {
@@ -152,14 +233,22 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    /** 모든 연산이 거치는 유일한 쓰기 트랜잭션 경로. */
+    /** 모든 연산이 거치는 유일한 쓰기 트랜잭션 경로. 시작할 때마다 {@code user_version}을 다시 읽는다. */
     <T> T inTransaction(TxBody<T> body) {
+        return runInTransaction(body, true);
+    }
+
+    /** {@code verify}가 거짓인 경로는 열기뿐이다. 그때는 아직 기준 버전이 없고 판정은 {@link #establishSchema}가 한다. */
+    private <T> T runInTransaction(TxBody<T> body, boolean verify) {
         lock.lock();
         try {
             try (Statement s = connection.createStatement()) {
                 s.execute("BEGIN IMMEDIATE");
             }
             try {
+                if (verify) {
+                    verifyVersion();
+                }
                 T result = body.apply(connection);
                 try (Statement s = connection.createStatement()) {
                     s.execute("COMMIT");
@@ -173,6 +262,17 @@ public final class SqliteStorage implements Storage {
             throw new SmqStorageException("sqlite operation failed", e);
         } finally {
             lock.unlock();
+        }
+    }
+
+    private void verifyVersion() throws SQLException {
+        int found = pragmaInt(connection, "user_version");
+        if (failed) {
+            throw versionMismatch("this instance stopped after the schema version changed", found);
+        }
+        if (found != openedVersion) {
+            failed = true;
+            throw unsupported(found);
         }
     }
 

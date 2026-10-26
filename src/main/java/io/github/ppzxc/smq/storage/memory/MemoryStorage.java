@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,7 +47,7 @@ public final class MemoryStorage implements Storage {
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Map<String, TreeMap<Long, Entry>> queues = new HashMap<>();
-    private final Map<String, QueueOptions> optionsByQueue = new HashMap<>();
+    private final Map<String, QueueOptions> optionsByQueue = new LinkedHashMap<>();
     private long nextMessageId = 1;
     private long nextLeaseToken = 1;
 

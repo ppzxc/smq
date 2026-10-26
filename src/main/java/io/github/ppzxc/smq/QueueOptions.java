@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -10,9 +11,8 @@ import java.util.OptionalInt;
 public record QueueOptions(OptionalInt maxDeliveries, Optional<String> deadLetterQueue, boolean singleActiveConsumer) {
 
     public QueueOptions {
-        if (maxDeliveries == null || deadLetterQueue == null) {
-            throw new NullPointerException("options must not contain null");
-        }
+        Objects.requireNonNull(maxDeliveries, "maxDeliveries");
+        Objects.requireNonNull(deadLetterQueue, "deadLetterQueue");
         if (maxDeliveries.isPresent() && maxDeliveries.getAsInt() < 1) {
             throw new IllegalArgumentException("maxDeliveries must be >= 1: " + maxDeliveries.getAsInt());
         }

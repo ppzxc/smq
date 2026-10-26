@@ -101,7 +101,7 @@ public final class SqliteStorage implements Storage {
             try (Statement s = c.createStatement()) {
                 s.execute("""
                         CREATE TABLE queue (
-                          id INTEGER PRIMARY KEY,
+                          id INTEGER PRIMARY KEY AUTOINCREMENT,
                           name TEXT NOT NULL UNIQUE,
                           max_deliveries INTEGER,
                           dead_letter_queue_id INTEGER REFERENCES queue(id),
@@ -184,13 +184,24 @@ public final class SqliteStorage implements Storage {
                 }
                 return null;
             }
-            Long dlqId = options.deadLetterQueue().isPresent() ? requireQueue(c, options.deadLetterQueue().get()) : null;
+            Long dlqId = null;
+            if (options.deadLetterQueue().isPresent()) {
+                dlqId = requireQueue(c, options.deadLetterQueue().get());
+            }
             try (PreparedStatement ps = c.prepareStatement("""
                     INSERT INTO queue(name, max_deliveries, dead_letter_queue_id, single_active_consumer)
                     VALUES (?, ?, ?, ?)""")) {
                 ps.setString(1, queue);
-                ps.setObject(2, options.maxDeliveries().isPresent() ? options.maxDeliveries().getAsInt() : null);
-                ps.setObject(3, dlqId);
+                if (options.maxDeliveries().isPresent()) {
+                    ps.setInt(2, options.maxDeliveries().getAsInt());
+                } else {
+                    ps.setNull(2, java.sql.Types.INTEGER);
+                }
+                if (dlqId != null) {
+                    ps.setLong(3, dlqId);
+                } else {
+                    ps.setNull(3, java.sql.Types.INTEGER);
+                }
                 ps.setInt(4, options.singleActiveConsumer() ? 1 : 0);
                 ps.executeUpdate();
             }
@@ -244,7 +255,9 @@ public final class SqliteStorage implements Storage {
                 WHERE q.name = ?""")) {
             ps.setString(1, queue);
             try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
+                if (!rs.next()) {
+                    throw new QueueNotFoundException(queue);
+                }
                 int max = rs.getInt(1);
                 OptionalInt maxDeliveries = rs.wasNull() ? OptionalInt.empty() : OptionalInt.of(max);
                 return new QueueOptions(maxDeliveries, Optional.ofNullable(rs.getString(2)), rs.getInt(3) != 0);

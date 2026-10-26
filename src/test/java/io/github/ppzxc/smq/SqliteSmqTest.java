@@ -4,13 +4,32 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.InstantSource;
 import org.junit.jupiter.api.Test;
 
 class SqliteSmqTest extends SmqConformanceTest {
 
     @Override
-    Smq.Builder builder(Path dir) {
-        return Smq.sqlite(dir.resolve("smq.db"));
+    TestBuilder builder(Path dir) {
+        Smq.SqliteBuilder b = Smq.sqlite(dir.resolve("smq.db"));
+        return new TestBuilder() {
+            @Override
+            public TestBuilder clock(InstantSource clock) {
+                b.clock(clock);
+                return this;
+            }
+
+            @Override
+            public TestBuilder leaseDuration(Duration leaseDuration) {
+                b.leaseDuration(leaseDuration);
+                return this;
+            }
+
+            @Override
+            public Smq open() {
+                return b.open();
+            }
+        };
     }
 
     @Test
@@ -63,6 +82,28 @@ class SqliteSmqTest extends SmqConformanceTest {
         }
         try (Smq second = builder(dir).clock(clock).open()) {
             assertTrue(second.queue("q").settle(held.ackAll()).allOk());
+        }
+    }
+
+    @Test
+    void 호출_순서와_상관없이_durability와_공용_설정을_체인할_수_있다() {
+        try (Smq a = Smq.sqlite(dir.resolve("a.db")).clock(clock).durability(Durability.PROCESS_CRASH)
+                .leaseDuration(Duration.ofSeconds(1)).open();
+                Smq b = Smq.sqlite(dir.resolve("b.db")).durability(Durability.PROCESS_CRASH).clock(clock)
+                        .leaseDuration(Duration.ofSeconds(1)).open()) {
+            assertNotNull(a.declare("q", QueueOptions.defaults()));
+            assertNotNull(b.declare("q", QueueOptions.defaults()));
+        }
+    }
+
+    @Test
+    void 두_내구성_수준_모두_발행과_꺼내기가_동작한다() throws Exception {
+        for (Durability d : Durability.values()) {
+            try (Smq smq = Smq.sqlite(dir.resolve(d + ".db")).durability(d).open()) {
+                Queue q = smq.declare("q", QueueOptions.defaults());
+                q.publish(msg("a"));
+                assertEquals(1, q.pull(1, Duration.ZERO).messages().size());
+            }
         }
     }
 }

@@ -861,4 +861,17 @@ abstract class SmqConformanceTest {
                 () -> last.settle(lastChunk.settle().reject(end.id()).build()));
         assertTrue(last.settle(lastChunk.ackAll()).allOk());
     }
+
+    @Test
+    void smq_접두사는_예약이라_같은_이름의_사용자_헤더는_시스템_값으로_덮어써진다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().deadLetterQueue("dead"));
+        MessageId id = q.publish(msg("a").withHeaders(Map.of("smq-reason", "mine", "trace", "t-1")));
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().reject(id).build()).allOk());
+
+        Message moved = dead.pull(1, Duration.ZERO).messages().getFirst();
+        assertEquals("rejected", moved.headers().get("smq-reason"));
+        assertEquals("t-1", moved.headers().get("trace"));
+    }
 }

@@ -2,8 +2,8 @@ package io.github.ppzxc.smq.storage.memory;
 
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
-import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.NoDeadLetterQueueException;
+import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueDeclarationConflictException;
 import io.github.ppzxc.smq.QueueInUseException;
@@ -47,6 +47,12 @@ public final class MemoryStorage implements Storage {
             this.headers = Map.copyOf(m.headers());
             this.publishedAt = publishedAt;
             this.availableAt = m.availableAt(publishedAt);
+        }
+
+        /** dead letter 큐에 새 메시지로 들어갈 항목. id와 전달 횟수는 새로 시작한다. */
+        Entry deadLettered(MessageId newId, String originalQueue, DeadLetters.Reason reason, Instant now) {
+            DeadLetters.Origin origin = new DeadLetters.Origin(originalQueue, id, headers, deliveryCount);
+            return new Entry(newId, new NewMessage(payload, DeadLetters.headers(origin, reason, now)), now);
         }
     }
 
@@ -216,47 +222,52 @@ public final class MemoryStorage implements Storage {
             if (d.kind() != Disposition.Kind.REJECT) {
                 continue;
             }
-            for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
-                Entry e = q.getValue().get(d.id().value());
-                if (e != null) {
-                    if (holds(e, token) && optionsByQueue.get(q.getKey()).deadLetterQueue().isEmpty()) {
-                        throw new NoDeadLetterQueueException(q.getKey());
-                    }
-                    break;
-                }
+            Located found = locate(d.id());
+            if (found != null && holds(found.entry, token) && deadLetterQueueOf(found.queue).isEmpty()) {
+                throw new NoDeadLetterQueueException(found.queue);
             }
         }
     }
 
     private Outcome settleOne(LeaseToken token, Disposition d, Instant now) {
-        for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
-            TreeMap<Long, Entry> messages = q.getValue();
-            Entry e = messages.get(d.id().value());
-            if (e != null) {
-                if (!holds(e, token)) {
-                    return Outcome.STALE;
-                }
-                switch (d.kind()) {
-                    case ACK -> messages.remove(d.id().value());
-                    case REJECT -> {
-                        messages.remove(d.id().value());
-                        String dlq = optionsByQueue.get(q.getKey()).deadLetterQueue().orElseThrow();
-                        Entry moved = new Entry(new MessageId(nextMessageId++),
-                                new NewMessage(e.payload, DeadLetters.headers(e.headers, q.getKey(), e.id,
-                                        e.deliveryCount, now, DeadLetters.REASON_REJECTED)),
-                                now);
-                        queues.get(dlq).put(moved.id.value(), moved);
-                    }
-                    case NACK -> {
-                        e.leaseToken = null;
-                        e.leaseDeadline = null;
-                        e.availableAt = d.availableAt(now);
-                    }
-                }
-                return Outcome.OK;
+        Located found = locate(d.id());
+        if (found == null || !holds(found.entry, token)) {
+            return Outcome.STALE;
+        }
+        switch (d.kind()) {
+            case ACK -> found.messages.remove(d.id().value());
+            case REJECT -> {
+                found.messages.remove(d.id().value());
+                String dlq = deadLetterQueueOf(found.queue).orElseThrow();
+                Entry moved = found.entry.deadLettered(new MessageId(nextMessageId++), found.queue,
+                        DeadLetters.Reason.REJECTED, now);
+                queues.get(dlq).put(moved.id.value(), moved);
+            }
+            case NACK -> {
+                found.entry.leaseToken = null;
+                found.entry.leaseDeadline = null;
+                found.entry.availableAt = d.availableAt(now);
             }
         }
-        return Outcome.STALE;
+        return Outcome.OK;
+    }
+
+    private record Located(String queue, TreeMap<Long, Entry> messages, Entry entry) {
+    }
+
+    /** id로 메시지가 있는 큐를 찾는다. 없으면 null이다. */
+    private Located locate(MessageId id) {
+        for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
+            Entry e = q.getValue().get(id.value());
+            if (e != null) {
+                return new Located(q.getKey(), q.getValue(), e);
+            }
+        }
+        return null;
+    }
+
+    private Optional<String> deadLetterQueueOf(String queue) {
+        return optionsByQueue.get(queue).deadLetterQueue();
     }
 
     /** 판정 기준은 리스 토큰 일치 하나뿐이다. 기한이 지났는지는 보지 않는다. */

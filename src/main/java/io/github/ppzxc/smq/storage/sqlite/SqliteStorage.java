@@ -4,8 +4,8 @@ import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
-import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.NoDeadLetterQueueException;
+import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueDeclarationConflictException;
 import io.github.ppzxc.smq.QueueInUseException;
@@ -446,8 +446,8 @@ public final class SqliteStorage implements Storage {
         }
         insert.setLong(1, dlqId);
         insert.setBytes(2, payload);
-        insert.setBytes(3, encodeHeaders(DeadLetters.headers(headers, queueName, d.id(), deliveryCount, now,
-                DeadLetters.REASON_REJECTED)));
+        insert.setBytes(3, encodeHeaders(DeadLetters.headers(
+                new DeadLetters.Origin(queueName, d.id(), headers, deliveryCount), DeadLetters.Reason.REJECTED, now)));
         insert.setLong(4, toNanos(now));
         insert.executeUpdate();
         delete.setLong(1, d.id().value());

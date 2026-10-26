@@ -177,13 +177,17 @@ public final class MemoryStorage implements Storage {
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
         lock.lock();
         try {
-            TreeMap<Long, Entry> queued = require(queue);
+            TreeMap<Long, Entry> entries = require(queue);
             QueueOptions options = optionsByQueue.get(queue);
+            // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
+            if (options.singleActiveConsumer() && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
+                return PullResult.empty();
+            }
             List<Entry> picked = new ArrayList<>();
             List<Entry> exhausted = new ArrayList<>();
             boolean deadLettersRemain = false;
             boolean moves = options.maxDeliveries().isPresent();
-            for (Entry e : queued.values()) {
+            for (Entry e : entries.values()) {
                 // 소진 메시지를 옮기려면 청크가 차도 끝까지 훑어야 한다. 옮길 일이 없는 큐는 청크가 차면 멈춘다.
                 if (picked.size() == max && !moves) {
                     break;
@@ -204,7 +208,7 @@ public final class MemoryStorage implements Storage {
             if (!exhausted.isEmpty()) {
                 TreeMap<Long, Entry> dlq = queues.get(options.deadLetterQueue().orElseThrow());
                 for (Entry e : exhausted) {
-                    queued.remove(e.id.value());
+                    entries.remove(e.id.value());
                     Entry moved = e.deadLettered(new MessageId(nextMessageId++), queue,
                             DeadLetters.Reason.MAX_DELIVERIES, now);
                     dlq.put(moved.id.value(), moved);
@@ -331,6 +335,10 @@ public final class MemoryStorage implements Storage {
     /** 리스가 없거나 기한이 지났으면 준비 상태다. 기한이 지나도 다시 꺼내기 전까지는 리스 토큰이 남아 있다. */
     private static boolean isReady(Entry e, Instant now) {
         return !isDelayed(e, now) && (e.leaseToken == null || !e.leaseDeadline.isAfter(now));
+    }
+
+    private static boolean isLeased(Entry e, Instant now) {
+        return e.leaseToken != null && e.leaseDeadline.isAfter(now);
     }
 
     private static boolean isDelayed(Entry e, Instant now) {

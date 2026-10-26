@@ -35,7 +35,7 @@ class SqliteStorageTest {
         SqliteStorage.open(db, Durability.POWER_LOSS).close();
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db)) {
             assertEquals(String.valueOf(SqliteStorage.APPLICATION_ID), pragma(c, "application_id"));
-            assertEquals("2", pragma(c, "user_version"));
+            assertEquals("1", pragma(c, "user_version"));
             assertEquals("wal", pragma(c, "journal_mode"));
         }
     }

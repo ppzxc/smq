@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -390,5 +391,140 @@ abstract class SmqConformanceTest {
         }
         assertEquals(new QueueCounts(0, 1, 0), fresh.counts());
         assertEquals(Outcome.OK, fresh.settle(freshChunk.ackAll()).byMessage().get(freshChunk.messages().getFirst().id()));
+    }
+
+    @Test
+    void 리스가_만료된_메시지는_원래_id_자리로_돌아가_다시_꺼내지고_전달_횟수가_늘어난다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        Chunk first = q.pull(2, Duration.ZERO);
+        assertEquals(List.of(1, 1), first.messages().stream().map(Message::deliveryCount).toList());
+
+        clock.advance(Duration.ofSeconds(10));
+        Chunk second = q.pull(10, Duration.ZERO);
+        assertEquals(ids, second.messages().stream().map(Message::id).toList());
+        assertEquals(List.of(2, 2, 1), second.messages().stream().map(Message::deliveryCount).toList());
+
+        clock.advance(Duration.ofSeconds(10));
+        Chunk third = q.pull(10, Duration.ZERO);
+        assertEquals(List.of(3, 3, 2), third.messages().stream().map(Message::deliveryCount).toList());
+    }
+
+    @Test
+    void 리스_기한_전에는_다시_꺼낼_수_없다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        q.publish(msg("a"));
+        q.pull(1, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(9));
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+    }
+
+    @Test
+    void counts는_리스_중_개수를_돌려주고_기한이_지났지만_다시_꺼내지_않은_메시지는_준비로_센다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        q.pull(2, Duration.ZERO);
+        assertEquals(new QueueCounts(1, 2, 0), q.counts());
+        clock.advance(Duration.ofSeconds(10));
+        assertEquals(new QueueCounts(3, 0, 0), q.counts());
+        q.pull(1, Duration.ZERO);
+        assertEquals(new QueueCounts(2, 1, 0), q.counts());
+    }
+
+    @Test
+    void pull에서_덮어쓴_리스_시간이_청크의_기한과_만료_시점에_반영된다() throws Exception {
+        Queue q = open(Duration.ofSeconds(60)).declare("q", QueueOptions.defaults());
+        q.publish(msg("a"));
+        Chunk c = q.pull(1, Duration.ZERO, Duration.ofSeconds(5));
+        assertEquals(T0.plusSeconds(5), c.leaseDeadline());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(2, q.pull(1, Duration.ZERO).messages().getFirst().deliveryCount());
+    }
+
+    @Test
+    void extend는_리스를_지금부터_d_뒤로_바꾸고_새_기한과_메시지별_OK를_돌려준다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(10, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(6));
+        Extension ext = q.extend(c, Duration.ofSeconds(20));
+        assertEquals(T0.plusSeconds(26), ext.leaseDeadline());
+        assertTrue(ext.outcomes().allOk());
+        assertEquals(Set.copyOf(ids), ext.outcomes().byMessage().keySet());
+
+        clock.advance(Duration.ofSeconds(19));
+        assertTrue(q.pull(10, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(0, 2, 0), q.counts());
+        clock.advance(Duration.ofSeconds(1));
+        assertEquals(2, q.pull(10, Duration.ZERO).messages().size());
+    }
+
+    @Test
+    void 같은_연장을_다시_해도_안전하다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(10, Duration.ZERO);
+        Extension first = q.extend(c, Duration.ofSeconds(20));
+        Extension again = q.extend(c, Duration.ofSeconds(20));
+        assertEquals(first, again);
+        assertTrue(again.outcomes().allOk());
+        assertEquals(new QueueCounts(0, 2, 0), q.counts());
+        assertTrue(q.settle(c.ackAll()).allOk());
+    }
+
+    @Test
+    void 기한이_지났어도_아무도_다시_꺼내지_않았다면_원래_리스의_정산과_연장은_OK다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        q.publish(List.of(msg("a"), msg("b")));
+        Chunk c = q.pull(10, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(30));
+        Extension ext = q.extend(c, Duration.ofSeconds(10));
+        assertTrue(ext.outcomes().allOk());
+        assertEquals(new QueueCounts(0, 2, 0), q.counts());
+        clock.advance(Duration.ofSeconds(30));
+        assertTrue(q.settle(c.ackAll()).allOk());
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+    }
+
+    @Test
+    void 다른_컨슈머가_다시_꺼간_메시지에_대한_늦은_정산과_연장은_STALE이고_효력이_없다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk slow = q.pull(10, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(10));
+        Chunk fast = q.pull(1, Duration.ZERO);
+        assertEquals(ids.getFirst(), fast.messages().getFirst().id());
+
+        Outcomes late = q.settle(slow.ackAll());
+        assertEquals(Outcome.STALE, late.byMessage().get(ids.getFirst()));
+        assertEquals(Outcome.OK, late.byMessage().get(ids.get(1)));
+
+        Extension ext = q.extend(slow, Duration.ofSeconds(100));
+        assertEquals(List.of(ids.getFirst(), ids.get(1)), ext.outcomes().stale());
+        // 연장은 효력이 없으므로 fast의 리스는 그대로이고 기한이 되면 만료된다.
+        assertEquals(new QueueCounts(0, 1, 0), q.counts());
+        assertTrue(q.settle(fast.ackAll()).allOk());
+    }
+
+    @Test
+    void ACK한_메시지를_같은_리스로_다시_연장하면_STALE이다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        MessageId id = q.publish(msg("a"));
+        Chunk c = q.pull(1, Duration.ZERO);
+        assertTrue(q.settle(c.ackAll()).allOk());
+        Extension ext = q.extend(c, Duration.ofSeconds(10));
+        assertEquals(List.of(id), ext.outcomes().stale());
+    }
+
+    @Test
+    void 빈_청크를_연장하면_빈_결과이고_인자_오류는_IllegalArgumentException() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        Chunk empty = q.pull(1, Duration.ZERO);
+        assertTrue(q.extend(empty, Duration.ofSeconds(1)).outcomes().byMessage().isEmpty());
+        q.publish(msg("a"));
+        Chunk c = q.pull(1, Duration.ZERO);
+        assertThrows(IllegalArgumentException.class, () -> q.extend(c, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> q.extend(c, null));
+        assertThrows(NullPointerException.class, () -> q.extend(null, Duration.ofSeconds(1)));
     }
 }

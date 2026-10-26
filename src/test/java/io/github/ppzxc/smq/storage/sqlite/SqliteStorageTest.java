@@ -91,7 +91,8 @@ class SqliteStorageTest {
                 try (var ps = c.prepareStatement("EXPLAIN QUERY PLAN " + SqliteStorage.SELECT_READY);
                         ) {
                     ps.setLong(1, 1);
-                    ps.setInt(2, 10);
+                    ps.setLong(2, 0);
+                    ps.setInt(3, 10);
                     try (ResultSet rs = ps.executeQuery()) {
                         while (rs.next()) {
                             rows.add(rs.getString("detail"));

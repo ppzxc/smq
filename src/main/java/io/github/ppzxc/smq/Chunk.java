@@ -38,6 +38,14 @@ public final class Chunk {
         return messages.isEmpty();
     }
 
+    LeaseToken token() {
+        return token;
+    }
+
+    List<MessageId> messageIds() {
+        return messages.stream().map(Message::id).toList();
+    }
+
     /** 청크의 모든 메시지를 ACK하는 정산 값. */
     public Settlement ackAll() {
         return new Settlement(queue, token, messages.stream().map(Message::id).toList());

@@ -11,6 +11,7 @@ import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.SmqStorageException;
 import io.github.ppzxc.smq.storage.Disposition;
+import io.github.ppzxc.smq.storage.Extended;
 import io.github.ppzxc.smq.storage.LeaseToken;
 import io.github.ppzxc.smq.storage.NewMessage;
 import io.github.ppzxc.smq.storage.PullResult;
@@ -51,7 +52,8 @@ public final class SqliteStorage implements Storage {
     public static final int SCHEMA_VERSION = 1;
 
     static final String SELECT_READY =
-            "SELECT id FROM message WHERE queue_id = ? AND lease_token IS NULL ORDER BY id LIMIT ?";
+            "SELECT id FROM message WHERE queue_id = ? AND (lease_token IS NULL OR lease_deadline <= ?)"
+                    + " ORDER BY id LIMIT ?";
 
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
 
@@ -118,7 +120,7 @@ public final class SqliteStorage implements Storage {
                           lease_token INTEGER,
                           lease_deadline INTEGER
                         )""");
-                s.execute("CREATE INDEX message_ready ON message(queue_id, id) WHERE lease_token IS NULL");
+                s.execute("CREATE INDEX message_ready ON message(queue_id, id)");
                 s.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)");
                 s.execute("INSERT INTO meta(key, value) VALUES ('lease_seq', 0)");
                 s.execute("PRAGMA application_id = " + APPLICATION_ID);
@@ -287,9 +289,11 @@ public final class SqliteStorage implements Storage {
         return inTransaction(c -> {
             long queueId = requireQueue(c, queue);
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT COALESCE(SUM(lease_token IS NULL), 0), COALESCE(SUM(lease_token IS NOT NULL), 0)
-                    FROM message WHERE queue_id = ?""")) {
-                ps.setLong(1, queueId);
+                    SELECT COALESCE(SUM(lease_token IS NULL OR lease_deadline <= ?1), 0),
+                           COALESCE(SUM(lease_token IS NOT NULL AND lease_deadline > ?1), 0)
+                    FROM message WHERE queue_id = ?2""")) {
+                ps.setLong(1, toNanos(now));
+                ps.setLong(2, queueId);
                 try (ResultSet rs = ps.executeQuery()) {
                     return new QueueCounts(rs.getLong(1), rs.getLong(2), 0);
                 }
@@ -327,7 +331,8 @@ public final class SqliteStorage implements Storage {
             long queueId = requireQueue(c, queue);
             try (PreparedStatement peek = c.prepareStatement(SELECT_READY)) {
                 peek.setLong(1, queueId);
-                peek.setInt(2, 1);
+                peek.setLong(2, toNanos(now));
+                peek.setInt(3, 1);
                 try (ResultSet rs = peek.executeQuery()) {
                     if (!rs.next()) {
                         return PullResult.empty();
@@ -350,7 +355,8 @@ public final class SqliteStorage implements Storage {
                 ps.setLong(1, token);
                 ps.setLong(2, toNanos(deadline));
                 ps.setLong(3, queueId);
-                ps.setInt(4, max);
+                ps.setLong(4, toNanos(now));
+                ps.setInt(5, max);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         messages.add(new Message(new MessageId(rs.getLong(1)), rs.getBytes(2),
@@ -376,6 +382,24 @@ public final class SqliteStorage implements Storage {
                 }
             }
             return results;
+        });
+    }
+
+    @Override
+    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now) {
+        return inTransaction(c -> {
+            Instant deadline = now.plus(d);
+            List<Result> results = new ArrayList<>(ids.size());
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE message SET lease_deadline = ? WHERE id = ? AND lease_token = ?")) {
+                for (MessageId id : ids) {
+                    ps.setLong(1, toNanos(deadline));
+                    ps.setLong(2, id.value());
+                    ps.setLong(3, token.value());
+                    results.add(new Result(id, ps.executeUpdate() == 1 ? Outcome.OK : Outcome.STALE));
+                }
+            }
+            return new Extended(deadline, results);
         });
     }
 

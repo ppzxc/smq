@@ -36,6 +36,9 @@ public interface Storage extends AutoCloseable {
     /** 한 트랜잭션으로 반영하고 메시지별 결과를 돌려준다. */
     List<Result> settle(LeaseToken token, List<Disposition> items, Instant now);
 
+    /** 리스를 {@code now + d}로 바꾼다. 정산과 같은 토큰 일치 기준으로 메시지별 결과를 돌려준다. */
+    Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now);
+
     @Override
     void close();
 }

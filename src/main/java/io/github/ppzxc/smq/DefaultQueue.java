@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq;
 
+import io.github.ppzxc.smq.storage.Extended;
 import io.github.ppzxc.smq.storage.NewMessage;
 import io.github.ppzxc.smq.storage.PullResult;
 import io.github.ppzxc.smq.storage.Result;
@@ -104,5 +105,20 @@ final class DefaultQueue implements Queue {
             byMessage.put(r.id(), r.outcome());
         }
         return new Outcomes(byMessage);
+    }
+
+    @Override
+    public Extension extend(Chunk chunk, Duration leaseDuration) {
+        Objects.requireNonNull(chunk, "chunk");
+        Validation.positive(leaseDuration, "leaseDuration");
+        if (chunk.isEmpty()) {
+            return new Extension(null, new Outcomes(Map.of()));
+        }
+        Extended extended = storage.extend(chunk.token(), chunk.messageIds(), leaseDuration, clock.instant());
+        Map<MessageId, Outcome> byMessage = new LinkedHashMap<>();
+        for (Result r : extended.results()) {
+            byMessage.put(r.id(), r.outcome());
+        }
+        return new Extension(extended.leaseDeadline(), new Outcomes(byMessage));
     }
 }

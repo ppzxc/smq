@@ -9,6 +9,7 @@ import io.github.ppzxc.smq.QueueInUseException;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.storage.Disposition;
+import io.github.ppzxc.smq.storage.Extended;
 import io.github.ppzxc.smq.storage.LeaseToken;
 import io.github.ppzxc.smq.storage.NewMessage;
 import io.github.ppzxc.smq.storage.PullResult;
@@ -121,7 +122,7 @@ public final class MemoryStorage implements Storage {
             long ready = 0;
             long leased = 0;
             for (Entry e : require(queue).values()) {
-                if (e.leaseToken == null) {
+                if (isReady(e, now)) {
                     ready++;
                 } else {
                     leased++;
@@ -162,7 +163,7 @@ public final class MemoryStorage implements Storage {
         try {
             List<Entry> picked = new ArrayList<>();
             for (Entry e : require(queue).values()) {
-                if (e.leaseToken == null) {
+                if (isReady(e, now)) {
                     picked.add(e);
                     if (picked.size() == max) {
                         break;
@@ -205,7 +206,7 @@ public final class MemoryStorage implements Storage {
         for (TreeMap<Long, Entry> messages : queues.values()) {
             Entry e = messages.get(d.id().value());
             if (e != null) {
-                if (e.leaseToken == null || e.leaseToken != token.value()) {
+                if (!holds(e, token)) {
                     return Outcome.STALE;
                 }
                 messages.remove(d.id().value());
@@ -213,6 +214,42 @@ public final class MemoryStorage implements Storage {
             }
         }
         return Outcome.STALE;
+    }
+
+    /** 판정 기준은 리스 토큰 일치 하나뿐이다. 기한이 지났는지는 보지 않는다. */
+    private static boolean holds(Entry e, LeaseToken token) {
+        return e.leaseToken != null && e.leaseToken == token.value();
+    }
+
+    @Override
+    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now) {
+        lock.lock();
+        try {
+            Instant deadline = now.plus(d);
+            List<Result> results = new ArrayList<>(ids.size());
+            for (MessageId id : ids) {
+                Outcome outcome = Outcome.STALE;
+                for (TreeMap<Long, Entry> messages : queues.values()) {
+                    Entry e = messages.get(id.value());
+                    if (e != null) {
+                        if (holds(e, token)) {
+                            e.leaseDeadline = deadline;
+                            outcome = Outcome.OK;
+                        }
+                        break;
+                    }
+                }
+                results.add(new Result(id, outcome));
+            }
+            return new Extended(deadline, results);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** 리스가 없거나 기한이 지났으면 준비 상태다. 기한이 지나도 다시 꺼내기 전까지는 리스 토큰이 남아 있다. */
+    private static boolean isReady(Entry e, Instant now) {
+        return e.leaseToken == null || !e.leaseDeadline.isAfter(now);
     }
 
     private TreeMap<Long, Entry> require(String queue) {

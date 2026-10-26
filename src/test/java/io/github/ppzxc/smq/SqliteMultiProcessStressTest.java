@@ -25,6 +25,9 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class SqliteMultiProcessStressTest {
 
+    /** Windows에서 JVM 기동과 쓰기 경합으로 정산이 수 초 늦어도 리스가 먼저 끝나지 않을 만큼 넉넉하게 잡는다. */
+    private static final int LEASE_SECONDS = 15;
+
     @TempDir
     Path dir;
 
@@ -130,7 +133,7 @@ class SqliteMultiProcessStressTest {
         int count = 6;
         int perWorker = 400;
         for (int i = 0; i < count; i++) {
-            new Worker("w" + i, perWorker, 3);
+            new Worker("w" + i, perWorker, LEASE_SECONDS);
         }
         Worker victim = workers.get(0);
         long deadline = System.nanoTime() + Duration.ofMinutes(2).toNanos();
@@ -155,7 +158,7 @@ class SqliteMultiProcessStressTest {
             Thread.sleep(100);
         }
         // 정산 못 한 메시지의 리스가 끝나 다시 나올 시간을 준 뒤 멈춘다.
-        Thread.sleep(5000);
+        Thread.sleep(LEASE_SECONDS * 1000L + 2000);
         for (Worker w : survivors) {
             w.stop();
         }

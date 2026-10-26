@@ -4,6 +4,8 @@ import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
 import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.QueueCounts;
+import io.github.ppzxc.smq.QueueDeclarationConflictException;
+import io.github.ppzxc.smq.QueueInUseException;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.storage.Disposition;
@@ -18,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -43,6 +46,7 @@ public final class MemoryStorage implements Storage {
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Map<String, TreeMap<Long, Entry>> queues = new HashMap<>();
+    private final Map<String, QueueOptions> optionsByQueue = new HashMap<>();
     private long nextMessageId = 1;
     private long nextLeaseToken = 1;
 
@@ -50,7 +54,40 @@ public final class MemoryStorage implements Storage {
     public void declare(String queue, QueueOptions options) {
         lock.lock();
         try {
-            queues.computeIfAbsent(queue, q -> new TreeMap<>());
+            QueueOptions existing = optionsByQueue.get(queue);
+            if (existing != null) {
+                if (!existing.equals(options)) {
+                    throw new QueueDeclarationConflictException(queue, existing, options);
+                }
+                return;
+            }
+            options.deadLetterQueue().ifPresent(dlq -> {
+                if (!queues.containsKey(dlq)) {
+                    throw new QueueNotFoundException(dlq);
+                }
+            });
+            queues.put(queue, new TreeMap<>());
+            optionsByQueue.put(queue, options);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public boolean delete(String queue) {
+        lock.lock();
+        try {
+            if (!queues.containsKey(queue)) {
+                return false;
+            }
+            for (Map.Entry<String, QueueOptions> e : optionsByQueue.entrySet()) {
+                if (e.getValue().deadLetterQueue().filter(queue::equals).isPresent()) {
+                    throw new QueueInUseException(queue, e.getKey());
+                }
+            }
+            optionsByQueue.remove(queue);
+            queues.remove(queue);
+            return true;
         } finally {
             lock.unlock();
         }
@@ -61,6 +98,16 @@ public final class MemoryStorage implements Storage {
         lock.lock();
         try {
             return queues.containsKey(queue);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public Optional<QueueOptions> options(String queue) {
+        lock.lock();
+        try {
+            return Optional.ofNullable(optionsByQueue.get(queue));
         } finally {
             lock.unlock();
         }

@@ -5,6 +5,8 @@ import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
 import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.QueueCounts;
+import io.github.ppzxc.smq.QueueDeclarationConflictException;
+import io.github.ppzxc.smq.QueueInUseException;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.SmqStorageException;
@@ -33,6 +35,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.concurrent.locks.ReentrantLock;
 import org.sqlite.SQLiteConfig;
 
@@ -98,7 +102,10 @@ public final class SqliteStorage implements Storage {
                 s.execute("""
                         CREATE TABLE queue (
                           id INTEGER PRIMARY KEY,
-                          name TEXT NOT NULL UNIQUE
+                          name TEXT NOT NULL UNIQUE,
+                          max_deliveries INTEGER,
+                          dead_letter_queue_id INTEGER REFERENCES queue(id),
+                          single_active_consumer INTEGER NOT NULL DEFAULT 0
                         )""");
                 s.execute("""
                         CREATE TABLE message (
@@ -170,8 +177,21 @@ public final class SqliteStorage implements Storage {
     @Override
     public void declare(String queue, QueueOptions options) {
         inTransaction(c -> {
-            try (PreparedStatement ps = c.prepareStatement("INSERT OR IGNORE INTO queue(name) VALUES (?)")) {
+            if (findQueue(c, queue) != null) {
+                QueueOptions existing = readOptions(c, queue);
+                if (!existing.equals(options)) {
+                    throw new QueueDeclarationConflictException(queue, existing, options);
+                }
+                return null;
+            }
+            Long dlqId = options.deadLetterQueue().isPresent() ? requireQueue(c, options.deadLetterQueue().get()) : null;
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO queue(name, max_deliveries, dead_letter_queue_id, single_active_consumer)
+                    VALUES (?, ?, ?, ?)""")) {
                 ps.setString(1, queue);
+                ps.setObject(2, options.maxDeliveries().isPresent() ? options.maxDeliveries().getAsInt() : null);
+                ps.setObject(3, dlqId);
+                ps.setInt(4, options.singleActiveConsumer() ? 1 : 0);
                 ps.executeUpdate();
             }
             return null;
@@ -179,8 +199,57 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
+    public boolean delete(String queue) {
+        return inTransaction(c -> {
+            Long queueId = findQueue(c, queue);
+            if (queueId == null) {
+                return false;
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT name FROM queue WHERE dead_letter_queue_id = ? ORDER BY id LIMIT 1")) {
+                ps.setLong(1, queueId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        throw new QueueInUseException(queue, rs.getString(1));
+                    }
+                }
+            }
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM message WHERE queue_id = ?")) {
+                ps.setLong(1, queueId);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM queue WHERE id = ?")) {
+                ps.setLong(1, queueId);
+                ps.executeUpdate();
+            }
+            return true;
+        });
+    }
+
+    @Override
     public boolean exists(String queue) {
         return inTransaction(c -> findQueue(c, queue) != null);
+    }
+
+    @Override
+    public Optional<QueueOptions> options(String queue) {
+        return inTransaction(c -> findQueue(c, queue) == null ? Optional.<QueueOptions>empty()
+                : Optional.of(readOptions(c, queue)));
+    }
+
+    private static QueueOptions readOptions(Connection c, String queue) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT q.max_deliveries, d.name, q.single_active_consumer
+                FROM queue q LEFT JOIN queue d ON d.id = q.dead_letter_queue_id
+                WHERE q.name = ?""")) {
+            ps.setString(1, queue);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                int max = rs.getInt(1);
+                OptionalInt maxDeliveries = rs.wasNull() ? OptionalInt.empty() : OptionalInt.of(max);
+                return new QueueOptions(maxDeliveries, Optional.ofNullable(rs.getString(2)), rs.getInt(3) != 0);
+            }
+        }
     }
 
     private static Long findQueue(Connection c, String queue) throws SQLException {

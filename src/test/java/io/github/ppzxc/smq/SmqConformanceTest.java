@@ -9,6 +9,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -239,5 +241,154 @@ abstract class SmqConformanceTest {
     void 예외_계층의_뿌리는_unchecked_SmqException() {
         assertTrue(RuntimeException.class.isAssignableFrom(SmqException.class));
         assertTrue(SmqException.class.isAssignableFrom(QueueNotFoundException.class));
+    }
+
+    @Test
+    void 같은_옵션으로_여러_번_선언해도_아무_일이_없다() throws Exception {
+        Smq smq = open();
+        smq.declare("orders.dead", QueueOptions.defaults());
+        QueueOptions options = QueueOptions.defaults().maxDeliveries(5, "orders.dead");
+        Queue first = smq.declare("orders", options);
+        first.publish(msg("a"));
+        Queue again = smq.declare("orders", options);
+        assertEquals(options, again.options());
+        assertEquals(options, smq.queue("orders").options());
+        assertEquals(1, again.counts().ready());
+    }
+
+    @Test
+    void 이미_있는_큐를_다른_옵션으로_선언하면_기존과_요청_옵션을_담은_QueueDeclarationConflictException() {
+        Smq smq = open();
+        smq.declare("dead", QueueOptions.defaults());
+        QueueOptions existing = QueueOptions.defaults().maxDeliveries(3, "dead");
+        QueueOptions requested = QueueOptions.defaults().maxDeliveries(5, "dead");
+        smq.declare("orders", existing);
+        QueueDeclarationConflictException e =
+                assertThrows(QueueDeclarationConflictException.class, () -> smq.declare("orders", requested));
+        assertInstanceOf(SmqException.class, e);
+        assertEquals("orders", e.queue());
+        assertEquals(existing, e.existing());
+        assertEquals(requested, e.requested());
+        assertEquals(existing, smq.queue("orders").options());
+    }
+
+    @Test
+    void maxDeliveries는_dead_letter_큐_없이_지정할_수_없고_지정하지_않으면_무제한이다() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new QueueOptions(OptionalInt.of(3), Optional.empty(), false));
+        assertThrows(IllegalArgumentException.class, () -> QueueOptions.defaults().maxDeliveries(0, "dead"));
+        assertTrue(QueueOptions.defaults().maxDeliveries().isEmpty());
+        assertTrue(QueueOptions.defaults().deadLetterQueue("dead").maxDeliveries().isEmpty());
+        Smq smq = open();
+        smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("orders", QueueOptions.defaults().deadLetterQueue("dead"));
+        assertTrue(q.options().maxDeliveries().isEmpty());
+        assertEquals(Optional.of("dead"), smq.queue("orders").options().deadLetterQueue());
+    }
+
+    @Test
+    void 자기_자신을_dead_letter_큐로_지정하면_오류이고_없는_큐를_지정하면_선언_오류다() {
+        Smq smq = open();
+        assertThrows(IllegalArgumentException.class,
+                () -> smq.declare("orders", QueueOptions.defaults().deadLetterQueue("orders")));
+        assertThrows(IllegalArgumentException.class,
+                () -> smq.declare("orders", QueueOptions.defaults().maxDeliveries(3, "orders")));
+        QueueNotFoundException e = assertThrows(QueueNotFoundException.class,
+                () -> smq.declare("orders", QueueOptions.defaults().maxDeliveries(3, "missing")));
+        assertEquals("missing", e.queue());
+        assertThrows(QueueNotFoundException.class, () -> smq.queue("orders"));
+    }
+
+    @Test
+    void singleActiveConsumer가_저장되어_options와_재선언_비교에_반영된다() {
+        Smq smq = open();
+        QueueOptions single = QueueOptions.defaults().singleActiveConsumer(true);
+        Queue q = smq.declare("ordered", single);
+        assertTrue(q.options().singleActiveConsumer());
+        assertTrue(smq.queue("ordered").options().singleActiveConsumer());
+        assertEquals(single, smq.declare("ordered", single).options());
+        QueueDeclarationConflictException e = assertThrows(QueueDeclarationConflictException.class,
+                () -> smq.declare("ordered", QueueOptions.defaults()));
+        assertEquals(single, e.existing());
+        assertFalse(smq.declare("plain", QueueOptions.defaults()).options().singleActiveConsumer());
+        assertThrows(QueueDeclarationConflictException.class, () -> smq.declare("plain", single));
+    }
+
+    @Test
+    void delete는_메시지째_지우고_지웠으면_true_없었으면_false() {
+        Smq smq = open();
+        Queue q = smq.declare("orders", QueueOptions.defaults());
+        q.publish(List.of(msg("a"), msg("b")));
+        assertTrue(smq.delete("orders"));
+        assertFalse(smq.delete("orders"));
+        assertFalse(smq.delete("never-declared"));
+        assertThrows(QueueNotFoundException.class, () -> smq.queue("orders"));
+        assertThrows(IllegalArgumentException.class, () -> smq.delete("bad name"));
+        assertEquals(0, smq.declare("orders", QueueOptions.defaults()).counts().ready());
+    }
+
+    @Test
+    void 다른_큐가_dead_letter_큐로_참조하는_큐를_지우면_QueueInUseException() {
+        Smq smq = open();
+        smq.declare("dead", QueueOptions.defaults());
+        smq.declare("orders", QueueOptions.defaults().maxDeliveries(3, "dead"));
+        QueueInUseException e = assertThrows(QueueInUseException.class, () -> smq.delete("dead"));
+        assertInstanceOf(SmqException.class, e);
+        assertEquals("dead", e.queue());
+        assertEquals("orders", e.referencedBy());
+        assertEquals("dead", smq.queue("dead").name());
+        assertTrue(smq.delete("orders"));
+        assertTrue(smq.delete("dead"));
+    }
+
+    @Test
+    void dead_letter_큐_연쇄에서도_참조_중인_큐는_지울_수_없다() {
+        Smq smq = open();
+        smq.declare("c", QueueOptions.defaults());
+        smq.declare("b", QueueOptions.defaults().deadLetterQueue("c"));
+        smq.declare("a", QueueOptions.defaults().deadLetterQueue("b"));
+        assertThrows(QueueInUseException.class, () -> smq.delete("c"));
+        assertThrows(QueueInUseException.class, () -> smq.delete("b"));
+        assertTrue(smq.delete("a"));
+        assertTrue(smq.delete("b"));
+        assertTrue(smq.delete("c"));
+    }
+
+    @Test
+    void 삭제한_큐의_핸들로_발행하거나_꺼내면_QueueNotFoundException() {
+        Smq smq = open();
+        Queue q = smq.declare("orders", QueueOptions.defaults());
+        smq.delete("orders");
+        assertThrows(QueueNotFoundException.class, () -> q.publish(msg("a")));
+        assertThrows(QueueNotFoundException.class, () -> q.pull(1, Duration.ZERO));
+        assertThrows(QueueNotFoundException.class, q::counts);
+    }
+
+    @Test
+    void 삭제한_큐의_리스로_들어온_정산은_STALE이고_같은_이름으로_다시_선언한_큐는_새_큐다() throws Exception {
+        Smq smq = open();
+        Queue old = smq.declare("orders", QueueOptions.defaults());
+        old.publish(List.of(msg("old-1"), msg("old-2")));
+        Chunk oldChunk = old.pull(10, Duration.ZERO);
+        assertEquals(2, oldChunk.messages().size());
+        smq.delete("orders");
+
+        Outcomes afterDelete = old.settle(oldChunk.ackAll());
+        for (Message m : oldChunk.messages()) {
+            assertEquals(Outcome.STALE, afterDelete.byMessage().get(m.id()));
+        }
+
+        Queue fresh = smq.declare("orders", QueueOptions.defaults());
+        assertEquals(new QueueCounts(0, 0, 0), fresh.counts());
+        fresh.publish(msg("new-1"));
+        Chunk freshChunk = fresh.pull(10, Duration.ZERO);
+        assertEquals("new-1", text(freshChunk.messages().getFirst()));
+
+        Outcomes stale = fresh.settle(oldChunk.ackAll());
+        for (Message m : oldChunk.messages()) {
+            assertEquals(Outcome.STALE, stale.byMessage().get(m.id()));
+        }
+        assertEquals(new QueueCounts(0, 1, 0), fresh.counts());
+        assertEquals(Outcome.OK, fresh.settle(freshChunk.ackAll()).byMessage().get(freshChunk.messages().getFirst().id()));
     }
 }

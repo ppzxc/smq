@@ -75,6 +75,19 @@ class SqliteSchemaTest {
     }
 
     @Test
+    void 같은_버전의_smq_파일은_데이터를_그대로_둔_채_열린다() throws Exception {
+        int supported = supportedVersion();
+        try (Smq first = Smq.sqlite(db()).open()) {
+            first.declare("q", QueueOptions.defaults()).publish(msg("a"));
+        }
+
+        try (Smq second = Smq.sqlite(db()).open()) {
+            assertEquals(1, second.queue("q").counts().ready());
+        }
+        assertEquals(supported, userVersion(db()));
+    }
+
+    @Test
     void smq가_아닌_비어_있지_않은_파일은_거부하고_망가뜨리지_않는다() throws Exception {
         jdbc(db(), "CREATE TABLE foreign_table(x)", "INSERT INTO foreign_table VALUES (1)");
 
@@ -153,6 +166,49 @@ class SqliteSchemaTest {
             }
         } finally {
             pool.shutdownNow();
+        }
+    }
+
+    /** 자식 JVM의 진입점. 시작 신호 파일이 생길 때까지 기다렸다가 열고, 연 인스턴스로 큐 하나를 쓴다. */
+    public static final class OpenerMain {
+        public static void main(String[] args) throws Exception {
+            Path db = Path.of(args[0]);
+            Path go = Path.of(args[1]);
+            while (!Files.exists(go)) {
+                Thread.sleep(1);
+            }
+            try (Smq smq = Smq.sqlite(db).open()) {
+                smq.declare("q", QueueOptions.defaults()).publish(msg(args[2]));
+            }
+        }
+    }
+
+    @Test
+    void 여러_프로세스가_동시에_같은_새_파일을_열어도_모두_성공하고_스키마가_한_번만_만들어진다() throws Exception {
+        int processes = 4;
+        Path go = dir.resolve("go");
+        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+        List<Process> children = new ArrayList<>();
+        try {
+            for (int i = 0; i < processes; i++) {
+                children.add(new ProcessBuilder(java, "-cp", System.getProperty("java.class.path"),
+                        OpenerMain.class.getName(), db().toString(), go.toString(), "m" + i)
+                        .redirectErrorStream(true)
+                        .redirectOutput(dir.resolve("child" + i + ".log").toFile())
+                        .start());
+            }
+            Thread.sleep(1500); // 모두 신호를 기다리는 상태가 되게 한다.
+            Files.createFile(go);
+            for (int i = 0; i < processes; i++) {
+                Process child = children.get(i);
+                assertTrue(child.waitFor(60, TimeUnit.SECONDS), "child " + i + " did not finish");
+                assertEquals(0, child.exitValue(), Files.readString(dir.resolve("child" + i + ".log")));
+            }
+        } finally {
+            children.forEach(Process::destroyForcibly);
+        }
+        try (Smq smq = Smq.sqlite(db()).open()) {
+            assertEquals(processes, smq.queue("q").counts().ready());
         }
     }
 

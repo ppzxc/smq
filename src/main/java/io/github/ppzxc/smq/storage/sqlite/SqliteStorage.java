@@ -43,10 +43,13 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.locks.ReentrantLock;
 import org.sqlite.SQLiteConfig;
+import org.sqlite.SQLiteErrorCode;
+import org.sqlite.SQLiteException;
 
 /**
  * SQLite 파일 하나를 쓰는 저장소. 모든 연산은 {@link #inTransaction}이라는 하나의 쓰기 트랜잭션 경로를 거친다.
- * 이후 트랜잭션마다 하는 일(스키마 버전 확인, {@code SQLITE_BUSY} 재시도)은 그 한 곳에 넣는다.
+ * 트랜잭션마다 하는 스키마 버전 확인은 이미 그 경로에 있다. {@code SQLITE_BUSY} 재시도는 아직 없고
+ * (이슈 #33), 생기면 같은 경로에 들어간다.
  */
 public final class SqliteStorage implements Storage {
 
@@ -77,8 +80,8 @@ public final class SqliteStorage implements Storage {
 
     private final Connection connection;
     private final ReentrantLock lock = new ReentrantLock();
-    /** 열 때 판정한 스키마 버전. 열기가 끝나기 전에는 트랜잭션마다 하는 확인을 건너뛴다. */
-    private volatile int openedVersion = -1;
+    /** 열 때 판정한 스키마 버전. 열기가 끝난 뒤 {@link #inTransaction}이 이 값과 파일의 버전을 비교한다. */
+    private volatile int openedVersion;
     /** 버전이 달라진 것을 한 번 보면 이 저장소는 영구히 실패한 상태다. */
     private volatile boolean failed;
 
@@ -97,7 +100,7 @@ public final class SqliteStorage implements Storage {
         try {
             connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
             SqliteStorage storage = new SqliteStorage(connection);
-            int version = storage.inTransaction(SqliteStorage::establishSchema);
+            int version = storage.runInTransaction(SqliteStorage::establishSchema, false);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
             enableWal(connection);
             storage.openedVersion = version;
@@ -105,8 +108,7 @@ public final class SqliteStorage implements Storage {
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
             if (isNotADatabase(e)) {
-                throw new IncompatibleStorageException(
-                        "not an smq database (not a SQLite file), supported " + SCHEMA_VERSION);
+                throw notSmq("not a SQLite file");
             }
             if (e instanceof RuntimeException re) {
                 throw re;
@@ -117,8 +119,8 @@ public final class SqliteStorage implements Storage {
 
     private static boolean isNotADatabase(Throwable t) {
         for (; t != null; t = t.getCause()) {
-            if (t instanceof org.sqlite.SQLiteException se
-                    && se.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_NOTADB) {
+            if (t instanceof SQLiteException se
+                    && se.getResultCode() == SQLiteErrorCode.SQLITE_NOTADB) {
                 return true;
             }
         }
@@ -136,7 +138,7 @@ public final class SqliteStorage implements Storage {
                 s.execute("PRAGMA journal_mode = WAL");
                 return;
             } catch (SQLException e) {
-                if (e.getErrorCode() != org.sqlite.SQLiteErrorCode.SQLITE_BUSY.code || System.nanoTime() > giveUp) {
+                if (e.getErrorCode() != SQLiteErrorCode.SQLITE_BUSY.code || System.nanoTime() > giveUp) {
                     throw e;
                 }
                 try {
@@ -188,8 +190,7 @@ public final class SqliteStorage implements Storage {
             return SCHEMA_VERSION;
         }
         if (applicationId != APPLICATION_ID) {
-            throw new IncompatibleStorageException("not an smq database (application_id=" + applicationId
-                    + "), supported " + SCHEMA_VERSION);
+            throw notSmq("application_id=" + applicationId);
         }
         if (version > SCHEMA_VERSION) {
             throw unsupported(version);
@@ -215,8 +216,15 @@ public final class SqliteStorage implements Storage {
     }
 
     private static IncompatibleStorageException unsupported(int found) {
-        return new IncompatibleStorageException(
-                "unsupported schema version: found " + found + ", supported " + SCHEMA_VERSION);
+        return versionMismatch("unsupported schema version", found);
+    }
+
+    private static IncompatibleStorageException versionMismatch(String what, int found) {
+        return new IncompatibleStorageException(what + ": found " + found + ", supported " + SCHEMA_VERSION);
+    }
+
+    private static IncompatibleStorageException notSmq(String reason) {
+        return new IncompatibleStorageException("not an smq database (" + reason + "), supported " + SCHEMA_VERSION);
     }
 
     private static int pragmaInt(Connection c, String name) throws SQLException {
@@ -227,13 +235,20 @@ public final class SqliteStorage implements Storage {
 
     /** 모든 연산이 거치는 유일한 쓰기 트랜잭션 경로. 시작할 때마다 {@code user_version}을 다시 읽는다. */
     <T> T inTransaction(TxBody<T> body) {
+        return runInTransaction(body, true);
+    }
+
+    /** {@code verify}가 거짓인 경로는 열기뿐이다. 그때는 아직 기준 버전이 없고 판정은 {@link #establishSchema}가 한다. */
+    private <T> T runInTransaction(TxBody<T> body, boolean verify) {
         lock.lock();
         try {
             try (Statement s = connection.createStatement()) {
                 s.execute("BEGIN IMMEDIATE");
             }
             try {
-                verifyVersion();
+                if (verify) {
+                    verifyVersion();
+                }
                 T result = body.apply(connection);
                 try (Statement s = connection.createStatement()) {
                     s.execute("COMMIT");
@@ -251,16 +266,11 @@ public final class SqliteStorage implements Storage {
     }
 
     private void verifyVersion() throws SQLException {
-        int expected = openedVersion;
-        if (expected < 0) {
-            return; // 열기 중이다. 판정은 establishSchema가 한다.
-        }
-        if (failed) {
-            throw new IncompatibleStorageException("this instance stopped after the schema version changed: found "
-                    + pragmaInt(connection, "user_version") + ", supported " + SCHEMA_VERSION);
-        }
         int found = pragmaInt(connection, "user_version");
-        if (found != expected) {
+        if (failed) {
+            throw versionMismatch("this instance stopped after the schema version changed", found);
+        }
+        if (found != openedVersion) {
             failed = true;
             throw unsupported(found);
         }

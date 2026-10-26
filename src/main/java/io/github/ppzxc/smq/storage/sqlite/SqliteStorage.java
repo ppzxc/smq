@@ -52,7 +52,7 @@ public final class SqliteStorage implements Storage {
 
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
     public static final int APPLICATION_ID = 0x534D5131;
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 1;
 
     static final String SELECT_READY =
             "SELECT id FROM message WHERE queue_id = ? AND (available_at IS NULL OR available_at <= ?)"

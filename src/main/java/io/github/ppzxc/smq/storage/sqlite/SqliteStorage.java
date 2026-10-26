@@ -57,12 +57,18 @@ public final class SqliteStorage implements Storage {
     public static final int APPLICATION_ID = 0x534D5131;
     public static final int SCHEMA_VERSION = 1;
 
+    /** 꺼낼 수 있는 메시지의 시각 조건. 지연이 끝났고 리스가 없거나 만료됐다. 자리표시자 둘은 모두 현재 시각이다. */
+    private static final String READY_TIME_CONDITION =
+            "(available_at IS NULL OR available_at <= ?) AND (lease_token IS NULL OR lease_deadline <= ?)";
+
     static final String SELECT_READY =
-            "SELECT id FROM message WHERE queue_id = ? AND (available_at IS NULL OR available_at <= ?)"
-                    + " AND (lease_token IS NULL OR lease_deadline <= ?)"
+            "SELECT id FROM message WHERE queue_id = ? AND " + READY_TIME_CONDITION
                     + " ORDER BY id LIMIT ?";
 
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
+    private static final int MAX_ATTEMPTS = 5;
+    /** SQLite 기본 결과 코드 {@code SQLITE_BUSY}. */
+    private static final int SQLITE_BUSY = 5;
 
     @FunctionalInterface
     interface TxBody<T> {
@@ -79,19 +85,26 @@ public final class SqliteStorage implements Storage {
     private static final Map<Integer, Migration> MIGRATIONS = Map.of();
 
     private final Connection connection;
+    private final int maxAttempts;
     private final ReentrantLock lock = new ReentrantLock();
     /** 열 때 판정한 스키마 버전. 열기가 끝난 뒤 {@link #inTransaction}이 이 값과 파일의 버전을 비교한다. */
     private volatile int openedVersion;
     /** 버전이 달라진 것을 한 번 보면 이 저장소는 영구히 실패한 상태다. */
     private volatile boolean failed;
 
-    private SqliteStorage(Connection connection) {
+    private SqliteStorage(Connection connection, int maxAttempts) {
         this.connection = connection;
+        this.maxAttempts = maxAttempts;
     }
 
     public static SqliteStorage open(Path path, Durability durability) {
+        return open(path, durability, BUSY_TIMEOUT_MILLIS, MAX_ATTEMPTS);
+    }
+
+    /** 테스트가 경합을 짧게 재현할 수 있게 busy timeout과 시도 횟수를 정한다. */
+    static SqliteStorage open(Path path, Durability durability, int busyTimeoutMillis, int maxAttempts) {
         SQLiteConfig config = new SQLiteConfig();
-        config.setBusyTimeout(BUSY_TIMEOUT_MILLIS);
+        config.setBusyTimeout(busyTimeoutMillis);
         // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
         config.setSynchronous(durability == Durability.POWER_LOSS
                 ? SQLiteConfig.SynchronousMode.FULL
@@ -99,10 +112,15 @@ public final class SqliteStorage implements Storage {
         Connection connection = null;
         try {
             connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
-            SqliteStorage storage = new SqliteStorage(connection);
-            int version = storage.runInTransaction(SqliteStorage::establishSchema, false);
+            SqliteStorage storage = new SqliteStorage(connection, maxAttempts);
+            // 열기는 아직 기준 버전이 없으므로 verify 없이 판정한다.
+            int version = storage.retryingOnBusy(() -> storage.runOnce(SqliteStorage::establishSchema, false));
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
-            enableWal(connection);
+            storage.retryingOnBusy(() -> {
+                try (Statement s = storage.connection.createStatement()) {
+                    return s.execute("PRAGMA journal_mode = WAL");
+                }
+            });
             storage.openedVersion = version;
             return storage;
         } catch (SQLException | RuntimeException e) {
@@ -125,30 +143,6 @@ public final class SqliteStorage implements Storage {
             }
         }
         return false;
-    }
-
-    /**
-     * 저널 모드 전환은 다른 연결이 쓰는 중이면 busy 핸들러 없이 바로 {@code SQLITE_BUSY}로 실패할 수 있다.
-     * 새 파일을 여러 프로세스가 동시에 열 때 생기므로 제한 시간 안에서 다시 시도한다.
-     */
-    private static void enableWal(Connection c) throws SQLException {
-        long giveUp = System.nanoTime() + Duration.ofMillis(BUSY_TIMEOUT_MILLIS).toNanos();
-        while (true) {
-            try (Statement s = c.createStatement()) {
-                s.execute("PRAGMA journal_mode = WAL");
-                return;
-            } catch (SQLException e) {
-                if (e.getErrorCode() != SQLiteErrorCode.SQLITE_BUSY.code || System.nanoTime() > giveUp) {
-                    throw e;
-                }
-                try {
-                    Thread.sleep(5);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw e;
-                }
-            }
-        }
     }
 
     /** 열 때의 판정. 생성이나 업그레이드를 했으면 그 뒤의 버전을, 그대로 열면 파일의 버전을 돌려준다. */
@@ -233,35 +227,72 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    /** 모든 연산이 거치는 유일한 쓰기 트랜잭션 경로. 시작할 때마다 {@code user_version}을 다시 읽는다. */
+    /**
+     * 모든 연산이 거치는 유일한 쓰기 트랜잭션 경로. 시작할 때마다 {@code user_version}을 다시 읽는다.
+     * {@code SQLITE_BUSY}(다른 프로세스나 연결이 쓰기 락을 쥐고 {@code busy_timeout}이 지난 경우)가 나면
+     * 되돌린 뒤 트랜잭션 전체를 다시 시도한다. 시도를 다 쓰고도 풀리지 않거나 다른 저장소 오류면
+     * {@link SmqStorageException}을 던진다. 그 예외는 효력 불명이다.
+     */
     <T> T inTransaction(TxBody<T> body) {
-        return runInTransaction(body, true);
+        return retryingOnBusy(() -> runOnce(body, true));
+    }
+
+    @FunctionalInterface
+    private interface SqlAction<T> {
+        T run() throws SQLException;
+    }
+
+    /** {@code SQLITE_BUSY} 재시도 루프. 쓰기 트랜잭션과 저널 모드 전환이 함께 쓴다. */
+    private <T> T retryingOnBusy(SqlAction<T> action) {
+        lock.lock();
+        try {
+            for (int attempt = 1;; attempt++) {
+                try {
+                    return action.run();
+                } catch (SQLException e) {
+                    if (!isBusy(e) || attempt >= maxAttempts) {
+                        throw new SmqStorageException("sqlite operation failed", e);
+                    }
+                    retryDelay(attempt, e);
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
     }
 
     /** {@code verify}가 거짓인 경로는 열기뿐이다. 그때는 아직 기준 버전이 없고 판정은 {@link #establishSchema}가 한다. */
-    private <T> T runInTransaction(TxBody<T> body, boolean verify) {
-        lock.lock();
+    private <T> T runOnce(TxBody<T> body, boolean verify) throws SQLException {
+        try (Statement s = connection.createStatement()) {
+            s.execute("BEGIN IMMEDIATE");
+        }
         try {
+            if (verify) {
+                verifyVersion();
+            }
+            T result = body.apply(connection);
             try (Statement s = connection.createStatement()) {
-                s.execute("BEGIN IMMEDIATE");
+                s.execute("COMMIT");
             }
-            try {
-                if (verify) {
-                    verifyVersion();
-                }
-                T result = body.apply(connection);
-                try (Statement s = connection.createStatement()) {
-                    s.execute("COMMIT");
-                }
-                return result;
-            } catch (Throwable t) {
-                rollbackQuietly();
-                throw t;
-            }
-        } catch (SQLException e) {
-            throw new SmqStorageException("sqlite operation failed", e);
-        } finally {
-            lock.unlock();
+            return result;
+        } catch (Throwable t) {
+            rollbackQuietly();
+            throw t;
+        }
+    }
+
+    private static boolean isBusy(SQLException e) {
+        // 확장 결과 코드의 아래 8비트가 기본 결과 코드다.
+        return (e.getErrorCode() & 0xFF) == SQLITE_BUSY;
+    }
+
+    /** {@code SQLITE_BUSY} 재시도 사이의 대기. 폴링 간격과는 무관하다. */
+    private static void retryDelay(int attempt, SQLException cause) {
+        try {
+            Thread.sleep(10L * attempt);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new SmqStorageException("interrupted while retrying sqlite operation", cause);
         }
     }
 
@@ -436,8 +467,47 @@ public final class SqliteStorage implements Storage {
         });
     }
 
+    /**
+     * 꺼낼 메시지가 있는지 autocommit으로 본다. 쓰기 락을 잡지 않고, ResultSet과 Statement를 바로 닫아
+     * 읽기 트랜잭션이 열린 채 남지 않는다. 폴링이 쓰기 경합을 만들거나 checkpoint를 굶기지 않게 하기 위해서다.
+     * 있다고 나와도 실제 꺼내기는 쓰기 트랜잭션이 다시 확인한다. 큐가 없거나 스키마 버전이 바뀌었으면 true를 돌려 그쪽에서 오류가 나게 한다.
+     */
+    private boolean anyReady(String queue, Instant now) {
+        lock.lock();
+        try (PreparedStatement ps = connection.prepareStatement(
+                "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
+                        + " AND " + READY_TIME_CONDITION + "), "
+                        + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
+            ps.setString(1, queue);
+            ps.setLong(2, toNanos(now));
+            ps.setLong(3, toNanos(now));
+            ps.setString(4, queue);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return true; // 일어날 수 없지만, 모르면 쓰기 경로가 확인하게 한다.
+                }
+                if (rs.getInt(1) == 1 || rs.getInt(2) == 0) {
+                    return true;
+                }
+            }
+            // 비어 보여도 스키마 버전이 바뀌었으면 쓰기 경로가 확인하고 던지게 한다. 대기 중인 꺼내기가
+            // 버전 변화를 놓치지 않기 위해서다.
+            return failed || pragmaInt(connection, "user_version") != openedVersion;
+        } catch (SQLException e) {
+            if (isBusy(e)) {
+                return true; // 쓰기 트랜잭션 경로가 재시도한다.
+            }
+            throw new SmqStorageException("sqlite operation failed", e);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     @Override
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
+        if (!anyReady(queue, now)) {
+            return PullResult.empty();
+        }
         return inTransaction(c -> {
             long queueId = requireQueue(c, queue);
             try (PreparedStatement peek = c.prepareStatement(SELECT_READY)) {

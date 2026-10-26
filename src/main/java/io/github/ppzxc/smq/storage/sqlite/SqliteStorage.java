@@ -120,7 +120,8 @@ public final class SqliteStorage implements Storage {
                 : SQLiteConfig.SynchronousMode.NORMAL);
         Connection connection = null;
         try {
-            connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
+            connection = StatementCachingConnection.wrap(
+                    DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties()));
             SqliteStorage storage = new SqliteStorage(connection, maxAttempts);
             // 열기는 아직 기준 버전이 없으므로 verify 없이 판정한다.
             int version = storage.retryingOnBusy(() -> storage.runOnce(SqliteStorage::establishSchema, false));

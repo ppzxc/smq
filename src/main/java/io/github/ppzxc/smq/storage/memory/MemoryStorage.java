@@ -8,6 +8,8 @@ import io.github.ppzxc.smq.QueueDeclarationConflictException;
 import io.github.ppzxc.smq.QueueInUseException;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
+import io.github.ppzxc.smq.storage.ChangeHint;
+import io.github.ppzxc.smq.storage.ConditionChangeHint;
 import io.github.ppzxc.smq.storage.Disposition;
 import io.github.ppzxc.smq.storage.Extended;
 import io.github.ppzxc.smq.storage.LeaseToken;
@@ -49,6 +51,7 @@ public final class MemoryStorage implements Storage {
     }
 
     private final ReentrantLock lock = new ReentrantLock();
+    private final ConditionChangeHint hint = new ConditionChangeHint();
     private final Map<String, TreeMap<Long, Entry>> queues = new HashMap<>();
     private final Map<String, QueueOptions> optionsByQueue = new LinkedHashMap<>();
     private long nextMessageId = 1;
@@ -156,6 +159,7 @@ public final class MemoryStorage implements Storage {
                 messages.put(e.id.value(), e);
                 ids.add(e.id);
             }
+            hint.wake();
             return ids;
         } finally {
             lock.unlock();
@@ -201,6 +205,7 @@ public final class MemoryStorage implements Storage {
             for (Disposition d : items) {
                 results.add(new Result(d.id(), settleOne(token, d, now)));
             }
+            hint.wake();
             return results;
         } finally {
             lock.unlock();
@@ -277,6 +282,12 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
+    public Optional<ChangeHint> changeHint() {
+        return Optional.of(hint);
+    }
+
+    @Override
     public void close() {
+        hint.wake();
     }
 }

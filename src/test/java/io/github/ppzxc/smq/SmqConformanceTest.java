@@ -769,4 +769,187 @@ abstract class SmqConformanceTest {
         // 잘못된 인자는 아무것도 바꾸지 않는다.
         assertEquals(new QueueCounts(0, 1, 0), q.counts());
     }
+
+    // ---- 꺼내기 대기와 종료 (#29) ----
+
+    private static long millisSince(long startNanos) {
+        return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+    }
+
+    /** 대기 스레드가 꺼내기에 들어가 기다리기 시작할 시간을 준다. */
+    private static void letWaiterBlock() throws InterruptedException {
+        Thread.sleep(150);
+    }
+
+    @Test
+    void 메시지가_있으면_긴_wait에도_바로_돌아온다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        q.publish(msg("a"));
+        long start = System.nanoTime();
+        Chunk c = q.pull(1, Duration.ofSeconds(30));
+        assertEquals(1, c.messages().size());
+        assertTrue(millisSince(start) < 2000);
+    }
+
+    @Test
+    void 메시지가_없으면_wait만큼_기다린_뒤_빈_청크를_돌려준다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        long start = System.nanoTime();
+        Chunk c = q.pull(1, Duration.ofMillis(300));
+        long elapsed = millisSince(start);
+        assertTrue(c.isEmpty());
+        assertTrue(elapsed >= 290, "elapsed=" + elapsed);
+        assertTrue(elapsed < 3000, "elapsed=" + elapsed);
+    }
+
+    @Test
+    void 같은_프로세스에서_발행하면_기다리던_꺼내기가_곧바로_깨어난다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        var result = new java.util.concurrent.CompletableFuture<Chunk>();
+        Thread.ofPlatform().start(() -> {
+            try {
+                result.complete(q.pull(1, Duration.ofSeconds(30)));
+            } catch (Throwable t) {
+                result.completeExceptionally(t);
+            }
+        });
+        letWaiterBlock();
+        long start = System.nanoTime();
+        q.publish(msg("a"));
+        Chunk c = result.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals("a", text(c.messages().getFirst()));
+        assertTrue(millisSince(start) < 1000);
+    }
+
+    @Test
+    void 시계를_앞으로_돌린_효과는_다음_폴링에서_반영되어_지연_메시지가_나온다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        q.publish(msg("later").withDelay(Duration.ofMinutes(10)));
+        var result = new java.util.concurrent.CompletableFuture<Chunk>();
+        Thread.ofPlatform().start(() -> {
+            try {
+                result.complete(q.pull(1, Duration.ofSeconds(30)));
+            } catch (Throwable t) {
+                result.completeExceptionally(t);
+            }
+        });
+        letWaiterBlock();
+        assertFalse(result.isDone());
+        clock.advance(Duration.ofMinutes(10));
+        Chunk c = result.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals("later", text(c.messages().getFirst()));
+    }
+
+    @Test
+    void 기다리던_스레드를_interrupt하면_InterruptedException() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        var thrown = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        var interruptedFlag = new java.util.concurrent.atomic.AtomicBoolean();
+        Thread t = Thread.ofPlatform().start(() -> {
+            try {
+                q.pull(1, Duration.ofSeconds(30));
+            } catch (Throwable e) {
+                thrown.set(e);
+            }
+            interruptedFlag.set(Thread.currentThread().isInterrupted());
+        });
+        letWaiterBlock();
+        long start = System.nanoTime();
+        t.interrupt();
+        t.join(10_000);
+        assertFalse(t.isAlive());
+        assertInstanceOf(InterruptedException.class, thrown.get());
+        assertTrue(millisSince(start) < 2000);
+    }
+
+    @Test
+    void Smq를_닫으면_기다리던_꺼내기가_빈_청크를_받고_깨어난다() throws Exception {
+        Smq smq = open();
+        Queue q = smq.declare("q", QueueOptions.defaults());
+        int waiters = 3;
+        List<java.util.concurrent.CompletableFuture<Chunk>> results = new ArrayList<>();
+        for (int i = 0; i < waiters; i++) {
+            var f = new java.util.concurrent.CompletableFuture<Chunk>();
+            results.add(f);
+            Thread.ofPlatform().start(() -> {
+                try {
+                    f.complete(q.pull(1, Duration.ofSeconds(30)));
+                } catch (Throwable e) {
+                    f.completeExceptionally(e);
+                }
+            });
+        }
+        letWaiterBlock();
+        long start = System.nanoTime();
+        smq.close();
+        for (var f : results) {
+            assertTrue(f.get(10, java.util.concurrent.TimeUnit.SECONDS).isEmpty());
+        }
+        assertTrue(millisSince(start) < 2000);
+    }
+
+    @Test
+    void 닫은_뒤의_꺼내기는_기다리지_않고_빈_청크이고_두_번_닫아도_안전하다() throws Exception {
+        Smq smq = open();
+        Queue q = smq.declare("q", QueueOptions.defaults());
+        smq.close();
+        smq.close();
+        long start = System.nanoTime();
+        assertTrue(q.pull(1, Duration.ofSeconds(30)).isEmpty());
+        assertTrue(millisSince(start) < 2000);
+    }
+
+    @Test
+    void 여러_스레드가_하나의_Smq를_함께_써도_모든_메시지가_정확히_한_번_전달된다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        int producers = 4;
+        int perProducer = 100;
+        int consumers = 4;
+        int total = producers * perProducer;
+        var seen = java.util.concurrent.ConcurrentHashMap.<String>newKeySet();
+        var duplicates = new java.util.concurrent.atomic.AtomicInteger();
+        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        var delivered = new java.util.concurrent.atomic.AtomicInteger();
+        List<Thread> threads = new ArrayList<>();
+        for (int c = 0; c < consumers; c++) {
+            threads.add(Thread.ofPlatform().start(() -> {
+                try {
+                    while (delivered.get() < total) {
+                        Chunk chunk = q.pull(7, Duration.ofMillis(200));
+                        for (Message m : chunk.messages()) {
+                            if (!seen.add(text(m))) {
+                                duplicates.incrementAndGet();
+                            }
+                        }
+                        if (!chunk.isEmpty()) {
+                            q.settle(chunk.ackAll());
+                            delivered.addAndGet(chunk.messages().size());
+                        }
+                    }
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            }));
+        }
+        for (int p = 0; p < producers; p++) {
+            int id = p;
+            threads.add(Thread.ofPlatform().start(() -> {
+                try {
+                    for (int i = 0; i < perProducer; i++) {
+                        q.publish(msg(id + "-" + i));
+                    }
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            }));
+        }
+        for (Thread t : threads) {
+            t.join(30_000);
+            assertFalse(t.isAlive());
+        }
+        assertNull(failure.get());
+        assertEquals(0, duplicates.get());
+        assertEquals(total, seen.size());
+        assertEquals(new QueueCounts(0, 0, 0), q.counts());
+    }
 }

@@ -39,6 +39,11 @@ public interface Storage extends AutoCloseable {
     /** 리스를 {@code now + d}로 바꾼다. 정산과 같은 토큰 일치 기준으로 메시지별 결과를 돌려준다. */
     Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now);
 
+    /** 변경이 있을 때 대기자를 깨우는 선택적 힌트. 없으면 코어가 백오프 폴링만 한다. */
+    default Optional<ChangeHint> changeHint() {
+        return Optional.empty();
+    }
+
     @Override
     void close();
 }

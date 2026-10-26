@@ -36,6 +36,15 @@ tasks.test {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
+// 스키마 견본을 다시 만드는 수동 작업. 평소 빌드와 테스트는 이 작업을 돌리지 않는다.
+tasks.register<JavaExec>("generateSchemaSample") {
+    group = "verification"
+    description = "src/test/resources/schema-samples/schema-v1.db 견본을 다시 만든다"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass = "io.github.ppzxc.smq.SchemaSampleGenerator"
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
 publishing {
     publications {
         create<MavenPublication>("maven") {

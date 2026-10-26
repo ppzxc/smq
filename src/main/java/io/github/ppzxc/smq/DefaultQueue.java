@@ -108,13 +108,13 @@ final class DefaultQueue implements Queue {
     }
 
     @Override
-    public Extension extend(Chunk chunk, Duration d) {
+    public Extension extend(Chunk chunk, Duration leaseDuration) {
         Objects.requireNonNull(chunk, "chunk");
-        Validation.positive(d, "d");
+        Validation.positive(leaseDuration, "leaseDuration");
         if (chunk.isEmpty()) {
             return new Extension(null, new Outcomes(Map.of()));
         }
-        Extended extended = storage.extend(chunk.token(), chunk.messageIds(), d, clock.instant());
+        Extended extended = storage.extend(chunk.token(), chunk.messageIds(), leaseDuration, clock.instant());
         Map<MessageId, Outcome> byMessage = new LinkedHashMap<>();
         for (Result r : extended.results()) {
             byMessage.put(r.id(), r.outcome());

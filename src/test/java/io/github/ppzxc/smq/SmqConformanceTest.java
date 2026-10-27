@@ -42,21 +42,23 @@ abstract class SmqConformanceTest {
         return settings.open(factory().open(dir));
     }
 
-    Smq open(Duration lease) {
-        BuilderSettings settings = new BuilderSettings();
-        settings.clock(clock);
-        settings.leaseDuration(lease);
+    private Smq register(BuilderSettings settings) {
         Smq smq = openWith(settings);
         opened.add(smq);
         return smq;
     }
 
+    Smq open(Duration lease) {
+        BuilderSettings settings = new BuilderSettings();
+        settings.clock(clock);
+        settings.leaseDuration(lease);
+        return register(settings);
+    }
+
     Smq open() {
         BuilderSettings settings = new BuilderSettings();
         settings.clock(clock);
-        Smq smq = openWith(settings);
-        opened.add(smq);
-        return smq;
+        return register(settings);
     }
 
     @AfterEach

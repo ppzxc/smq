@@ -37,6 +37,15 @@ class BuilderSmokeTest {
         }
     }
 
+    @Test
+    void 공개_builder_둘_다_양수가_아닌_리스_기간을_IllegalArgumentException으로_거부한다() {
+        for (Duration bad : new Duration[] {Duration.ZERO, Duration.ofSeconds(-1), null}) {
+            assertThrows(IllegalArgumentException.class, () -> Smq.inMemory().leaseDuration(bad), "inMemory " + bad);
+            assertThrows(IllegalArgumentException.class,
+                    () -> Smq.sqlite(dir.resolve("smq.db")).leaseDuration(bad), "sqlite " + bad);
+        }
+    }
+
     private static void roundTrip(Smq smq, MutableClock clock) throws Exception {
         Queue q = smq.declare("q", QueueOptions.defaults());
         MessageId id = q.publish(OutgoingMessage.of("a".getBytes(StandardCharsets.UTF_8)));

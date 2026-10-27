@@ -312,7 +312,9 @@ public final class SqliteStorage implements Storage {
     /**
      * 꺼낼 메시지가 있는지 autocommit으로 본다. 실행은 {@link TransactionExecutor#anyOrUncertain}이 맡아 쓰기 락과
      * 재시도 없이, 읽기 트랜잭션을 남기지 않고 한다. 있다고 나와도 실제 꺼내기는 쓰기 트랜잭션이 다시 확인한다.
-     * 큐가 없으면 true를 돌려 그쪽에서 오류가 나게 한다.
+     * 확실하지 않으면 true를 돌려 쓰기 경로가 다시 확인하게 한다. 그런 경우는 큐가 없을 때(쓰기 경로가 오류를
+     * 던진다), 비어 보이는데 스키마 버전이 열 때와 달라졌거나 영구 실패 상태일 때, 읽기가 BUSY일 때다.
+     * BUSY가 아닌 오류는 true가 아니라 예외다.
      */
     private boolean anyReady(String queue, Instant now) {
         return executor.anyOrUncertain(connection -> {

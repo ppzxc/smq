@@ -32,10 +32,6 @@ final class SqliteSchema {
         this.upgrades = Map.copyOf(upgrades);
     }
 
-    int targetVersion() {
-        return targetVersion;
-    }
-
     /**
      * 호출한 쪽의 쓰기 트랜잭션 안에서 판정한다. 생성이나 업그레이드를 했으면 그 뒤의 버전을, 그대로 열면
      * 파일의 버전을 돌려준다. DDL, 데이터 변환, 버전 올리기가 모두 호출한 쪽의 트랜잭션 하나에 들어간다.
@@ -107,12 +103,13 @@ final class SqliteSchema {
         }
     }
 
-    IncompatibleStorageException unsupported(int found) {
-        return versionMismatch("unsupported schema version", found);
+    private IncompatibleStorageException unsupported(int found) {
+        return versionMismatch("unsupported schema version", found, targetVersion);
     }
 
-    IncompatibleStorageException versionMismatch(String what, int found) {
-        return new IncompatibleStorageException(what + ": found " + found + ", supported " + targetVersion);
+    /** 버전 불일치 예외의 유일한 메시지 형식. 열 때의 판정과 트랜잭션마다의 확인이 함께 쓴다. */
+    static IncompatibleStorageException versionMismatch(String what, int found, int supported) {
+        return new IncompatibleStorageException(what + ": found " + found + ", supported " + supported);
     }
 
     IncompatibleStorageException notSmq(String reason) {

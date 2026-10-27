@@ -1,9 +1,7 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
-import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.SmqStorageException;
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.concurrent.locks.ReentrantLock;
@@ -129,21 +127,15 @@ final class TransactionExecutor {
     }
 
     private void verifyVersion() throws SQLException {
-        int found;
-        try (Statement s = connection.createStatement(); ResultSet rs = s.executeQuery("PRAGMA user_version")) {
-            found = rs.getInt(1);
-        }
+        int found = SqliteSchema.pragmaInt(connection, "user_version");
         if (failed) {
-            throw mismatch("this instance stopped after the schema version changed", found);
+            throw SqliteSchema.versionMismatch(
+                    "this instance stopped after the schema version changed", found, baselineVersion);
         }
         if (found != baselineVersion) {
             failed = true;
-            throw mismatch("unsupported schema version", found);
+            throw SqliteSchema.versionMismatch("unsupported schema version", found, baselineVersion);
         }
-    }
-
-    private IncompatibleStorageException mismatch(String what, int found) {
-        return new IncompatibleStorageException(what + ": found " + found + ", supported " + baselineVersion);
     }
 
     private void rollbackQuietly() {

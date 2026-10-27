@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 /** 자식 결과들을 측정 조건 하나의 항목으로 합산한다. */
-final class Aggregator {
+public final class Aggregator {
 
     private Aggregator() {}
 
@@ -28,7 +28,7 @@ final class Aggregator {
     }
 
     /** 오름차순 표본의 nearest-rank 백분위수. */
-    static long percentile(long[] sorted, int p) {
+    public static long percentile(long[] sorted, int p) {
         if (sorted.length == 0) throw new IllegalArgumentException("표본이 없다");
         int rank = (int) Math.ceil(p / 100.0 * sorted.length);
         return sorted[Math.max(1, Math.min(rank, sorted.length)) - 1];

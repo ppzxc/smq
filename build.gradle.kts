@@ -3,6 +3,7 @@ import com.vanniktech.maven.publish.JavaLibrary
 import com.vanniktech.maven.publish.SourcesJar
 import java.util.zip.ZipFile
 import org.gradle.plugins.signing.SigningExtension
+import org.gradle.api.tasks.options.Option
 
 plugins {
     `java-library`
@@ -53,13 +54,13 @@ tasks.withType<JavaCompile> {
 
 val benchmarkBaseline = layout.projectDirectory.file("benchmark/baseline.json")
 
-fun JavaExec.benchmarkRunner(vararg extra: String) {
+fun JavaExec.benchmarkRunner(vararg extra: String, main: String = "io.github.ppzxc.smq.benchmark.BenchMain") {
     group = "benchmark"
     // smq jar와 그 런타임 의존성은 모듈 경로에, 하네스(benchmark 출력)만 클래스패스에 둔다.
     // 자식 JVM은 부모의 jdk.module.path와 java.class.path를 그대로 물려받는다.
     dependsOn(tasks.jar)
     classpath = benchmark.output
-    mainClass = "io.github.ppzxc.smq.benchmark.BenchMain"
+    mainClass = main
     val modulePath = files(tasks.jar, configurations.runtimeClasspath)
     jvmArgumentProviders.add(CommandLineArgumentProvider {
         listOf("--enable-native-access=ALL-UNNAMED", "--enable-native-access=org.xerial.sqlitejdbc",
@@ -79,6 +80,49 @@ tasks.register<JavaExec>("benchmark") {
     benchmarkRunner("--mode", "full", "--baseline", benchmarkBaseline.asFile.path,
             "--output", layout.buildDirectory.file("benchmark/result.json").get().asFile.path)
     (findProperty("benchmark.args") as String?)?.let { args(it.split(" ").filter(String::isNotBlank)) }
+}
+
+// 무작위 블랙박스 하네스. 옵션은 `./gradlew randomBench --seed 42 --budget 10m`처럼 태스크 옵션으로 준다.
+abstract class RandomBench : JavaExec() {
+    @get:Input
+    @get:Optional
+    @get:Option(option = "seed", description = "이 시드 하나만 다시 돈다")
+    abstract val seed: Property<String>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "budget", description = "새 실행을 시작할 수 있는 세션 시간. 예: 30m, 90s (기본 30m)")
+    abstract val budget: Property<String>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "load", description = "부하 구간 길이. 예: 10s (기본 10s)")
+    abstract val load: Property<String>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "master-seed", description = "실행 시드를 뽑을 마스터 시드 (기본 현재 시각)")
+    abstract val masterSeed: Property<String>
+}
+
+val randomBenchMain = "io.github.ppzxc.smq.benchmark.random.RandomBenchMain"
+val randomBenchOut = layout.buildDirectory.dir("random-bench").get().asFile.path
+
+tasks.register<RandomBench>("randomBench") {
+    description = "무작위 워크로드와 불변식 검사기. 수동 실행. 첫 위반에서 멈추고 비정상 종료한다. --seed, --budget 옵션."
+    benchmarkRunner("--out-dir", randomBenchOut, main = randomBenchMain)
+    doFirst {
+        seed.orNull?.let { args("--seed", it) }
+        budget.orNull?.let { args("--budget", it) }
+        load.orNull?.let { args("--load", it) }
+        masterSeed.orNull?.let { args("--master-seed", it) }
+    }
+}
+
+// check에는 넣지 않는다. CI Linux 잡이 별도 단계로 돌린다.
+tasks.register<JavaExec>("randomBenchSmoke") {
+    description = "고정 시드 몇 개를 실행당 약 2초씩 돈다. 하네스와 검사기가 끝까지 도는지, 위반이 없는지 확인한다."
+    benchmarkRunner("--smoke", "--out-dir", randomBenchOut, main = randomBenchMain)
 }
 
 // benchmark 소스셋이 배포 jar와 소스 jar에 섞이지 않았는지 jar 내용으로 확인한다.

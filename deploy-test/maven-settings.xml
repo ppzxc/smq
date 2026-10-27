@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 스테이징 저장소용 Maven 설정. 환경 변수 SMQ_REPO_TOKEN이 있을 때 run-all.sh가 -s 로 넘긴다.
+     저장소 id smq-input(소비자 POM)에 Bearer 헤더를 붙인다. 토큰은 파일에 쓰지 않는다. -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <servers>
+    <server>
+      <id>smq-input</id>
+      <configuration>
+        <httpHeaders>
+          <property>
+            <name>Authorization</name>
+            <value>Bearer ${env.SMQ_REPO_TOKEN}</value>
+          </property>
+        </httpHeaders>
+      </configuration>
+    </server>
+  </servers>
+</settings>

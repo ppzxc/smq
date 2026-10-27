@@ -1,0 +1,91 @@
+# 배포 테스트 (b) 스테이징과 (c) 공개 후 Central. 세 단계(a, b, c)가 같은 하네스(deploy-test/run-all.sh)를 쓰고 저장소 URL만 바뀐다.
+# 수동 실행(workflow_dispatch)과 공개 워크플로의 재사용 호출(workflow_call)을 모두 받는다.
+name: Deploy test
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: smq 버전 (예 0.0.1)
+        required: true
+        type: string
+      repository:
+        description: 저장소. staging은 Portal 스테이징(VALIDATED), central은 공개 후 Maven Central
+        required: true
+        type: choice
+        options: [staging, central]
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      repository:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # workflow_call의 repository는 choice 제약이 없으므로 값을 검증한다. 잘못된 값으로 잡이 모두 건너뛰어 녹색이 되는 것을 막는다.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: repository 입력 검증
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+        run: |
+          case "$REPOSITORY" in
+            staging|central) ;;
+            *) echo "::error::repository는 staging 또는 central이어야 한다: $REPOSITORY"; exit 1 ;;
+          esac
+
+  # (b) 스테이징: Environment release의 Portal 자격증명으로 Bearer 토큰을 만들어 붙인다.
+  staging:
+    needs: validate
+    if: inputs.repository == 'staging'
+    runs-on: ${{ matrix.os }}
+    environment: release
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Portal Bearer 토큰 만들기
+        shell: bash
+        env:
+          CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          token=$(printf '%s:%s' "$CENTRAL_USERNAME" "$CENTRAL_PASSWORD" | base64 | tr -d '\n')
+          echo "::add-mask::$token"
+          echo "PORTAL_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/deploy-test
+        with:
+          version: ${{ inputs.version }}
+          repo-url: https://central.sonatype.com/api/v1/publisher/deployments/download/
+          token: ${{ env.PORTAL_TOKEN }}
+
+  # (c) 공개 후 Central: 시크릿 없이 해석될 때까지 재시도하고 약 2시간(7200초)이 지나면 실패한다.
+  # 해석된 뒤의 소비자 실행은 재시도하지 않으므로, 동기화 지연과 실제 결함이 구분된다.
+  central:
+    needs: validate
+    if: inputs.repository == 'central'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/deploy-test
+        with:
+          version: ${{ inputs.version }}
+          repo-url: https://repo.maven.apache.org/maven2
+          wait-limit-seconds: '7200'

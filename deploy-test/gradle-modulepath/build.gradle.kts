@@ -1,15 +1,11 @@
-// smq 빌드와 분리된 외부 소비자. 입력은 -PsmqVersion(필수)과 -PrepoUrl(기본 mavenLocal)이다.
+// smq 빌드와 분리된 외부 소비자. 입력은 -PsmqVersion(필수)과 -PrepoUrl(기본 mavenLocal)과 환경 변수 SMQ_REPO_TOKEN(선택, Bearer 토큰)이다.
 plugins {
     application
 }
 
 val smqVersion = providers.gradleProperty("smqVersion").get()
-val repoUrl = providers.gradleProperty("repoUrl").orElse("mavenLocal").get()
 
-repositories {
-    if (repoUrl == "mavenLocal") mavenLocal() else maven { url = uri(repoUrl) }
-    mavenCentral()
-}
+apply(from = "../shared/repositories.gradle.kts")
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(25) }

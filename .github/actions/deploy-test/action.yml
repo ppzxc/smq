@@ -1,0 +1,46 @@
+# 배포 테스트 (b)/(c)가 공유하는 단계. 호출하는 잡이 먼저 actions/checkout을 해야 한다.
+# 소비자 4개를 돌리는 하네스는 PR CI의 (a)와 같은 deploy-test/run-all.sh다. 저장소 URL과 토큰만 다르다.
+name: 배포 테스트 소비자 실행
+inputs:
+  version:
+    description: 시험할 smq 버전
+    required: true
+  repo-url:
+    description: 저장소 URL
+    required: true
+  token:
+    description: 선택. 있으면 저장소 요청에 Bearer 헤더를 붙인다
+    required: false
+    default: ''
+  wait-limit-seconds:
+    description: 0보다 크면 아티팩트가 보일 때까지 이 시간(초)까지 재시도한다
+    required: false
+    default: '0'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '25'
+
+    - uses: gradle/actions/setup-gradle@v4
+
+    - name: 아티팩트 해석 대기
+      if: inputs.wait-limit-seconds != '0'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        REPO_URL: ${{ inputs.repo-url }}
+        SMQ_WAIT_LIMIT_SECONDS: ${{ inputs.wait-limit-seconds }}
+        SMQ_REPO_TOKEN: ${{ inputs.token }}
+      run: deploy-test/wait-for-artifact.sh "$VERSION" "$REPO_URL"
+
+    - name: 소비자 4개 실행
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        REPO_URL: ${{ inputs.repo-url }}
+        SMQ_REPO_TOKEN: ${{ inputs.token }}
+      run: deploy-test/run-all.sh "$VERSION" "$REPO_URL"

@@ -140,8 +140,9 @@ class SqliteMultiProcessStressTest {
         }
         Worker victim = workers.get(0);
         long deadline = System.nanoTime() + Duration.ofMinutes(2).toNanos();
-        while (victim.received() < 20) {
-            assertTrue(System.nanoTime() < deadline, "희생 작업자가 꺼내기 시작하지 않았다");
+        // 희생 작업자가 받은 개수로 기다리면, 나머지가 먼저 다 비웠을 때 영영 채워지지 않는다. 전체 진행으로 시점을 잡는다.
+        while (workers.stream().mapToLong(Worker::received).sum() < (long) count * perWorker / 3) {
+            assertTrue(System.nanoTime() < deadline, "작업자들이 꺼내기를 진행하지 않았다");
             Thread.sleep(10);
         }
         victim.process.destroyForcibly();

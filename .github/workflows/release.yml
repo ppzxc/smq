@@ -19,7 +19,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PORTAL_API: https://central.sonatype.com/api/v1/publisher
   PORTAL_DOWNLOAD: https://central.sonatype.com/api/v1/publisher/deployments/download
   CENTRAL_REPO: https://repo.maven.apache.org/maven2
   ARTIFACT_PATH: io/github/ppzxc/smq
@@ -45,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           fail=0
-          # 워크플로 이름 → 그 워크플로에서 녹색이어야 하는 잡
+          # 두 워크플로(Linux, Windows) 모두에서 check와 deploy-test 잡이 녹색이어야 한다. 이름은 .github/workflows의 name과 잡 id와 맞춘다.
           for wf in Linux Windows; do
             run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=push&per_page=50" \
               --jq "[.workflow_runs[] | select(.name == \"$wf\")] | sort_by(.created_at) | last | .id // empty")

@@ -67,6 +67,13 @@ class RunParamsTest {
     }
 
     @Test
+    void argRoundTripKeepsSeedsBeyondDoublePrecision() {
+        for (long seed : new long[] {Long.MAX_VALUE, Long.MIN_VALUE + 1, 9_007_199_254_740_993L}) {
+            assertEquals(seed, RunParams.fromArg(RunParams.fromSeed(seed, FULL).toArg()).seed());
+        }
+    }
+
+    @Test
     void smokeLimitsCapDepthAndLease() {
         for (long seed = 0; seed < 500; seed++) {
             RunParams p = RunParams.fromSeed(seed, Limits.smoke(2_000));

@@ -122,13 +122,16 @@ record RunParams(long seed, int processes, int maxMessageBytes, int publishBatch
 
     /** 자식 JVM에 넘기는 인자. 비율을 반올림하지 않으므로 자식이 부모와 같은 워크로드를 만든다. */
     String toArg() {
-        String json = Json.write(fields(DoubleUnaryOperator.identity()));
+        Map<String, Object> m = fields(DoubleUnaryOperator.identity());
+        // JSON 수는 double로 읽혀 2^53을 넘는 시드가 깨진다. 시드는 문자열로 보낸다.
+        m.put("seed", Long.toString(seed));
+        String json = Json.write(m);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes(StandardCharsets.UTF_8));
     }
 
     static RunParams fromArg(String arg) {
         Map<?, ?> m = (Map<?, ?>) Json.parse(new String(Base64.getUrlDecoder().decode(arg), StandardCharsets.UTF_8));
-        return new RunParams(l(m, "seed"), i(m, "processes"), i(m, "maxMessageBytes"), i(m, "publishBatch"),
+        return new RunParams(Long.parseLong((String) m.get("seed")), i(m, "processes"), i(m, "maxMessageBytes"), i(m, "publishBatch"),
                 i(m, "chunkSize"), ints(m, "producers"), ints(m, "consumers"),
                 Durability.valueOf((String) m.get("durability")), i(m, "prefillDepth"), d(m, "ackRatio"),
                 d(m, "nackRatio"), d(m, "rejectRatio"), d(m, "noneRatio"), d(m, "slowChunkRatio"),

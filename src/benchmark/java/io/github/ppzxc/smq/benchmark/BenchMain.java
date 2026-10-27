@@ -25,6 +25,7 @@ public final class BenchMain {
     private BenchMain() {}
 
     public static void main(String[] args) throws Exception {
+        ModuleGuard.announce("부모 JVM");
         Map<String, String> opts = parse(args);
         boolean full = opts.getOrDefault("mode", "smoke").equals("full");
         if (!full && !opts.getOrDefault("mode", "smoke").equals("smoke")) throw new IllegalArgumentException("--mode는 smoke 또는 full");

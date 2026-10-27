@@ -52,9 +52,16 @@ val benchmarkBaseline = layout.projectDirectory.file("benchmark/baseline.json")
 
 fun JavaExec.benchmarkRunner(vararg extra: String) {
     group = "benchmark"
-    classpath = benchmark.runtimeClasspath
+    // smq jar와 그 런타임 의존성은 모듈 경로에, 하네스(benchmark 출력)만 클래스패스에 둔다.
+    // 자식 JVM은 부모의 jdk.module.path와 java.class.path를 그대로 물려받는다.
+    dependsOn(tasks.jar)
+    classpath = benchmark.output
     mainClass = "io.github.ppzxc.smq.benchmark.BenchMain"
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    val modulePath = files(tasks.jar, configurations.runtimeClasspath)
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+        listOf("--enable-native-access=ALL-UNNAMED", "--enable-native-access=org.xerial.sqlitejdbc",
+            "--module-path", modulePath.asPath, "--add-modules", "io.github.ppzxc.smq")
+    })
     javaLauncher = javaToolchains.launcherFor(java.toolchain)
     args(*extra)
 }

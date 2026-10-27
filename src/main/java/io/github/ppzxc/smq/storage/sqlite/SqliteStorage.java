@@ -47,14 +47,15 @@ import org.sqlite.SQLiteErrorCode;
 import org.sqlite.SQLiteException;
 
 /**
- * SQLite 파일 하나를 쓰는 저장소. 모든 연산은 {@link #inTransaction}이라는 하나의 쓰기 트랜잭션 경로를 거친다.
- * 트랜잭션마다 하는 스키마 버전 확인은 이미 그 경로에 있다. {@code SQLITE_BUSY} 재시도는 아직 없고
- * (이슈 #33), 생기면 같은 경로에 들어간다.
+ * SQLite 파일 하나를 쓰는 저장소. 큐 연산은 {@link #inTransaction}이라는 쓰기 트랜잭션 경로를 거친다.
+ * 이 경로는 트랜잭션마다 스키마 버전을 확인하고, {@code SQLITE_BUSY}가 나면 재시도한다.
+ * 꺼내기 대기 중에 쓰는 읽기는 이 경로를 거치지 않는 별도 경로다.
+ * 열 때의 스키마 판정(생성, 거부, 업그레이드)은 상태 없는 {@link SqliteSchema}가 맡는다.
  */
 public final class SqliteStorage implements Storage {
 
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
-    public static final int APPLICATION_ID = 0x534D5131;
+    public static final int APPLICATION_ID = SqliteSchema.APPLICATION_ID;
     public static final int SCHEMA_VERSION = 1;
 
     /** 꺼낼 수 있는 메시지의 시각 조건. 지연이 끝났고 리스가 없거나 만료됐다. 자리표시자 둘은 모두 현재 시각이다. */
@@ -84,14 +85,8 @@ public final class SqliteStorage implements Storage {
         T apply(Connection connection) throws SQLException;
     }
 
-    /** 한 단계 낮은 버전의 스키마를 한 단계 올린다. 호출한 쪽의 {@code BEGIN IMMEDIATE} 트랜잭션 안에서 돈다. */
-    @FunctionalInterface
-    interface Migration {
-        void apply(Connection connection) throws SQLException;
-    }
-
-    /** 키는 올리기 전의 버전이다. 스키마 버전이 처음 하나뿐이라 아직 비어 있다. */
-    private static final Map<Integer, Migration> MIGRATIONS = Map.of();
+    /** 운영 스키마: 목표 버전 1, 업그레이드 단계 없음. */
+    private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
 
     private final Connection connection;
     private final int maxAttempts;
@@ -124,7 +119,7 @@ public final class SqliteStorage implements Storage {
                     DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties()));
             SqliteStorage storage = new SqliteStorage(connection, maxAttempts);
             // 열기는 아직 기준 버전이 없으므로 verify 없이 판정한다.
-            int version = storage.retryingOnBusy(() -> storage.runOnce(SqliteStorage::establishSchema, false));
+            int version = storage.retryingOnBusy(() -> storage.runOnce(SCHEMA::establish, false));
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
             storage.retryingOnBusy(() -> {
                 try (Statement s = storage.connection.createStatement()) {
@@ -136,7 +131,7 @@ public final class SqliteStorage implements Storage {
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
             if (isNotADatabase(e)) {
-                throw notSmq("not a SQLite file");
+                throw SCHEMA.notSmq("not a SQLite file");
             }
             if (e instanceof RuntimeException re) {
                 throw re;
@@ -153,88 +148,6 @@ public final class SqliteStorage implements Storage {
             }
         }
         return false;
-    }
-
-    /** 열 때의 판정. 생성이나 업그레이드를 했으면 그 뒤의 버전을, 그대로 열면 파일의 버전을 돌려준다. */
-    private static int establishSchema(Connection c) throws SQLException {
-        int applicationId = pragmaInt(c, "application_id");
-        int version = pragmaInt(c, "user_version");
-        boolean empty;
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
-            empty = rs.getInt(1) == 0;
-        }
-        if (empty && applicationId == 0) {
-            try (Statement s = c.createStatement()) {
-                s.execute("""
-                        CREATE TABLE queue (
-                          id INTEGER PRIMARY KEY AUTOINCREMENT,
-                          name TEXT NOT NULL UNIQUE,
-                          max_deliveries INTEGER,
-                          dead_letter_queue_id INTEGER REFERENCES queue(id),
-                          single_active_consumer INTEGER NOT NULL DEFAULT 0
-                        )""");
-                s.execute("""
-                        CREATE TABLE message (
-                          id INTEGER PRIMARY KEY AUTOINCREMENT,
-                          queue_id INTEGER NOT NULL REFERENCES queue(id),
-                          payload BLOB NOT NULL,
-                          headers BLOB NOT NULL,
-                          delivery_count INTEGER NOT NULL DEFAULT 0,
-                          published_at INTEGER NOT NULL,
-                          lease_token INTEGER,
-                          lease_deadline INTEGER,
-                          available_at INTEGER
-                        )""");
-                s.execute("CREATE INDEX message_ready ON message(queue_id, id)");
-                s.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)");
-                s.execute("INSERT INTO meta(key, value) VALUES ('lease_seq', 0)");
-                s.execute("PRAGMA application_id = " + APPLICATION_ID);
-                s.execute("PRAGMA user_version = " + SCHEMA_VERSION);
-            }
-            return SCHEMA_VERSION;
-        }
-        if (applicationId != APPLICATION_ID) {
-            throw notSmq("application_id=" + applicationId);
-        }
-        if (version > SCHEMA_VERSION) {
-            throw unsupported(version);
-        }
-        if (version < SCHEMA_VERSION) {
-            upgrade(c, version);
-        }
-        return SCHEMA_VERSION;
-    }
-
-    /** 한 단계씩 올린다. DDL, 데이터 변환, 버전 올리기가 호출한 쪽의 트랜잭션 하나에 들어간다. */
-    private static void upgrade(Connection c, int from) throws SQLException {
-        for (int version = from; version < SCHEMA_VERSION; version++) {
-            Migration migration = MIGRATIONS.get(version);
-            if (migration == null) {
-                throw unsupported(from);
-            }
-            migration.apply(c);
-            try (Statement s = c.createStatement()) {
-                s.execute("PRAGMA user_version = " + (version + 1));
-            }
-        }
-    }
-
-    private static IncompatibleStorageException unsupported(int found) {
-        return versionMismatch("unsupported schema version", found);
-    }
-
-    private static IncompatibleStorageException versionMismatch(String what, int found) {
-        return new IncompatibleStorageException(what + ": found " + found + ", supported " + SCHEMA_VERSION);
-    }
-
-    private static IncompatibleStorageException notSmq(String reason) {
-        return new IncompatibleStorageException("not an smq database (" + reason + "), supported " + SCHEMA_VERSION);
-    }
-
-    private static int pragmaInt(Connection c, String name) throws SQLException {
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("PRAGMA " + name)) {
-            return rs.getInt(1);
-        }
     }
 
     /**
@@ -271,7 +184,7 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    /** {@code verify}가 거짓인 경로는 열기뿐이다. 그때는 아직 기준 버전이 없고 판정은 {@link #establishSchema}가 한다. */
+    /** {@code verify}가 거짓인 경로는 열기뿐이다. 그때는 아직 기준 버전이 없고 판정은 {@link SqliteSchema#establish}가 한다. */
     private <T> T runOnce(TxBody<T> body, boolean verify) throws SQLException {
         try (Statement s = connection.createStatement()) {
             s.execute("BEGIN IMMEDIATE");
@@ -307,13 +220,13 @@ public final class SqliteStorage implements Storage {
     }
 
     private void verifyVersion() throws SQLException {
-        int found = pragmaInt(connection, "user_version");
+        int found = SqliteSchema.pragmaInt(connection, "user_version");
         if (failed) {
-            throw versionMismatch("this instance stopped after the schema version changed", found);
+            throw SCHEMA.versionMismatch("this instance stopped after the schema version changed", found);
         }
         if (found != openedVersion) {
             failed = true;
-            throw unsupported(found);
+            throw SCHEMA.unsupported(found);
         }
     }
 
@@ -513,7 +426,7 @@ public final class SqliteStorage implements Storage {
             }
             // 비어 보여도 스키마 버전이 바뀌었으면 쓰기 경로가 확인하고 던지게 한다. 대기 중인 꺼내기가
             // 버전 변화를 놓치지 않기 위해서다.
-            return failed || pragmaInt(connection, "user_version") != openedVersion;
+            return failed || SqliteSchema.pragmaInt(connection, "user_version") != openedVersion;
         } catch (SQLException e) {
             if (isBusy(e)) {
                 return true; // 쓰기 트랜잭션 경로가 재시도한다.

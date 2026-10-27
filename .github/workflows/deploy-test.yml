@@ -57,8 +57,9 @@ jobs:
       - name: Portal Bearer 토큰 만들기
         shell: bash
         env:
-          CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          # Environment release의 시크릿 이름은 Gradle 환경 변수 규약을 따른다. Portal 토큰은 base64(사용자:비밀번호)다.
+          CENTRAL_USERNAME: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALUSERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALPASSWORD }}
         run: |
           token=$(printf '%s:%s' "$CENTRAL_USERNAME" "$CENTRAL_PASSWORD" | base64 | tr -d '\n')
           echo "::add-mask::$token"

@@ -93,6 +93,7 @@ final class DefaultQueue implements Queue {
     @Override
     public Outcomes settle(Settlement settlement) {
         Objects.requireNonNull(settlement, "settlement");
+        requireOwn(settlement.queue(), "settlement");
         if (settlement.items().isEmpty()) {
             return new Outcomes(Map.of());
         }
@@ -109,6 +110,7 @@ final class DefaultQueue implements Queue {
     public Extension extend(Chunk chunk, Duration leaseDuration) {
         Objects.requireNonNull(chunk, "chunk");
         Validation.positive(leaseDuration, "leaseDuration");
+        requireOwn(chunk.queue(), "chunk");
         if (chunk.isEmpty()) {
             return new Extension(null, new Outcomes(Map.of()));
         }
@@ -118,5 +120,12 @@ final class DefaultQueue implements Queue {
             byMessage.put(r.id(), r.outcome());
         }
         return new Extension(extended.leaseDeadline(), new Outcomes(byMessage));
+    }
+
+    /** 정산과 연장은 이 큐에서 꺼낸 청크로만 할 수 있다. 큐 이름이 다르면 호출자의 실수이므로 저장소에 가기 전에 거부한다. */
+    private void requireOwn(String sourceQueue, String what) {
+        if (!name.equals(sourceQueue)) {
+            throw new IllegalArgumentException(what + " is from queue '" + sourceQueue + "', not '" + name + "'");
+        }
     }
 }

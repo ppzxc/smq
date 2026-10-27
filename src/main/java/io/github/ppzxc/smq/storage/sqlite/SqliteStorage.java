@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.concurrent.locks.ReentrantLock;
 import org.sqlite.SQLiteConfig;
 import org.sqlite.SQLiteErrorCode;
 import org.sqlite.SQLiteException;
@@ -51,11 +50,12 @@ import org.sqlite.SQLiteException;
  * 연결, lock, 스키마 버전 확인, {@code SQLITE_BUSY} 재시도는 {@link TransactionExecutor}가 소유한다.
  * 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의 확인하는 쓰기 트랜잭션을 거친다.
  * 꺼내기 대기용 {@link #anyReady}만 쓰기 락과 재시도 없는 autocommit 읽기로 따로 간다.
+ * 열 때의 스키마 판정(생성, 거부, 업그레이드)은 상태 없는 {@link SqliteSchema}가 맡는다.
  */
 public final class SqliteStorage implements Storage {
 
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
-    public static final int APPLICATION_ID = 0x534D5131;
+    public static final int APPLICATION_ID = SqliteSchema.APPLICATION_ID;
     public static final int SCHEMA_VERSION = 1;
 
     /** 꺼낼 수 있는 메시지의 시각 조건. 지연이 끝났고 리스가 없거나 만료됐다. 자리표시자 둘은 모두 현재 시각이다. */
@@ -78,14 +78,8 @@ public final class SqliteStorage implements Storage {
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
     private static final int MAX_ATTEMPTS = 5;
 
-    /** 한 단계 낮은 버전의 스키마를 한 단계 올린다. 호출한 쪽의 {@code BEGIN IMMEDIATE} 트랜잭션 안에서 돈다. */
-    @FunctionalInterface
-    interface Migration {
-        void apply(Connection connection) throws SQLException;
-    }
-
-    /** 키는 올리기 전의 버전이다. 스키마 버전이 처음 하나뿐이라 아직 비어 있다. */
-    private static final Map<Integer, Migration> MIGRATIONS = Map.of();
+    /** 운영 스키마: 목표 버전 1, 업그레이드 단계 없음. */
+    private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
 
     private final TransactionExecutor executor;
 
@@ -112,7 +106,7 @@ public final class SqliteStorage implements Storage {
             TransactionExecutor executor = new TransactionExecutor(connection,
                     new TransactionExecutor.RetryPolicy(maxAttempts, attempt -> Thread.sleep(10L * attempt)));
             // 열기는 아직 기준 버전이 없으므로 확인 없이 판정하고, 그 결과가 기준 버전이 된다.
-            executor.executeUnverified(SqliteStorage::establishSchema);
+            executor.executeUnverified(SCHEMA::establish);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
             executor.retryOnBusy(() -> {
                 try (Statement s = executor.connection().createStatement()) {
@@ -123,7 +117,7 @@ public final class SqliteStorage implements Storage {
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
             if (isNotADatabase(e)) {
-                throw notSmq("not a SQLite file");
+                throw SCHEMA.notSmq("not a SQLite file");
             }
             if (e instanceof RuntimeException re) {
                 throw re;
@@ -140,88 +134,6 @@ public final class SqliteStorage implements Storage {
             }
         }
         return false;
-    }
-
-    /** 열 때의 판정. 생성이나 업그레이드를 했으면 그 뒤의 버전을, 그대로 열면 파일의 버전을 돌려준다. */
-    private static int establishSchema(Connection c) throws SQLException {
-        int applicationId = pragmaInt(c, "application_id");
-        int version = pragmaInt(c, "user_version");
-        boolean empty;
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
-            empty = rs.getInt(1) == 0;
-        }
-        if (empty && applicationId == 0) {
-            try (Statement s = c.createStatement()) {
-                s.execute("""
-                        CREATE TABLE queue (
-                          id INTEGER PRIMARY KEY AUTOINCREMENT,
-                          name TEXT NOT NULL UNIQUE,
-                          max_deliveries INTEGER,
-                          dead_letter_queue_id INTEGER REFERENCES queue(id),
-                          single_active_consumer INTEGER NOT NULL DEFAULT 0
-                        )""");
-                s.execute("""
-                        CREATE TABLE message (
-                          id INTEGER PRIMARY KEY AUTOINCREMENT,
-                          queue_id INTEGER NOT NULL REFERENCES queue(id),
-                          payload BLOB NOT NULL,
-                          headers BLOB NOT NULL,
-                          delivery_count INTEGER NOT NULL DEFAULT 0,
-                          published_at INTEGER NOT NULL,
-                          lease_token INTEGER,
-                          lease_deadline INTEGER,
-                          available_at INTEGER
-                        )""");
-                s.execute("CREATE INDEX message_ready ON message(queue_id, id)");
-                s.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)");
-                s.execute("INSERT INTO meta(key, value) VALUES ('lease_seq', 0)");
-                s.execute("PRAGMA application_id = " + APPLICATION_ID);
-                s.execute("PRAGMA user_version = " + SCHEMA_VERSION);
-            }
-            return SCHEMA_VERSION;
-        }
-        if (applicationId != APPLICATION_ID) {
-            throw notSmq("application_id=" + applicationId);
-        }
-        if (version > SCHEMA_VERSION) {
-            throw unsupported(version);
-        }
-        if (version < SCHEMA_VERSION) {
-            upgrade(c, version);
-        }
-        return SCHEMA_VERSION;
-    }
-
-    /** 한 단계씩 올린다. DDL, 데이터 변환, 버전 올리기가 호출한 쪽의 트랜잭션 하나에 들어간다. */
-    private static void upgrade(Connection c, int from) throws SQLException {
-        for (int version = from; version < SCHEMA_VERSION; version++) {
-            Migration migration = MIGRATIONS.get(version);
-            if (migration == null) {
-                throw unsupported(from);
-            }
-            migration.apply(c);
-            try (Statement s = c.createStatement()) {
-                s.execute("PRAGMA user_version = " + (version + 1));
-            }
-        }
-    }
-
-    private static IncompatibleStorageException unsupported(int found) {
-        return versionMismatch("unsupported schema version", found);
-    }
-
-    private static IncompatibleStorageException versionMismatch(String what, int found) {
-        return new IncompatibleStorageException(what + ": found " + found + ", supported " + SCHEMA_VERSION);
-    }
-
-    private static IncompatibleStorageException notSmq(String reason) {
-        return new IncompatibleStorageException("not an smq database (" + reason + "), supported " + SCHEMA_VERSION);
-    }
-
-    private static int pragmaInt(Connection c, String name) throws SQLException {
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("PRAGMA " + name)) {
-            return rs.getInt(1);
-        }
     }
 
     /**
@@ -421,7 +333,7 @@ public final class SqliteStorage implements Storage {
             }
             // 비어 보여도 스키마 버전이 바뀌었으면 쓰기 경로가 확인하고 던지게 한다. 대기 중인 꺼내기가
             // 버전 변화를 놓치지 않기 위해서다.
-            return executor.versionChanged(pragmaInt(connection, "user_version"));
+            return executor.versionChanged(SqliteSchema.pragmaInt(connection, "user_version"));
         } catch (SQLException e) {
             if (TransactionExecutor.isBusy(e)) {
                 return true; // 쓰기 트랜잭션 경로가 재시도한다.

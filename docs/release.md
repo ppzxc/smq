@@ -38,7 +38,7 @@
 | 파일 | 바꾸는 곳 | 바꾸기 전 | 바꾼 뒤 |
 |---|---|---|---|
 | `build.gradle.kts` | `version` | `0.0.1-SNAPSHOT` | `0.0.1` |
-| `CHANGELOG.md` | `[Unreleased]` 절 이름과 맨 아래 링크 | `## [Unreleased]` | `## [0.0.1] - YYYY-MM-DD`. 위에 빈 `## [Unreleased]` 절을 새로 둔다. 링크 정의도 맞춘다 |
+| `CHANGELOG.md` | `[Unreleased]` 절 이름과 맨 아래 링크 | `## [Unreleased]` | `## [0.0.1] - YYYY-MM-DD`. 위에 빈 `## [Unreleased]` 절을 새로 둔다. 맨 아래 링크는 `[Unreleased]: .../compare/0.0.1...HEAD`, `[0.0.1]: .../releases/tag/0.0.1`로 바꾼다 |
 | `README.md` | 맨 위 `> **상태**` 문구 | "곧 Maven Central에 `0.0.1`로 공개할 예정이다. 0.x 동안은 API 호환을 약속하지 않는다." | "Maven Central에 `0.0.1` 공개. 0.x 동안은 API 호환을 약속하지 않는다." |
 | `README.md` | 빠른 시작의 "아직 공개 전이라면 ..." 문장 | 있음 | 지운다 |
 

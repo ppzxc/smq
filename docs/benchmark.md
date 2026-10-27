@@ -40,7 +40,7 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 3. 그런 장비가 없으면 WSL2 ext4에서 재도 된다. 이때 결과 파일의 `environment.caveat`에 "fsync 비용을 과소평가할 수 있다"는 경고가 자동으로 들어간다. 결과를 공유할 때 이 경고를 함께 적는다.
 4. 기준선은 같은 장비에서 3회 재서 항목별 중앙값으로 만든다. 4프로세스 PROCESS_CRASH 항목은 회차 편차가 커서 한 번 값으로는 흔들린다. 현재 기준선과 릴리스 전 절차는 `benchmark/README.md`에 있다. 새 기준선을 정할 때는 그 결과를 `benchmark/baseline.json`으로 복사해 커밋한다. 하한이 터무니없으면 그때 한 번만 조정한다. 릴리스 전에는 같은 환경에서 다시 돌려 PASS를 확인한다.
 
-하네스는 Windows에서도 돈다(자식 JVM에 조건을 Base64 인자로 넘긴다). 다만 smq는 Linux 로컬 파일시스템만 지원하므로 Windows 값은 참고용이고 기준선과 비교하지 않는다.
+하네스는 Windows에서도 돈다(자식 JVM에 조건을 Base64 인자로 넘긴다). Windows 값은 기록용이고 기준선과 비교하지 않는다([ADR 0008](adr/0008-windows-has-no-absolute-throughput-floor.md)).
 
 ## 결과와 기준선 파일 형식
 

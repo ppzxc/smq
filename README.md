@@ -43,7 +43,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 }
 ```
 
-실행할 때는 아래 [실행 요건](#실행-요건)의 JVM 옵션이 필요하다.
+실행할 때는 아래 [실행 요건](#실행-요건과-지원-플랫폼)의 JVM 옵션이 필요하다.
 
 ## 핵심 개념
 
@@ -200,11 +200,13 @@ if (!ext.outcomes().allOk()) { /* 일부는 이미 다른 리스로 넘어갔거
 - **스키마 업그레이드**: 파일을 열 때 스키마 버전이 낮으면 자동으로 올린다. 업그레이드 뒤에도 남아 있는 옛 버전 프로세스는 다음 트랜잭션에서 예외로 멈춘다. 이때 그 프로세스가 쥔 리스는 만료되어 재전달되므로 전달이 유실되지 않는다([ADR 0004](docs/adr/0004-schema-auto-upgrade-with-per-transaction-version-check.md)).
 - **스레드 안전**: `Smq`와 `Queue`, 불변 값인 `Chunk`와 `Settlement`는 여러 스레드에서 써도 된다.
 
-## 실행 요건
+## 실행 요건과 지원 플랫폼
 
 - **네이티브 접근 허용**: SQLite 저장소가 쓰는 sqlite-jdbc는 네이티브 라이브러리를 읽는다. JVM 옵션으로
   `--enable-native-access=ALL-UNNAMED`를 준다. 모듈 경로에서는 `--enable-native-access=org.xerial.sqlitejdbc`다.
-- **DB 파일 위치**: Linux 로컬 파일시스템에 둔다. WSL의 `/mnt/c`, NFS, SMB는 지원하지 않는다.
+- **지원 플랫폼**: Linux와 Windows다. 둘 다 DB 파일을 로컬 파일시스템(Linux 로컬 FS, Windows 로컬 NTFS)에 둔다. Windows는 `./gradlew check`(CI)와 다중 프로세스 안전성을 검증했다.
+- **DB 파일 위치**: SMB 공유, 네트워크 드라이브, NFS, OneDrive 같은 동기화 폴더, ReFS, WSL의 `/mnt/c`는 지원하지 않는다.
+- **Windows 성능**: Linux 기준 환경보다 처리량이 낮다. 특히 `POWER_LOSS` 단건은 fsync 비용에 묶여 약 80~90 msg/s다. 배치로 발행하면 격차가 크게 줄어든다. 근거는 [ADR 0008](docs/adr/0008-windows-has-no-absolute-throughput-floor.md)이다.
 - **인메모리 저장소**: `Smq.inMemory()`는 한 프로세스 안에서만 쓴다. 다중 프로세스는 지원하지 않는다.
 
 ## 성능 참고: 배치 없이 쓰면 느리다

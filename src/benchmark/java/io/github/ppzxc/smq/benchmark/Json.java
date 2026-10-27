@@ -9,11 +9,11 @@ import java.util.Map;
  * 하네스가 쓰는 최소 JSON. 객체, 배열, 문자열, 숫자, 불리언, null만 다룬다. 쓰기는 한 줄을 내고, 읽기는 숫자를 모두
  * {@link Double}로 돌려준다(정수 표현은 2^53까지 정확하다).
  */
-final class Json {
+public final class Json {
 
     private Json() {}
 
-    static String write(Object value) {
+    public static String write(Object value) {
         StringBuilder sb = new StringBuilder();
         write(sb, value);
         return sb.toString();
@@ -84,7 +84,7 @@ final class Json {
         sb.append('"');
     }
 
-    static Object parse(String text) {
+    public static Object parse(String text) {
         Parser p = new Parser(text);
         p.skip();
         Object v = p.value();

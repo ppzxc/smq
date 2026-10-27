@@ -3,7 +3,6 @@ package io.github.ppzxc.smq.benchmark;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +24,7 @@ public final class BenchMain {
     private BenchMain() {}
 
     public static void main(String[] args) throws Exception {
+        ModuleGuard.requireSmqModule("부모 JVM");
         Map<String, String> opts = parse(args);
         boolean full = opts.getOrDefault("mode", "smoke").equals("full");
         if (!full && !opts.getOrDefault("mode", "smoke").equals("smoke")) throw new IllegalArgumentException("--mode는 smoke 또는 full");
@@ -47,7 +47,7 @@ public final class BenchMain {
             results.putAll(m);
         }
 
-        Report report = new Report(environment(storage, workDir, full), results);
+        Report report = new Report(Environment.capture(full ? "full" : "smoke", storage.id(), workDir), results);
         if (opts.containsKey("output")) {
             Path out = Path.of(opts.get("output")).toAbsolutePath();
             Files.createDirectories(out.getParent());
@@ -75,23 +75,6 @@ public final class BenchMain {
             return Map.of();
         }
         return Report.fromJson(Files.readString(Path.of(path))).entries();
-    }
-
-    private static Map<String, String> environment(Storage storage, Path workDir, boolean full) throws IOException {
-        Map<String, String> env = new LinkedHashMap<>();
-        env.put("date", Instant.now().toString());
-        env.put("mode", full ? "full" : "smoke");
-        env.put("storage", storage.id());
-        env.put("os", System.getProperty("os.name") + " " + System.getProperty("os.version"));
-        env.put("arch", System.getProperty("os.arch"));
-        env.put("cpus", String.valueOf(Runtime.getRuntime().availableProcessors()));
-        env.put("java", System.getProperty("java.version"));
-        env.put("workDirFs", Files.getFileStore(workDir).type());
-        Path version = Path.of("/proc/version");
-        if (Files.exists(version) && Files.readString(version).toLowerCase().contains("microsoft")) {
-            env.put("caveat", "WSL2에서 잰 값이다. fsync 비용을 과소평가할 수 있다.");
-        }
-        return env;
     }
 
     private static Map<String, String> parse(String[] args) {

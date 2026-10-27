@@ -2,7 +2,7 @@
 
 애플리케이션 프로세스 안에서 동작하는 Java 25 내구성 메시지 큐. SQLite 파일 하나를 저장소로 쓰고, 메시지를 청크 단위로 꺼내 ACK/NACK하며, 실패한 메시지는 재시도한다. 별도 브로커 서버 없이 라이브러리 의존성 하나로 끝난다.
 
-> **상태**: 아직 Maven Central에 배포하지 않은 `0.1.0-SNAPSHOT`이다.
+> **상태**: 곧 Maven Central에 `0.0.1`로 공개할 예정이다. 0.x 동안은 API 호환을 약속하지 않는다.
 
 ## 개요
 
@@ -29,10 +29,24 @@ smq는 "청크로 꺼내 ACK/NACK하는 재시도 가능한 내구성 큐"까지
 
 ## 빠른 시작
 
-JDK 25가 필요하다. 소스를 받아 로컬 저장소에 설치하고 `io.github.ppzxc:smq:0.1.0-SNAPSHOT`을 의존성으로 건다.
+JDK 25가 필요하다. Maven Central의 `io.github.ppzxc:smq`를 의존성으로 건다. 아직 공개 전이라면 소스를 받아 `./gradlew publishToMavenLocal`로 로컬 저장소에 설치해 쓴다.
 
-```bash
-./gradlew publishToMavenLocal
+Gradle(Kotlin DSL):
+
+```kotlin
+dependencies {
+    implementation("io.github.ppzxc:smq:0.0.1")
+}
+```
+
+Maven:
+
+```xml
+<dependency>
+    <groupId>io.github.ppzxc</groupId>
+    <artifactId>smq</artifactId>
+    <version>0.0.1</version>
+</dependency>
 ```
 
 SQLite 저장소가 쓰는 sqlite-jdbc는 네이티브 라이브러리를 읽으므로 JVM 옵션 `--enable-native-access=ALL-UNNAMED`가 필요하다. 모듈 경로에서는 `--enable-native-access=org.xerial.sqlitejdbc`다.
@@ -105,6 +119,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 | [GLOSSARY.md](GLOSSARY.md) | 도메인 용어 정의. 코드와 문서가 이 용어를 쓴다. |
 | [docs/adr/](docs/adr) | 설계 결정 기록(0001~0008) |
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
+| [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
 | [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |
 | [research/](research) | RabbitMQ 핵심 기능, SQLite 다중 프로세스 동시성 등 조사 자료 |
 

@@ -24,6 +24,12 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 - `./gradlew benchmarkSmoke`: 짧은 스모크(조건당 약 1.5초). 다중 JVM, 다른 프로세스 S3, 미리 채운 깊이 경로를 한 번씩 지나가는지만 본다. 임계값은 없고 자식이 실패하지 않으면 통과한다. 수치는 의미가 없다.
 - `./gradlew benchmark`: 전체 측정(38개 조건, 조건마다 측정 10초와 예열 3초에 준비 시간이 더해진다. 100만 건 깊이는 준비가 더 걸린다). 수동으로만 돌린다. 결과를 `build/benchmark/result.json`에 쓰고, `benchmark/baseline.json`이 있으면 기준선과 견준다. FAIL이 하나라도 있으면 비정상 종료한다.
 
+### 모듈 경로 실행
+
+`benchmark`와 `benchmarkSmoke`는 smq jar와 그 런타임 의존성(sqlite-jdbc)을 **모듈 경로**에 올리고, 하네스(`src/benchmark` 출력)만 클래스패스에 둔다. 부모 JVM(`BenchMain`)은 `--module-path`와 `--add-modules io.github.ppzxc.smq`로 뜨고, 자식 JVM(`ChildMain`)은 부모의 `jdk.module.path`와 `java.class.path`를 그대로 물려받아 같은 구성으로 뜬다. 그래서 하네스는 `module-info`가 내보낸 `io.github.ppzxc.smq` 패키지의 공개 API만 쓸 수 있고, exports가 블랙박스 경계를 강제한다. 이전에는 main 출력 디렉터리를 클래스패스에 올려 이 경계가 걸리지 않았다.
+
+두 JVM은 시작할 때 `Smq`가 이름 있는 모듈에서 로드됐는지 검사하고, 아니면 바로 실패한다. 실행하면 표준 오류에 `[module] 부모 JVM: ...`과 JVM마다 `[module] 자식 JVM: ...` 줄이 나온다. 하네스를 IDE 등에서 클래스패스로 직접 돌리면 이 검사에서 실패한다. 순수 로직 단위 테스트(`test` 소스셋)는 클래스패스로 돌고 이 검사를 거치지 않는다. 측정 동작은 바뀌지 않는다.
+
 `benchmark`에는 `-Pbenchmark.args="..."`로 옵션을 더할 수 있다.
 
 | 옵션 | 뜻 |

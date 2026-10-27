@@ -1,6 +1,9 @@
 package io.github.ppzxc.smq.benchmark.random;
 
 import io.github.ppzxc.smq.benchmark.Json;
+import io.github.ppzxc.smq.benchmark.random.Delivery.Action;
+import io.github.ppzxc.smq.benchmark.random.Delivery.Pull;
+import io.github.ppzxc.smq.benchmark.random.Delivery.Settle;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -36,6 +39,32 @@ final class RecordsJson {
         m.put("settleAtMillis", d.settle().atMillis());
         m.put("nackDelayMillis", d.settle().nackDelayMillis());
         return Json.write(m);
+    }
+
+    static Published parsePublished(String line) {
+        Map<?, ?> m = (Map<?, ?>) Json.parse(line);
+        return new Published(Tag.parse((String) m.get("tag")), content(m), num(m, "atMillis"),
+                num(m, "delayMillis"));
+    }
+
+    static Delivery parseDelivery(String line) {
+        Map<?, ?> m = (Map<?, ?>) Json.parse(line);
+        Pull pull = new Pull(num(m, "chunk"), (int) num(m, "position"), num(m, "pulledAtMillis"),
+                num(m, "leaseDeadlineMillis"));
+        Settle settle = new Settle(Action.valueOf((String) m.get("settle")), (Boolean) m.get("applied"),
+                num(m, "settleAtMillis"), num(m, "nackDelayMillis"));
+        return new Delivery(QueueKind.valueOf((String) m.get("queue")), Tag.parse((String) m.get("tag")),
+                num(m, "messageId"), (int) num(m, "deliveryCount"), content(m), pull, settle);
+    }
+
+    private static Content content(Map<?, ?> m) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        ((Map<?, ?>) m.get("headers")).forEach((k, v) -> headers.put((String) k, (String) v));
+        return new Content(num(m, "checksum"), headers);
+    }
+
+    private static long num(Map<?, ?> m, String key) {
+        return ((Double) m.get(key)).longValue();
     }
 
     static String line(CountsSample s) {

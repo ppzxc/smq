@@ -143,7 +143,11 @@ public final class SqliteStorage implements Storage {
      * 시작할 때마다 {@code user_version}을 다시 확인하고, {@code SQLITE_BUSY}면 재시도한다.
      */
     <T> T inTransaction(TransactionExecutor.TxBody<T> body) {
-        return executor.execute(body);
+        return inTransaction(body, Deadline.NONE);
+    }
+
+    private <T> T inTransaction(TransactionExecutor.TxBody<T> body, Deadline deadline) {
+        return executor.execute(body, deadline);
     }
 
     @Override
@@ -316,7 +320,7 @@ public final class SqliteStorage implements Storage {
      * 던진다), 비어 보이는데 스키마 버전이 열 때와 달라졌거나 영구 실패 상태일 때, 읽기가 BUSY일 때다.
      * BUSY가 아닌 오류는 true가 아니라 예외다.
      */
-    private boolean anyReady(String queue, Instant now) {
+    private boolean anyReady(String queue, Instant now, Deadline waitDeadline) {
         return executor.anyOrUncertain(connection -> {
             try (PreparedStatement ps = connection.prepareStatement(
                     "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
@@ -331,12 +335,26 @@ public final class SqliteStorage implements Storage {
                     return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
                 }
             }
-        });
+        }, waitDeadline);
     }
 
     @Override
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
-        if (!anyReady(queue, now)) {
+        return pull(queue, max, lease, now, Deadline.NONE);
+    }
+
+    /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0009). */
+    @Override
+    public PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
+        try {
+            return pull(queue, max, lease, now, Deadline.after(wait));
+        } catch (Deadline.Expired e) {
+            return PullResult.empty();
+        }
+    }
+
+    private PullResult pull(String queue, int max, Duration lease, Instant now, Deadline waitDeadline) {
+        if (!anyReady(queue, now, waitDeadline)) {
             return PullResult.empty();
         }
         return inTransaction(c -> {
@@ -389,7 +407,7 @@ public final class SqliteStorage implements Storage {
             }
             messages.sort((a, b) -> a.id().compareTo(b.id()));
             return PullResult.of(new LeaseToken(token), deadline, messages);
-        });
+        }, waitDeadline);
     }
 
     /**

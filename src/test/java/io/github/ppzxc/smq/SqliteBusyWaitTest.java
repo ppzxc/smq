@@ -18,7 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * 다른 프로세스가 쓰기 락을 쥘 때 호출이 얼마나 막히는지 고정한다(#68). 다른 프로세스는 같은 파일을 연 별도 연결로
+ * 다른 프로세스가 쓰기 락을 쥘 때 호출이 얼마나 막히는지 고정한다(#68). 꺼내기는 wait 안에서만 막히고,
+ * 그 밖의 연산과 close()는 재시도가 끝날 때까지 직렬로 막힌다(ADR-0009). 다른 프로세스는 같은 파일을 연 별도 연결로
  * 흉내 낸다. 시도 5회, busy timeout 300ms면 쓰기 한 번이 BUSY로 실패하기까지 약 1.6초다.
  */
 class SqliteBusyWaitTest {
@@ -90,24 +91,40 @@ class SqliteBusyWaitTest {
     }
 
     @Test
-    void 쓰기_락을_다른_연결이_쥐면_꺼내기는_wait와_상관없이_재시도가_끝나야_예외로_돌아온다() throws Exception {
+    void 쓰기_락을_다른_연결이_쥐면_꺼내기는_wait가_지나면_빈_청크로_돌아온다() throws Exception {
         holdWriteLock();
 
         long start = System.nanoTime();
-        assertThrows(SmqStorageException.class, () -> queue.pull(1, Duration.ofMillis(50)));
+        Chunk chunk = queue.pull(1, Duration.ofMillis(50));
+
+        assertTrue(chunk.isEmpty());
+        // 마감은 첫 시도 뒤에 확인하므로 최악은 wait에 busy timeout 한 번을 더한 값이다.
+        assertTrue(millisSince(start) < BUSY_TIMEOUT_MILLIS + 400, "elapsed=" + millisSince(start));
+    }
+
+    @Test
+    void wait가_넉넉하면_BUSY_재시도_소진은_여전히_예외다() throws Exception {
+        holdWriteLock();
+
+        long start = System.nanoTime();
+        assertThrows(SmqStorageException.class, () -> queue.pull(1, Duration.ofSeconds(30)));
 
         assertTrue(millisSince(start) >= BLOCKED_AT_LEAST_MILLIS, "elapsed=" + millisSince(start));
     }
 
     @Test
-    void 같은_프로세스의_쓰기가_재시도_중이면_꺼내기는_wait와_상관없이_lock을_기다린다() throws Exception {
+    void 경합이_없으면_wait가_0이어도_꺼낸다() throws Exception {
+        Chunk chunk = queue.pull(1, Duration.ZERO);
+
+        assertEquals(1, chunk.messages().size());
+    }
+
+    @Test
+    void 락을_쥔_쪽이_놓으면_wait_안에_꺼낸다() throws Exception {
         holdWriteLock();
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread writer = startBlockedWriter(failure);
-        // 쓰기 스레드가 포기해 lock을 놓고 나면 락을 풀어 꺼내기가 성공하게 한다.
         Thread releaser = new Thread(() -> {
             try {
-                writer.join();
+                Thread.sleep(100);
             } catch (InterruptedException ignored) {
                 return;
             }
@@ -115,10 +132,23 @@ class SqliteBusyWaitTest {
         });
         releaser.start();
 
-        long start = System.nanoTime();
-        queue.pull(1, Duration.ofMillis(50));
+        Chunk chunk = queue.pull(1, Duration.ofSeconds(10));
 
-        assertTrue(millisSince(start) >= BLOCKED_AT_LEAST_MILLIS - 200, "elapsed=" + millisSince(start));
+        assertEquals(1, chunk.messages().size());
+        releaser.join();
+    }
+
+    @Test
+    void 같은_프로세스의_쓰기가_재시도_중이면_꺼내기는_wait_안에_lock을_못_잡고_빈_청크로_돌아온다() throws Exception {
+        holdWriteLock();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread writer = startBlockedWriter(failure);
+
+        long start = System.nanoTime();
+        Chunk chunk = queue.pull(1, Duration.ofMillis(50));
+
+        assertTrue(chunk.isEmpty());
+        assertTrue(millisSince(start) < 300, "elapsed=" + millisSince(start));
         writer.join();
         assertInstanceOf(SmqStorageException.class, failure.get());
     }

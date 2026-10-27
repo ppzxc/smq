@@ -33,6 +33,14 @@ public interface Storage extends AutoCloseable {
     /** 기다리지 않는다. 준비 메시지가 없으면 빈 결과다. */
     PullResult pull(String queue, int max, Duration lease, Instant now);
 
+    /**
+     * {@code wait} 안에서만 저장소의 lock과 쓰기 경합을 기다린다. 그 안에 꺼내지 못하면 아무것도 반영하지 않고 빈
+     * 결과를 돌려준다. 기본 구현은 한도를 두지 않는 {@link #pull(String, int, Duration, Instant)}다.
+     */
+    default PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
+        return pull(queue, max, lease, now);
+    }
+
     /** 한 트랜잭션으로 반영하고 메시지별 결과를 돌려준다. */
     List<Result> settle(LeaseToken token, List<Disposition> items, Instant now);
 

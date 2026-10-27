@@ -3,9 +3,9 @@ package io.github.ppzxc.smq;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.charset.StandardCharsets;
+import io.github.ppzxc.smq.storage.StorageFactory;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.InstantSource;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,25 +35,26 @@ abstract class SmqConformanceTest {
     final MutableClock clock = new MutableClock(T0);
     private final List<Smq> opened = new ArrayList<>();
 
-    /** 저장소별 빌더를 같은 모양으로 다루게 하는 테스트용 어댑터. */
-    interface TestBuilder {
-        TestBuilder clock(InstantSource clock);
+    /** 하위 클래스가 정하는 유일한 것. 저장소는 factory가 열고, 시각 주입과 리스 기간은 여기서 적용한다. */
+    abstract StorageFactory factory();
 
-        TestBuilder leaseDuration(Duration leaseDuration);
-
-        Smq open();
+    private Smq openWith(BuilderSettings settings) {
+        return settings.open(factory().open(dir));
     }
 
-    abstract TestBuilder builder(Path dir);
-
     Smq open(Duration lease) {
-        Smq smq = builder(dir).clock(clock).leaseDuration(lease).open();
+        BuilderSettings settings = new BuilderSettings();
+        settings.clock(clock);
+        settings.leaseDuration(lease);
+        Smq smq = openWith(settings);
         opened.add(smq);
         return smq;
     }
 
     Smq open() {
-        Smq smq = builder(dir).clock(clock).open();
+        BuilderSettings settings = new BuilderSettings();
+        settings.clock(clock);
+        Smq smq = openWith(settings);
         opened.add(smq);
         return smq;
     }
@@ -73,7 +74,7 @@ abstract class SmqConformanceTest {
 
     @Test
     void 열고_try_with_resources로_닫을_수_있다() {
-        try (Smq smq = builder(dir).open()) {
+        try (Smq smq = openWith(new BuilderSettings())) {
             assertNotNull(smq);
         }
     }
@@ -778,7 +779,7 @@ abstract class SmqConformanceTest {
             assertThrows(IllegalArgumentException.class, () -> c.nackAll(bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ZERO, bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> q.extend(c, bad), String.valueOf(bad));
-            assertThrows(IllegalArgumentException.class, () -> builder(dir).leaseDuration(bad), String.valueOf(bad));
+            assertThrows(IllegalArgumentException.class, () -> new BuilderSettings().leaseDuration(bad), String.valueOf(bad));
         }
         assertThrows(IllegalArgumentException.class, () -> new OutgoingMessage(new byte[0], Map.of(), null));
         // 잘못된 인자는 아무것도 바꾸지 않는다.

@@ -2,11 +2,9 @@ package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.io.InputStream;
+import io.github.ppzxc.smq.storage.StorageFactory;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
@@ -23,18 +21,14 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class SchemaV1SampleTest {
 
-    static final String RESOURCE = "/schema-samples/schema-v1.db";
     static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
 
     @TempDir
     Path dir;
 
-    static Path copySample(Path target) throws Exception {
-        try (InputStream in = SchemaV1SampleTest.class.getResourceAsStream(RESOURCE)) {
-            assertNotNull(in, "src/test/resources" + RESOURCE + " 가 없다");
-            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-        return target;
+    /** 견본 복사는 저장소 factory 한 곳에만 있다. */
+    static Path copySample(Path target) {
+        return StorageFactory.copyV1Sample(target);
     }
 
     private static String text(Message m) {

@@ -84,17 +84,35 @@ public final class SqliteStorage implements Storage {
     private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
 
     private final TransactionExecutor executor;
+    private final Duration lockWaitFloor;
 
-    private SqliteStorage(TransactionExecutor executor) {
+    private SqliteStorage(TransactionExecutor executor, Duration lockWaitFloor) {
         this.executor = executor;
+        this.lockWaitFloor = lockWaitFloor;
     }
 
     public static SqliteStorage open(Path path, Durability durability) {
-        return open(path, durability, BUSY_TIMEOUT_MILLIS, MAX_ATTEMPTS);
+        return open(path, durability, Deadline.DEFAULT_LOCK_WAIT_FLOOR);
+    }
+
+    /**
+     * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0009).
+     *     0 이상이다. 쓰기 트랜잭션 하나가 기본값(100ms)보다 오래 걸리는 저장소에서 늘린다.
+     */
+    public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
+        return open(path, durability, BUSY_TIMEOUT_MILLIS, MAX_ATTEMPTS, lockWaitFloor);
+    }
+
+    static SqliteStorage open(Path path, Durability durability, int busyTimeoutMillis, int maxAttempts) {
+        return open(path, durability, busyTimeoutMillis, maxAttempts, Deadline.DEFAULT_LOCK_WAIT_FLOOR);
     }
 
     /** 테스트가 경합을 짧게 재현할 수 있게 busy timeout과 시도 횟수를 정한다. */
-    static SqliteStorage open(Path path, Durability durability, int busyTimeoutMillis, int maxAttempts) {
+    static SqliteStorage open(
+            Path path, Durability durability, int busyTimeoutMillis, int maxAttempts, Duration lockWaitFloor) {
+        if (lockWaitFloor.isNegative()) {
+            throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
+        }
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(busyTimeoutMillis);
         // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
@@ -115,7 +133,7 @@ public final class SqliteStorage implements Storage {
                     return s.execute("PRAGMA journal_mode = WAL");
                 }
             });
-            return new SqliteStorage(executor);
+            return new SqliteStorage(executor, lockWaitFloor);
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
             if (isNotADatabase(e)) {
@@ -143,7 +161,11 @@ public final class SqliteStorage implements Storage {
      * 시작할 때마다 {@code user_version}을 다시 확인하고, {@code SQLITE_BUSY}면 재시도한다.
      */
     <T> T inTransaction(TransactionExecutor.TxBody<T> body) {
-        return executor.execute(body);
+        return inTransaction(body, Deadline.NONE);
+    }
+
+    private <T> T inTransaction(TransactionExecutor.TxBody<T> body, Deadline deadline) {
+        return executor.execute(body, deadline);
     }
 
     @Override
@@ -316,7 +338,7 @@ public final class SqliteStorage implements Storage {
      * 던진다), 비어 보이는데 스키마 버전이 열 때와 달라졌거나 영구 실패 상태일 때, 읽기가 BUSY일 때다.
      * BUSY가 아닌 오류는 true가 아니라 예외다.
      */
-    private boolean anyReady(String queue, Instant now) {
+    private boolean anyReady(String queue, Instant now, Deadline waitDeadline) {
         return executor.anyOrUncertain(connection -> {
             try (PreparedStatement ps = connection.prepareStatement(
                     "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
@@ -331,12 +353,26 @@ public final class SqliteStorage implements Storage {
                     return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
                 }
             }
-        });
+        }, waitDeadline);
     }
 
     @Override
     public PullResult pull(String queue, int max, Duration lease, Instant now) {
-        if (!anyReady(queue, now)) {
+        return pull(queue, max, lease, now, Deadline.NONE);
+    }
+
+    /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0009). */
+    @Override
+    public PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
+        try {
+            return pull(queue, max, lease, now, Deadline.after(wait, lockWaitFloor));
+        } catch (Deadline.Expired e) {
+            return PullResult.empty();
+        }
+    }
+
+    private PullResult pull(String queue, int max, Duration lease, Instant now, Deadline waitDeadline) {
+        if (!anyReady(queue, now, waitDeadline)) {
             return PullResult.empty();
         }
         return inTransaction(c -> {
@@ -389,7 +425,7 @@ public final class SqliteStorage implements Storage {
             }
             messages.sort((a, b) -> a.id().compareTo(b.id()));
             return PullResult.of(new LeaseToken(token), deadline, messages);
-        });
+        }, waitDeadline);
     }
 
     /**

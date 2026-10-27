@@ -9,6 +9,7 @@ smq 공개 API의 사용법 레퍼런스다. 개요와 빠른 시작은 [README]
 Smq smq = Smq.sqlite(Path.of("smq.db"))
         .durability(Durability.POWER_LOSS)      // 기본값. 생략 가능
         .leaseDuration(Duration.ofSeconds(30))  // 기본값. 생략 가능
+        .lockWaitFloor(Duration.ofMillis(100))  // 기본값. 생략 가능
         .open();
 
 // 인메모리: 프로세스 안에서만, 종료하면 사라진다. 테스트에 알맞다.
@@ -132,6 +133,6 @@ if (!ext.outcomes().allOk()) { /* 일부는 이미 다른 리스로 넘어갔거
 ## 내구성과 동시성
 
 - **내구성 수준**: SQLite 저장소의 `Durability`는 두 가지다. `POWER_LOSS`(기본)는 커밋마다 fsync해서 전원 장애나 OS 멈춤 뒤에도 성공한 발행·정산이 남는다. `PROCESS_CRASH`는 프로세스가 죽어도 남지만 전원 장애 때는 마지막 커밋 몇 개를 잃을 수 있고, 대신 처리량이 높다([ADR 0005](adr/0005-default-durability-survives-power-loss.md)). 인메모리 저장소에는 해당 없다.
-- **다중 프로세스**: 여러 프로세스가 같은 SQLite 파일을 열어 큐를 공유할 수 있다. 쓰기 경합(`SQLITE_BUSY`)은 내부에서 트랜잭션 단위로 다시 시도한다. 컨슈머를 서로 구별하지 않으며, 리스가 같은 메시지를 두 컨슈머에게 동시에 주지 않는다.
+- **다중 프로세스**: 여러 프로세스가 같은 SQLite 파일을 열어 큐를 공유할 수 있다. 쓰기 경합(`SQLITE_BUSY`)은 내부에서 트랜잭션 단위로 다시 시도한다. 다른 프로세스가 쓰기 락을 오래 쥐면 선언, 발행, 정산, 연장, `close()`는 재시도가 끝날 때까지(기본값 기준 최대 약 25초) 같은 프로세스의 다른 호출과 직렬로 막힐 수 있다. 꺼내기만 `wait`가 이 대기도 한정해 시간이 다하면 빈 청크를 돌려준다. 정상적인 짧은 직렬화는 `wait`가 0이어도 기다리는데, 이 하한은 기본 100ms이고 쓰기 트랜잭션 하나가 그보다 오래 걸리는 느린 저장 장치에서는 `lockWaitFloor`로 늘린다([ADR 0009](adr/0009-pull-wait-bounds-lock-and-busy-wait.md)). 컨슈머를 서로 구별하지 않으며, 리스가 같은 메시지를 두 컨슈머에게 동시에 주지 않는다.
 - **스키마 업그레이드**: 파일을 열 때 스키마 버전이 낮으면 자동으로 올린다. 업그레이드 뒤에도 남아 있는 옛 버전 프로세스는 다음 트랜잭션에서 예외로 멈춘다. 이때 그 프로세스가 쥔 리스는 만료되어 재전달되므로 전달이 유실되지 않는다([ADR 0004](adr/0004-schema-auto-upgrade-with-per-transaction-version-check.md)).
 - **스레드 안전**: `Smq`와 `Queue`, 불변 값인 `Chunk`와 `Settlement`는 여러 스레드에서 써도 된다.

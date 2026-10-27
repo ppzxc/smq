@@ -4,6 +4,7 @@ import io.github.ppzxc.smq.SmqStorageException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -68,7 +69,12 @@ final class TransactionExecutor {
      * 던지게 한다. BUSY가 아닌 오류는 예외다.
      */
     boolean anyOrUncertain(ReadProbe probe) {
-        lock.lock();
+        return anyOrUncertain(probe, Deadline.NONE);
+    }
+
+    /** 마감 안에 lock을 잡지 못하면 {@link Deadline.Expired}를 던진다. 아무것도 읽지 않았다. */
+    boolean anyOrUncertain(ReadProbe probe, Deadline deadline) {
+        acquire(deadline);
         try {
             if (probe.apply(connection)) {
                 return true;
@@ -93,7 +99,16 @@ final class TransactionExecutor {
 
     /** 확인하는 쓰기 트랜잭션. BUSY면 되돌린 뒤 전체를 다시 시도한다. 그 밖의 SQL 오류는 효력 불명이다. */
     <T> T execute(TxBody<T> body) {
-        return retryOnBusy(() -> runOnce(body, true));
+        return execute(body, Deadline.NONE);
+    }
+
+    /**
+     * 마감이 있으면 lock 대기와 BUSY 재시도에 적용한다. 마감 안에 lock을 잡지 못하거나, BUSY로 실패한 뒤 마감이
+     * 지났으면 {@link Deadline.Expired}를 던진다. 어느 쪽이든 아무것도 반영되지 않았다(BUSY 실패는 롤백된다).
+     * driver 안의 {@code busy_timeout} 대기는 끊을 수 없으므로 최악은 마감에 한 번의 {@code busy_timeout}을 더한 값이다.
+     */
+    <T> T execute(TxBody<T> body, Deadline deadline) {
+        return retryOnBusy(() -> runOnce(body, true), deadline);
     }
 
     void close() {
@@ -147,13 +162,23 @@ final class TransactionExecutor {
     }
 
     <T> T retryOnBusy(SqlAction<T> action) {
-        lock.lock();
+        return retryOnBusy(action, Deadline.NONE);
+    }
+
+    <T> T retryOnBusy(SqlAction<T> action, Deadline deadline) {
+        acquire(deadline);
         try {
             for (int attempt = 1;; attempt++) {
                 try {
                     return action.run();
                 } catch (SQLException e) {
-                    if (!isBusy(e) || attempt >= retry.maxAttempts()) {
+                    if (!isBusy(e)) {
+                        throw new SmqStorageException("sqlite operation failed", e);
+                    }
+                    if (deadline.passed()) {
+                        throw new Deadline.Expired();
+                    }
+                    if (attempt >= retry.maxAttempts()) {
                         throw new SmqStorageException("sqlite operation failed", e);
                     }
                     try {
@@ -166,6 +191,22 @@ final class TransactionExecutor {
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    /** lock을 잡는다. 마감이 있으면 남은 시간(열 때 정한 하한) 안에서만 기다리고, 못 잡으면 {@link Deadline.Expired}를 던진다. */
+    private void acquire(Deadline deadline) {
+        if (!deadline.bounded()) {
+            lock.lock();
+            return;
+        }
+        try {
+            if (!lock.tryLock(deadline.lockWaitNanos(), TimeUnit.NANOSECONDS)) {
+                throw new Deadline.Expired();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SmqStorageException("interrupted while waiting for sqlite lock", e);
         }
     }
 

@@ -109,7 +109,7 @@ SKIP  regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec  [기준선에 �
 고정 프로파일 벤치는 정해진 조건만 돈다. 무작위 하네스(`...benchmark.random` 패키지, 같은 `benchmark` 소스셋)는 시드 하나에서 무작위 워크로드를 만들어 SQLite 저장소에서 돌리고, 불변식 8개(유실, 유령, 중복 범위, dead letter 이동, 지연, 단일 활성 컨슈머, counts, 청크 안 순서)로 판정한다. 처리량과 지연(p50/p99)은 기록만 하고 판정하지 않는다. 고정 프로파일 벤치와 ns0270 기준선은 이것으로 대체되지 않는다. 지금은 단일 프로세스(스레드는 여럿)만 돈다. 크래시 주입은 없다. 모듈 경로에서 돌고 공개 API만 쓴다. 하네스는 배포 jar와 sources jar에 들어가지 않는다(`verifyJarExcludesBenchmark`).
 
 - `./gradlew randomBench`: 수동 실행. 마스터 시드(기본 현재 시각, 출력에 찍는다)에서 실행 시드를 뽑아 `--budget`(기본 30m)이 다할 때까지 돈다. 예산은 새 실행을 시작할 수 있는 시간이고 도는 실행은 끝낸다.
-- `./gradlew randomBench --seed <n>`: 그 시드 하나만 다시 돈다. 같은 시드는 같은 매개변수와 같은 워크로드(메시지 크기와 내용, 지연, 전달마다의 정산 결정)를 뜻한다. 실제 시계로 돌므로 끼어들기 순서까지 같지는 않다.
+- `./gradlew randomBench --seed <n>`: 그 시드 하나만 다시 돈다. 같은 시드는 같은 매개변수와 같은 워크로드(메시지 크기와 내용, 지연, 전달마다의 정산 결정)를 뜻한다. 실제 시계로 돌므로 끼어들기 순서까지 같지는 않다. 부하 구간 길이(`--load`)와 스모크의 한도가 다르면 같은 시드도 다른 워크로드이므로, 재현할 때는 같은 `--load`로 돌린다(`randomBenchSmoke`의 시드는 `randomBench`에서 한도가 달라 같은 워크로드가 아니다).
 - 옵션: `--seed`, `--budget`(`30m`, `90s`, `2h`, `PT30M`), `--load`(부하 구간, 기본 `10s`), `--master-seed`.
 - `./gradlew randomBenchSmoke`: 고정 시드 6개(`Options.SMOKE_SEEDS`)를 실행당 부하 2초로 돈다(전체 약 20초). 미리 채운 깊이는 2,000, 리스 기한은 1초까지로 줄인다. 위반이 있으면 실패한다. `check`에는 넣지 않았고 CI Linux 잡의 별도 단계로 돈다.
 

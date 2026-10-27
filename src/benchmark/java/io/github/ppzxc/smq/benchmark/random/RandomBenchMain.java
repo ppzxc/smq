@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.SplittableRandom;
 
@@ -44,7 +45,7 @@ public final class RandomBenchMain {
             seeds = Options.SMOKE_SEEDS.iterator();
             budget = Long.MAX_VALUE;
         } else if (o.seed().isPresent()) {
-            seeds = java.util.List.of(o.seed().getAsLong()).iterator();
+            seeds = List.of(o.seed().getAsLong()).iterator();
             budget = Long.MAX_VALUE;
         } else {
             SplittableRandom master = new SplittableRandom(o.masterSeed());

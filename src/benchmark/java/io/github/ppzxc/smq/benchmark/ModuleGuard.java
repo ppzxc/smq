@@ -22,8 +22,8 @@ final class ModuleGuard {
         return module.getName();
     }
 
-    /** 부모·자식 JVM이 시작할 때 부른다. smq가 모듈 경로에 있음을 확인하고 한 줄로 알린다. */
-    static void announce(String role) {
+    /** 부모·자식 JVM이 시작할 때 부른다. smq가 모듈 경로에 없으면 실패하고, 있으면 그 사실을 한 줄로 알린다. */
+    static void requireSmqModule(String role) {
         String name = requireNamed(Smq.class);
         if (!SMQ_MODULE.equals(name)) throw new IllegalStateException("예상하지 못한 모듈: " + name);
         System.err.println("[module] " + role + ": smq는 모듈 경로의 " + name + " 모듈에서 읽는다");

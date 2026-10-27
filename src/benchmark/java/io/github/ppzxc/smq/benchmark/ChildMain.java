@@ -15,7 +15,7 @@ public final class ChildMain {
             System.err.println("사용법: ChildMain <specArg> <role> <dbPath> <startAtEpochMs>");
             System.exit(2);
         }
-        ModuleGuard.announce("자식 JVM");
+        ModuleGuard.requireSmqModule("자식 JVM");
         RunSpec spec = RunSpec.fromArg(args[0]);
         Role role = Role.valueOf(args[1]);
         Path db = Path.of(args[2]);

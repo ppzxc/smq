@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- smq 빌드와 분리된 외부 소비자. 입력은 -DsmqVersion(필수)과 -DrepoUrl(기본 mavenLocal)이다. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>smqdeploytest</groupId>
+  <artifactId>smq-deploy-test-modulepath</artifactId>
+  <version>1</version>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>25</maven.compiler.release>
+    <repoUrl>https://repo.maven.apache.org/maven2</repoUrl>
+  </properties>
+
+  <repositories>
+    <repository>
+      <id>smq-input</id>
+      <url>${repoUrl}</url>
+      <snapshots><enabled>true</enabled></snapshots>
+    </repository>
+  </repositories>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.ppzxc</groupId>
+      <artifactId>smq</artifactId>
+      <version>${smqVersion}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>../shared/src/main/java</sourceDirectory>
+    <plugins>
+      <!-- 모듈 경로 소비자만 module-info를 얹는다. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <id>add-module-info</id>
+            <phase>generate-sources</phase>
+            <goals><goal>add-source</goal></goals>
+            <configuration>
+              <sources><source>../shared/module</source></sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.6.1</version>
+        <configuration>
+          <executable>java</executable>
+          <arguments>
+            <argument>--enable-native-access=org.xerial.sqlitejdbc</argument>
+            <argument>--module-path</argument>
+            <modulepath/>
+            <argument>--module</argument>
+            <argument>smq.deploytest/smqdeploytest.Main</argument>
+          </arguments>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

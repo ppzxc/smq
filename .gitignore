@@ -10,3 +10,7 @@ out/
 # 견본을 만들거나 열 때 SQLite가 남기는 WAL 부산물은 커밋하지 않는다
 src/test/resources/schema-samples/*.db-shm
 src/test/resources/schema-samples/*.db-wal
+
+# 배포 테스트 소비자 산출물
+deploy-test/**/target/
+deploy-test/**/output.log

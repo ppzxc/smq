@@ -63,6 +63,7 @@ fun JavaExec.benchmarkRunner(vararg extra: String, main: String = "io.github.ppz
     mainClass = main
     val modulePath = files(tasks.jar, configurations.runtimeClasspath)
     jvmArgumentProviders.add(CommandLineArgumentProvider {
+        // ModuleGuard.childJvmArgs와 같은 인자 목록이다. 한쪽을 바꾸면 다른 쪽도 맞춘다.
         listOf("--enable-native-access=ALL-UNNAMED", "--enable-native-access=org.xerial.sqlitejdbc",
             "--module-path", modulePath.asPath, "--add-modules", "io.github.ppzxc.smq")
     })

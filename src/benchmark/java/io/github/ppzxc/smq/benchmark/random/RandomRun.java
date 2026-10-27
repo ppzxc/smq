@@ -349,7 +349,7 @@ final class RandomRun {
             settleDecisions(target, chunk, tags, settles);
         }
         long chunkId = nextChunkId();
-        record(QueueKind.TARGET, chunkId, messages, tags, pulledAt, deadline, settles);
+        recordChunk(QueueKind.TARGET, chunkId, messages, tags, pulledAt, deadline, settles);
     }
 
     /** 처리 시간만큼 기다린다. 길면 리스 기한의 절반마다 연장한다. 부하 구간이 끝나 멈추면 false(정산하지 않는다). */
@@ -444,7 +444,7 @@ final class RandomRun {
                 countAck(messages.get(i).payload().length);
             }
         }
-        record(kind, nextChunkId(), messages, tags, pulledAt, deadline, settles);
+        recordChunk(kind, nextChunkId(), messages, tags, pulledAt, deadline, settles);
         return true;
     }
 
@@ -463,7 +463,7 @@ final class RandomRun {
         }
     }
 
-    private void record(QueueKind kind, long chunkId, List<Message> messages, List<Tag> tags, long pulledAt,
+    private void recordChunk(QueueKind kind, long chunkId, List<Message> messages, List<Tag> tags, long pulledAt,
             long[] deadline, Settle[] settles) {
         for (int i = 0; i < messages.size(); i++) {
             Message m = messages.get(i);

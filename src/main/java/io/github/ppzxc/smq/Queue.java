@@ -22,11 +22,13 @@ public interface Queue {
 
     Chunk pull(int max, Duration wait, Duration leaseDuration) throws InterruptedException;
 
+    /** 이 큐에서 꺼낸 청크로 만든 정산만 반영한다. 다른 큐의 청크로 만든 정산은 {@code IllegalArgumentException}이다. */
     Outcomes settle(Settlement settlement);
 
     /**
      * 청크의 리스를 "지금부터 {@code leaseDuration} 뒤"로 바꾼다. 같은 연장을 다시 해도 안전하다. 기한이 지났어도 아무도 다시 꺼내지
      * 않았다면 {@code OK}이고, 다른 리스가 가져갔거나 이미 정산된 메시지는 효력 없이 {@code STALE}이다.
+     * 다른 큐의 청크는 {@code IllegalArgumentException}이다.
      */
     Extension extend(Chunk chunk, Duration leaseDuration);
 }

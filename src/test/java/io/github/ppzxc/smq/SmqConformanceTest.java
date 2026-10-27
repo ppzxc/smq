@@ -537,6 +537,31 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 다른_큐의_청크로_정산하거나_연장하면_IllegalArgumentException이고_원래_큐의_리스는_그대로다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue a = smq.declare("a", QueueOptions.defaults());
+        Queue b = smq.declare("b", QueueOptions.defaults());
+        a.publish(msg("x"));
+        Chunk fromA = a.pull(1, Duration.ZERO);
+        Chunk emptyFromB = b.pull(1, Duration.ZERO);
+        Settlement emptySettlement = emptyFromB.settle().build();
+
+        assertThrows(IllegalArgumentException.class, () -> b.settle(fromA.ackAll()));
+        assertThrows(IllegalArgumentException.class, () -> b.extend(fromA, Duration.ofSeconds(100)));
+        // 빈 값도 큐 확인이 먼저다.
+        assertThrows(IllegalArgumentException.class, () -> a.settle(emptySettlement));
+        assertThrows(IllegalArgumentException.class, () -> a.extend(emptyFromB, Duration.ofSeconds(1)));
+
+        // 거부된 호출은 아무것도 바꾸지 않아 A의 리스는 그대로이고, 올바른 큐로는 정산된다.
+        assertEquals(new QueueCounts(0, 1, 0), a.counts());
+        // 연장이 잘못 반영됐다면 100초로 늘어나 10초 뒤에도 리스 중일 것이다.
+        clock.advance(Duration.ofSeconds(10));
+        assertEquals(new QueueCounts(1, 0, 0), a.counts());
+        assertTrue(a.settle(fromA.ackAll()).allOk());
+        assertEquals(new QueueCounts(0, 0, 0), a.counts());
+    }
+
+    @Test
     void 빈_청크를_연장하면_빈_결과이고_인자_오류는_IllegalArgumentException() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         Chunk empty = q.pull(1, Duration.ZERO);

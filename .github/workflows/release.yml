@@ -1,0 +1,180 @@
+# 공개 워크플로. main에서 workflow_dispatch로만 실행하고 Environment release를 쓴다.
+# Portal에 USER_MANAGED로 올려 VALIDATED까지 확인하고 배포 테스트 (b)를 돈다. Publish는 자동화하지 않는다.
+# 마지막에 사람이 Portal에서 직접 Publish를 누른다. 절차는 docs/release.md를 따른다.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 공개할 smq 버전 (예 0.0.1). build.gradle.kts의 version과 같아야 한다
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  PORTAL_DOWNLOAD: https://central.sonatype.com/api/v1/publisher/deployments/download
+  CENTRAL_REPO: https://repo.maven.apache.org/maven2
+  ARTIFACT_PATH: io/github/ppzxc/smq
+
+jobs:
+  # 릴리스 커밋(이 실행의 SHA)의 CI 체크 상태를 조회한다. Linux·Windows 워크플로의 check, 배포 테스트 (a)가 모두 녹색이어야 한다.
+  # randomBenchSmoke는 Linux check 잡의 단계이므로 그 잡이 success이면 통과한 것이다.
+  ci-status:
+    # main 외 브랜치와 태그에서는 건너뛰고, 아래 잡이 모두 이 잡에 의존해 함께 건너뛴다.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: CI 체크 상태 조회
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          fail=0
+          # 두 워크플로(Linux, Windows) 모두에서 check와 deploy-test 잡이 녹색이어야 한다. 이름은 .github/workflows의 name과 잡 id와 맞춘다.
+          for wf in Linux Windows; do
+            run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=push&per_page=50" \
+              --jq "[.workflow_runs[] | select(.name == \"$wf\")] | sort_by(.created_at) | last | .id // empty")
+            if [ -z "$run_id" ]; then
+              echo "::error::$wf 워크플로 실행을 찾지 못했다(커밋 $SHA). main push의 CI가 끝난 뒤 다시 실행한다."
+              fail=1
+              continue
+            fi
+            for job in check deploy-test; do
+              conclusion=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
+                --jq "[.jobs[] | select(.name == \"$job\")] | first | .conclusion // \"missing\"")
+              echo "$wf / $job: $conclusion"
+              if [ "$conclusion" != "success" ]; then
+                echo "::error::$wf / $job 가 녹색이 아니다($conclusion)."
+                fail=1
+              fi
+            done
+          done
+          exit "$fail"
+
+  upload:
+    needs: ci-status
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 입력 버전과 빌드 버전 확인
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          build_version=$(sed -nE 's/^version = "([^"]+)".*/\1/p' build.gradle.kts | head -1)
+          if [ "$build_version" != "$VERSION" ]; then
+            echo "::error::입력 버전($VERSION)이 build.gradle.kts의 version($build_version)과 다르다."
+            exit 1
+          fi
+
+      - name: Portal Bearer 토큰 만들기
+        shell: bash
+        env:
+          CENTRAL_USERNAME: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALUSERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALPASSWORD }}
+        run: |
+          token=$(printf '%s:%s' "$CENTRAL_USERNAME" "$CENTRAL_PASSWORD" | base64 | tr -d '\n')
+          echo "::add-mask::$token"
+          echo "PORTAL_TOKEN=$token" >> "$GITHUB_ENV"
+
+      # Portal API에는 이름·버전으로 배포를 찾는 목록 조회가 없다. 그래서 아티팩트가 보이는지로 판단한다.
+      #  - Central에 이미 보이면 PUBLISHED다. 다음 버전으로 올린다.
+      #  - Portal의 VALIDATED 배포 다운로드 경로에 보이면 VALIDATED 배포가 남아 있다. Portal에서 drop한다.
+      - name: 같은 버전의 기존 배포 조회
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          pom="smq-$VERSION.pom"
+          code() { curl -sS -o /dev/null --max-time 60 -w '%{http_code}' "$@" || echo 000; }
+
+          central=$(code "$CENTRAL_REPO/$ARTIFACT_PATH/$VERSION/$pom")
+          if [ "$central" = "200" ]; then
+            echo "::error::smq $VERSION 은 이미 Maven Central에 PUBLISHED 상태다. 버전을 다음 패치로 올린다."
+            exit 1
+          fi
+
+          staged=$(code -H "Authorization: Bearer $PORTAL_TOKEN" "$PORTAL_DOWNLOAD/$ARTIFACT_PATH/$VERSION/$pom")
+          case "$staged" in
+            200)
+              echo "::error::smq $VERSION 의 VALIDATED 배포가 Portal에 남아 있다. Portal(https://central.sonatype.com/publishing/deployments)에서 drop한 뒤 다시 실행한다."
+              exit 1 ;;
+            404) echo "기존 배포 없음" ;;
+            *)
+              echo "::error::Portal 조회 실패(HTTP $staged). 자격증명과 Portal 상태를 확인한다."
+              exit 1 ;;
+          esac
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # USER_MANAGED 업로드(build.gradle.kts의 automaticRelease = false). 이 단계는 Publish를 호출하지 않는다.
+      - name: Portal 업로드 (USER_MANAGED)
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALUSERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALPASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGINMEMORYKEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGINMEMORYKEYPASSWORD }}
+        run: ./gradlew publishToMavenCentral --no-daemon --stacktrace
+
+      # 업로드 도구가 반환한 뒤에도 검증이 끝나기 전일 수 있어서, 소비자가 읽는 세 파일이 VALIDATED 경로에 보일 때까지 기다린다.
+      - name: VALIDATED 대기
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          SMQ_REPO_TOKEN: ${{ env.PORTAL_TOKEN }}
+          SMQ_WAIT_LIMIT_SECONDS: '1800'
+          SMQ_WAIT_INTERVAL_SECONDS: '30'
+        run: deploy-test/wait-for-artifact.sh "$VERSION" "$PORTAL_DOWNLOAD"
+
+  # 배포 테스트 (b): 스테이징(VALIDATED)에서 소비자 4개를 Linux·Windows로 돌린다.
+  staging-test:
+    needs: upload
+    uses: ./.github/workflows/deploy-test.yml
+    with:
+      version: ${{ inputs.version }}
+      repository: staging
+    secrets: inherit
+
+  # 마지막 단계. 여기서는 Publish를 호출하지 않고 사람에게 안내만 한다.
+  announce:
+    needs: staging-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish 안내
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo "## smq $VERSION 스테이징 검증 완료"
+            echo
+            echo "배포 테스트 (b)가 통과했다. 공개는 자동으로 하지 않는다."
+            echo
+            echo "1. https://central.sonatype.com/publishing/deployments 에서 smq $VERSION 배포(VALIDATED)를 연다."
+            echo "2. **Publish**를 직접 누른다. 되돌릴 수 없다."
+            echo "3. 공개 뒤 배포 테스트 워크플로를 repository=central로 실행해 (c)를 확인하고, 태그와 GitHub Release를 만든다(docs/release.md)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "배포 테스트 (b) 통과. Portal에서 smq $VERSION 을 직접 Publish한다."

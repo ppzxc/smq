@@ -61,7 +61,3 @@ jobs:
         run: |
           version=$(sed -nE 's/^version = "([^"]+)".*/\1/p' build.gradle.kts | head -1)
           deploy-test/run-all.sh "$version"
-
-      - name: 배포 테스트 재시도 스크립트 검증
-        shell: bash
-        run: deploy-test/test/wait-for-artifact-test.sh

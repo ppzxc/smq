@@ -13,16 +13,21 @@ limit="${SMQ_WAIT_LIMIT_SECONDS:-7200}"
 interval="${SMQ_WAIT_INTERVAL_SECONDS:-60}"
 base="${repo%/}/io/github/ppzxc/smq/$version"
 
-curl_args=(-fsS -o /dev/null --max-time 60)
+curl_args=(-sS -o /dev/null --max-time 60 -w "%{http_code}")
 if [ -n "${SMQ_REPO_TOKEN:-}" ]; then
   curl_args+=(-H "Authorization: Bearer $SMQ_REPO_TOKEN")
 fi
 
 # 소비자가 읽는 세 파일이 모두 보여야 한다. 일부만 동기화된 상태에서 소비자를 돌리지 않기 위해서다.
 visible() {
-  local f
+  local f code
   for f in "smq-$version.pom" "smq-$version.module" "smq-$version.jar"; do
-    curl "${curl_args[@]}" "$base/$f" 2>/dev/null || return 1
+    code=$(curl "${curl_args[@]}" "$base/$f" 2>/dev/null || true)
+    case "$code" in
+      200) ;;
+      401|403) echo "::error::인증 또는 권한 오류($code): $base/$f. 동기화 지연이 아니므로 재시도하지 않는다." >&2; exit 2 ;;
+      *) return 1 ;;  # 404, 5xx, 네트워크 오류는 동기화 지연으로 보고 재시도한다
+    esac
   done
 }
 

@@ -28,7 +28,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 시드 하나의 실행: 미리 채우기, 부하 구간, 소진, 검증. 단일 프로세스이고 스레드는 여럿이다. 공개 API({@code Smq}, {@code Queue})만 쓰고
+ * 시드 하나의 실행: 미리 채우기, 부하 구간, 소진, 검증. 프로세스 수가 1이면 이 JVM의 스레드 여럿이 돈다. 1보다 크면 이 JVM(부모)은
+ * 미리 채우기와 표본과 소진과 판정을 맡고, 프로듀서와 컨슈머는 자식 JVM이 같은 SQLite 파일에서 돈다. 공개 API({@code Smq}, {@code Queue})만 쓰고
  * 실제 시계로 돈다.
  *
  * <p>시각 규약: 발행과 정산은 호출 직전 벽시계를, 꺼내기는 호출이 돌아온 직후 벽시계를 기록한다. 검사기의 부등식이 모두 거짓 위반을 내지
@@ -47,6 +48,10 @@ final class RandomRun {
     private static final long SAMPLE_INTERVAL_MS = 500;
     /** 소진 상한의 기본 몫. 리스 기한과 NACK 지연(최대 2초)은 따로 더한다. */
     private static final long DRAIN_BASE_MS = 30_000;
+    /** 부모가 자식을 띄우고 자식이 SQLite를 열 때까지 주는 여유. 부하 구간은 이만큼 뒤에 시작한다. */
+    private static final long CHILD_START_MARGIN_MS = 4_000;
+    private static final long CHILD_KILL_GRACE_MS = 60_000;
+    private static final long DEPTH_REFRESH_NANOS = 100_000_000L;
 
     interface Checker {
         List<Violation> check(InvariantChecker.Config config, List<Published> published, List<Delivery> deliveries,
@@ -57,6 +62,9 @@ final class RandomRun {
     private final Script script;
     private final Checker checker;
     private final long drainLimitMillis;
+    /** 이 JVM의 프로세스 번호. 단일 프로세스는 0, 다중 프로세스의 부모는 자식 번호(0..n-1) 다음인 n이다. */
+    private final int process;
+    private final ChildSpawner spawner;
 
     private final ConcurrentLinkedQueue<Published> published = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<Delivery> deliveries = new ConcurrentLinkedQueue<>();
@@ -75,12 +83,19 @@ final class RandomRun {
     private long prefillBytes;
     private volatile long loadStartMillis;
     private volatile long loadEndMillis;
+    private volatile long depthAtNanos;
+    private volatile long depth;
 
-    RandomRun(RunParams params, Checker checker, long drainLimitMillis) {
+    RandomRun(RunParams params, Checker checker, long drainLimitMillis, int process, ChildSpawner spawner) {
         this.params = params;
         this.script = new Script(params);
         this.checker = checker;
         this.drainLimitMillis = drainLimitMillis;
+        this.process = process;
+        this.spawner = spawner;
+    }
+
+    private record Queues(Queue target, Queue deadLetter) {
     }
 
     static long drainLimit(RunParams p) {
@@ -89,7 +104,12 @@ final class RandomRun {
 
     /** {@code dir}에 SQLite 파일을 만들고 돈다. 예외는 {@link Verdict#ERROR}로 돌려준다. */
     static RunResult execute(RunParams params, Path dir, Checker checker) {
-        RandomRun run = new RandomRun(params, checker, drainLimit(params));
+        return execute(params, dir, checker, ChildSpawner.jvm());
+    }
+
+    static RunResult execute(RunParams params, Path dir, Checker checker, ChildSpawner spawner) {
+        RandomRun run = new RandomRun(params, checker, drainLimit(params), params.processes() > 1 ? params.processes() : 0,
+                spawner);
         try {
             return run.runIn(dir);
         } catch (Throwable t) {
@@ -99,22 +119,74 @@ final class RandomRun {
 
     private RunResult runIn(Path dir) throws Exception {
         boolean drained;
-        try (Smq smq = Smq.sqlite(dir.resolve("smq.db")).durability(params.durability())
-                .leaseDuration(Duration.ofMillis(params.leaseMillis())).open()) {
-            smq.declare(DEAD_LETTER, QueueOptions.defaults());
-            QueueOptions options = QueueOptions.defaults().deadLetterQueue(DEAD_LETTER)
-                    .singleActiveConsumer(params.singleActiveConsumer());
-            if (params.maxDeliveries() > 0) {
-                options = options.maxDeliveries(params.maxDeliveries(), DEAD_LETTER);
+        Path db = dir.resolve("smq.db");
+        try (Smq smq = open(db)) {
+            Queues q = declare(smq);
+            prefill(q.target());
+            if (params.processes() > 1) {
+                runChildren(q, db, dir);
+            } else {
+                runLoad(q, System.currentTimeMillis(), params.producers().getFirst(), params.consumers().getFirst(),
+                        true);
             }
-            Queue target = smq.declare(TARGET, options);
-            Queue dlq = smq.queue(DEAD_LETTER);
-
-            prefill(target);
-            runLoad(target, dlq);
-            drained = drain(target, dlq);
+            drained = drain(q.target(), q.deadLetter());
         }
         return judge(drained);
+    }
+
+    private Smq open(Path db) {
+        return Smq.sqlite(db).durability(params.durability()).leaseDuration(Duration.ofMillis(params.leaseMillis()))
+                .open();
+    }
+
+    /** 대상 큐와 dead letter 큐를 선언한다. 여러 프로세스가 같은 옵션으로 불러도 같은 큐를 얻는다. */
+    private Queues declare(Smq smq) {
+        Queue dlq = smq.declare(DEAD_LETTER, QueueOptions.defaults());
+        QueueOptions options = QueueOptions.defaults().deadLetterQueue(DEAD_LETTER)
+                .singleActiveConsumer(params.singleActiveConsumer());
+        if (params.maxDeliveries() > 0) {
+            options = options.maxDeliveries(params.maxDeliveries(), DEAD_LETTER);
+        }
+        return new Queues(smq.declare(TARGET, options), dlq);
+    }
+
+    /** 자식 프로세스를 띄워 부하 구간 동안 {@code counts()}만 표본하고, 끝나면 모든 자식의 기록을 합친다. */
+    private void runChildren(Queues q, Path db, Path dir) throws Exception {
+        long startAt = System.currentTimeMillis() + CHILD_START_MARGIN_MS;
+        List<ChildSpawner.Running> running = new ArrayList<>();
+        try {
+            for (int i = 0; i < params.processes(); i++) {
+                running.add(spawner.spawn(new ChildSpawner.Spec(params, i, db, dir, startAt)));
+            }
+            runLoad(q, startAt, 0, 0, true);
+            long timeout = loadEndMillis + CHILD_KILL_GRACE_MS - System.currentTimeMillis();
+            for (ChildSpawner.Running r : running) {
+                r.await(timeout);
+            }
+        } finally {
+            running.forEach(ChildSpawner.Running::destroy);
+        }
+        for (int i = 0; i < params.processes(); i++) {
+            ChildOutput o = ChildOutput.read(dir, i);
+            published.addAll(o.published());
+            deliveries.addAll(o.deliveries());
+            loadAckedMessages.addAndGet(o.loadAckedMessages());
+            loadAckedBytes.addAndGet(o.loadAckedBytes());
+        }
+    }
+
+    /**
+     * 다중 프로세스의 자식 쪽. 부모가 선언해 둔 큐에 붙어 {@code startAt}부터 부하 구간 동안 이 프로세스 몫의 스레드를 돌리고,
+     * 끝나면 기록을 {@code outDir}에 쓴다.
+     */
+    static void runChild(RunParams params, int process, Path db, Path outDir, long startAt) throws Exception {
+        RandomRun run = new RandomRun(params, null, 0, process, null);
+        try (Smq smq = run.open(db)) {
+            run.runLoad(run.declare(smq), startAt, params.producers().get(process), params.consumers().get(process),
+                    false);
+        }
+        ChildOutput.write(outDir, process, new ChildOutput(run.loadAckedMessages.get(), run.loadAckedBytes.get(),
+                List.copyOf(run.published), List.copyOf(run.deliveries)));
     }
 
     // ---- 미리 채우기
@@ -133,7 +205,7 @@ final class RandomRun {
         List<Published> records = new ArrayList<>(n);
         long bytes = 0;
         for (int i = 0; i < n; i++) {
-            Tag tag = new Tag(params.seed(), 0, first + i);
+            Tag tag = new Tag(params.seed(), process, first + i);
             Script.Planned p = script.message(tag);
             batch.add(p.message());
             records.add(new Published(tag, p.content(), 0, p.delayMillis()));
@@ -151,20 +223,35 @@ final class RandomRun {
 
     // ---- 부하 구간
 
-    private void runLoad(Queue target, Queue dlq) throws InterruptedException {
-        loadStartMillis = System.currentTimeMillis();
-        loadEndMillis = loadStartMillis + params.loadMillis();
+    /**
+     * {@code startAt}부터 {@code loadMillis} 동안 부하를 건다. 스레드는 {@code startAt}까지 기다렸다가 함께 시작한다.
+     *
+     * @param sampling 부하 중 {@code counts()}를 표본한다(단일 프로세스와 다중 프로세스의 부모)
+     */
+    private void runLoad(Queues q, long startAt, int producers, int consumers, boolean sampling)
+            throws InterruptedException {
+        Queue target = q.target();
+        Queue dlq = q.deadLetter();
+        loadStartMillis = startAt;
+        loadEndMillis = startAt + params.loadMillis();
         List<Thread> threads = new ArrayList<>();
-        for (int i = 0; i < params.producers(); i++) {
+        for (int i = 0; i < producers; i++) {
             threads.add(thread("producer-" + i, () -> producerLoop(target)));
         }
-        for (int i = 0; i < params.consumers(); i++) {
+        for (int i = 0; i < consumers; i++) {
             threads.add(thread("consumer-" + i, () -> consumerLoop(target, dlq)));
+        }
+        if (!threads.isEmpty()) {
+            for (long wait = startAt - System.currentTimeMillis(); wait > 0; wait = startAt - System.currentTimeMillis()) {
+                sleepMillis(Math.min(wait, 50));
+            }
         }
         threads.forEach(Thread::start);
         try {
             while (System.currentTimeMillis() < loadEndMillis && failure.get() == null) {
-                sample(target, dlq, false);
+                if (sampling) {
+                    sample(target, dlq, false);
+                }
                 sleepMillis(Math.min(SAMPLE_INTERVAL_MS, Math.max(1, loadEndMillis - System.currentTimeMillis())));
             }
         } finally {
@@ -199,17 +286,32 @@ final class RandomRun {
     }
 
     private void producerLoop(Queue target) {
-        long messageCap = prefillMessages + BACKLOG_MESSAGES;
-        long byteCap = prefillBytes + BACKLOG_BYTES;
         while (!stop.get()) {
-            long outstanding = publishedMessages.get() - ackedMessages.get();
-            long outstandingBytes = publishedBytes.get() - ackedBytes.get();
-            if (outstanding >= messageCap || outstandingBytes >= byteCap) {
+            if (backlogFull(target)) {
                 sleepMillis(5);
                 continue;
             }
             publishBatch(target, params.publishBatch());
         }
+    }
+
+    /**
+     * 쌓인 양이 선을 넘었는지. 단일 프로세스는 자기가 센 발행과 ACK의 차이로 보고, 다중 프로세스는 ACK가 다른 프로세스에서 일어나
+     * 이 프로세스의 수로는 알 수 없으므로 큐의 {@code counts()}를 잠깐씩 캐시해 보며 메시지 수로만 제한한다.
+     */
+    private boolean backlogFull(Queue target) {
+        if (params.processes() == 1) {
+            return publishedMessages.get() - ackedMessages.get() >= prefillMessages + BACKLOG_MESSAGES
+                    || publishedBytes.get() - ackedBytes.get() >= prefillBytes + BACKLOG_BYTES;
+        }
+        long now = System.nanoTime();
+        if (now - depthAtNanos > DEPTH_REFRESH_NANOS) {
+            QueueCounts c = target.counts();
+            depth = c.ready() + c.leased() + c.delayed();
+            depthAtNanos = now;
+        }
+        long avgBytes = params.maxMessageBytes() / 4 + 64;
+        return depth >= params.prefillDepth() + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / avgBytes);
     }
 
     private void consumerLoop(Queue target, Queue dlq) throws InterruptedException {
@@ -246,7 +348,7 @@ final class RandomRun {
         if (finished) {
             settleDecisions(target, chunk, tags, settles);
         }
-        long chunkId = nextChunk.incrementAndGet();
+        long chunkId = nextChunkId();
         record(QueueKind.TARGET, chunkId, messages, tags, pulledAt, deadline, settles);
     }
 
@@ -342,8 +444,13 @@ final class RandomRun {
                 countAck(messages.get(i).payload().length);
             }
         }
-        record(kind, nextChunk.incrementAndGet(), messages, tags, pulledAt, deadline, settles);
+        record(kind, nextChunkId(), messages, tags, pulledAt, deadline, settles);
         return true;
+    }
+
+    /** 모든 프로세스에서 유일한 청크 번호. 위쪽 비트가 프로세스 번호다. */
+    private long nextChunkId() {
+        return ((long) process << 40) | nextChunk.incrementAndGet();
     }
 
     private void countAck(int bytes) {
@@ -368,10 +475,8 @@ final class RandomRun {
 
     /** 헤더의 태그. 읽을 수 없으면 어떤 발행 기록과도 맞지 않는 태그를 돌려줘 검사기가 유령으로 보고하게 한다. */
     static Tag tagOf(Message m) {
-        String raw = m.headers().get(Script.TAG_HEADER);
         try {
-            String[] parts = raw.split("/");
-            return new Tag(Long.parseLong(parts[0]), Integer.parseInt(parts[1]), Long.parseLong(parts[2]));
+            return Tag.parse(m.headers().get(Script.TAG_HEADER));
         } catch (RuntimeException e) {
             return new Tag(0, -1, m.id().value());
         }

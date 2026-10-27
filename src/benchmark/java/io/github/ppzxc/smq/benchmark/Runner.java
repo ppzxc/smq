@@ -75,9 +75,11 @@ final class Runner {
             throws IOException {
         Path out = dir.resolve("child-" + index + ".out");
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        Process p = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED", "-cp",
-                System.getProperty("java.class.path"), ChildMain.class.getName(), spec.toArg(), role.name(),
-                db.toString(), String.valueOf(startAt))
+        List<String> cmd = new ArrayList<>();
+        cmd.add(java);
+        cmd.addAll(ModuleGuard.childJvmArgs(System.getProperty("jdk.module.path"), System.getProperty("java.class.path")));
+        cmd.addAll(List.of(ChildMain.class.getName(), spec.toArg(), role.name(), db.toString(), String.valueOf(startAt)));
+        Process p = new ProcessBuilder(cmd)
                 .redirectOutput(out.toFile())
                 .redirectError(ProcessBuilder.Redirect.INHERIT)
                 .start();

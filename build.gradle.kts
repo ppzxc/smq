@@ -1,19 +1,22 @@
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.JavaLibrary
+import com.vanniktech.maven.publish.SourcesJar
 import java.util.zip.ZipFile
+import org.gradle.plugins.signing.SigningExtension
 
 plugins {
     `java-library`
-    `maven-publish`
+    id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
 group = "io.github.ppzxc"
-version = "0.1.0-SNAPSHOT"
+// 버전은 하드코딩한다. main은 항상 다음 패치-SNAPSHOT이고, 릴리스 PR에서만 바꾼다.
+version = "0.0.1-SNAPSHOT"
 
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
-    withSourcesJar()
-    withJavadocJar()
 }
 
 // 벤치 하네스. 배포 jar에는 들어가지 않고, main 출력과 sqlite-jdbc에만 의존한다.
@@ -109,10 +112,45 @@ tasks.register<JavaExec>("generateSchemaSample") {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            from(components["java"])
+// 서명은 항상 켜 두되(키가 있으면 로컬이든 CI든 서명한다), 키가 없을 때 실패하는 곳은 Central 업로드 경로뿐이다.
+// 그래야 릴리스 버전(비 SNAPSHOT)에서도 키 없는 publishToMavenLocal이 성공한다.
+afterEvaluate {
+    extensions.configure<SigningExtension> {
+        setRequired(provider {
+            gradle.taskGraph.allTasks.any { it.name.contains("MavenCentral") }
+        })
+    }
+}
+
+mavenPublishing {
+    configure(JavaLibrary(javadocJar = JavadocJar.Javadoc(), sourcesJar = SourcesJar.Sources()))
+    // USER_MANAGED: 업로드까지만 하고 공개(Publish)는 사람이 Portal에서 누른다.
+    publishToMavenCentral(automaticRelease = false)
+    // 조건 없이 켠다. 로컬 signing.* 키링과 CI signingInMemoryKey를 모두 받는다.
+    signAllPublications()
+
+    pom {
+        name = "smq"
+        description = "청크로 꺼내 ACK/NACK하는 재시도 가능한 내구성 큐 라이브러리"
+        url = "https://github.com/ppzxc/smq"
+        licenses {
+            license {
+                name = "MIT License"
+                url = "https://opensource.org/licenses/MIT"
+                distribution = "repo"
+            }
+        }
+        developers {
+            developer {
+                id = "ppzxc"
+                name = "ppzxc"
+                url = "https://github.com/ppzxc"
+            }
+        }
+        scm {
+            url = "https://github.com/ppzxc/smq"
+            connection = "scm:git:git://github.com/ppzxc/smq.git"
+            developerConnection = "scm:git:ssh://git@github.com/ppzxc/smq.git"
         }
     }
 }

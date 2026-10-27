@@ -3,6 +3,7 @@ package io.github.ppzxc.smq;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.github.ppzxc.smq.PullWaiter.Attempt;
 import io.github.ppzxc.smq.storage.ChangeHint;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -47,7 +48,7 @@ class PullWaiterTest {
                 waiter.close();
             }
         };
-        String result = waiter.await(Duration.ofSeconds(30), () -> null, () -> "empty");
+        String result = waiter.await(Duration.ofSeconds(30), () -> Attempt.empty(), () -> "empty");
         assertEquals("empty", result);
         assertEquals(List.of(), hint.awaits);
     }
@@ -72,7 +73,7 @@ class PullWaiterTest {
 
     private static List<Duration> awaitsUntilFifthAttempt(PullWaiter waiter, RecordingHint hint) throws Exception {
         AtomicInteger attempts = new AtomicInteger();
-        waiter.await(Duration.ofSeconds(30), () -> attempts.incrementAndGet() < 6 ? null : "got", () -> "empty");
+        waiter.await(Duration.ofSeconds(30), () -> attempts.incrementAndGet() < 6 ? Attempt.empty() : Attempt.found("got"), () -> "empty");
         return hint.awaits;
     }
 
@@ -100,8 +101,8 @@ class PullWaiterTest {
             if (attempts.incrementAndGet() > 3) {
                 throw new AssertionError("표시가 없는데 다시 꺼냈다");
             }
-            return null;
-        }, () -> "empty", () -> false);
+            return Attempt.empty();
+        }, () -> "empty");
         assertEquals("empty", result);
         assertEquals(1, attempts.get());
     }
@@ -116,8 +117,8 @@ class PullWaiterTest {
             if (n > 10) {
                 throw new AssertionError("표시가 없어졌는데도 다시 꺼냈다");
             }
-            return n == 5 ? "got" : null;
-        }, () -> "empty", () -> attempts.get() < 3);
+            return n == 5 ? Attempt.found("got") : n < 3 ? Attempt.retryNow() : Attempt.empty();
+        }, () -> "empty");
         assertEquals("got", result);
         assertEquals(5, attempts.get());
         // 3번째 시도부터 표시가 없으므로 3번째와 4번째 뒤에만 기다린다.
@@ -136,8 +137,8 @@ class PullWaiterTest {
             if (n == 3) {
                 waiter.close();
             }
-            return null;
-        }, () -> "empty", () -> true);
+            return Attempt.retryNow();
+        }, () -> "empty");
         assertEquals("empty", result);
         assertEquals(3, attempts.get());
     }
@@ -154,8 +155,8 @@ class PullWaiterTest {
             if (n == 3) {
                 Thread.currentThread().interrupt();
             }
-            return null;
-        }, () -> "empty", () -> true));
+            return Attempt.retryNow();
+        }, () -> "empty"));
         assertEquals(3, attempts.get());
     }
 }

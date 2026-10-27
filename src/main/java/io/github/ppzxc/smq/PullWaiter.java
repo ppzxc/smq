@@ -5,7 +5,6 @@ import io.github.ppzxc.smq.storage.ConditionChangeHint;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -48,19 +47,35 @@ final class PullWaiter {
         hint.wake();
     }
 
-    /**
-     * @param attempt 한 번 꺼내 본다. 비었으면 null
-     * @param empty 시간이 다했거나 닫혔을 때의 빈 결과
-     */
-    <T> T await(Duration wait, Supplier<T> attempt, Supplier<T> empty) throws InterruptedException {
-        return await(wait, attempt, empty, () -> false);
+    /** 한 번 꺼내 본 결과. 결과가 있거나, 비어서 기다리거나, 비었지만 바로 다시 꺼낸다. */
+    sealed interface Attempt<T> {
+
+        record Found<T>(T value) implements Attempt<T> {}
+
+        record Empty<T>() implements Attempt<T> {}
+
+        record RetryNow<T>() implements Attempt<T> {}
+
+        static <T> Attempt<T> found(T value) {
+            return new Found<>(value);
+        }
+
+        /** 비었다. 힌트나 폴링 간격만큼 기다린 뒤 다시 꺼낸다. */
+        static <T> Attempt<T> empty() {
+            return new Empty<>();
+        }
+
+        /** 비었지만 기다리지 않고 바로 다시 꺼낸다. 그 사이에도 닫힘과 interrupt는 확인한다. */
+        static <T> Attempt<T> retryNow() {
+            return new RetryNow<>();
+        }
     }
 
     /**
-     * @param retryNow 비어 돌아온 직후 true이면 기다리지 않고 바로 다시 꺼낸다. 그 사이에도 닫힘과 interrupt를 확인한다.
+     * @param attempt 한 번 꺼내 본다
+     * @param empty 시간이 다했거나 닫혔을 때의 빈 결과
      */
-    <T> T await(Duration wait, Supplier<T> attempt, Supplier<T> empty, BooleanSupplier retryNow)
-            throws InterruptedException {
+    <T> T await(Duration wait, Supplier<Attempt<T>> attempt, Supplier<T> empty) throws InterruptedException {
         long deadline = System.nanoTime() + wait.toNanos();
         long pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
         while (true) {
@@ -71,7 +86,7 @@ final class PullWaiter {
             if (closed.get()) {
                 return empty.get();
             }
-            T result;
+            Attempt<T> result;
             try {
                 result = attempt.get();
             } catch (RuntimeException e) {
@@ -81,10 +96,10 @@ final class PullWaiter {
                 }
                 throw e;
             }
-            if (result != null) {
-                return result;
+            if (result instanceof Attempt.Found<T> found) {
+                return found.value();
             }
-            if (retryNow.getAsBoolean()) {
+            if (result instanceof Attempt.RetryNow<T>) {
                 if (Thread.interrupted()) {
                     throw new InterruptedException();
                 }

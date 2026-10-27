@@ -81,16 +81,17 @@ final class DefaultQueue implements Queue {
             throw new IllegalArgumentException("wait must not be negative: " + wait);
         }
         Validation.positive(leaseDuration, "leaseDuration");
-        boolean[] deadLettersRemain = new boolean[1];
         long deadline = System.nanoTime() + wait.toNanos();
         return waiter.await(wait, () -> {
             // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
             Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
             PullResult r = storage.pull(name, max, leaseDuration, clock.instant(), remaining);
+            if (!r.messages().isEmpty()) {
+                return PullWaiter.Attempt.found(new Chunk(name, r.messages(), r.leaseDeadline(), r.token()));
+            }
             // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다(닫힘과 interrupt는 대기 루프가 확인한다).
-            deadLettersRemain[0] = r.messages().isEmpty() && r.deadLettersRemain();
-            return r.messages().isEmpty() ? null : new Chunk(name, r.messages(), r.leaseDeadline(), r.token());
-        }, () -> new Chunk(name, List.of(), null, null), () -> deadLettersRemain[0]);
+            return r.deadLettersRemain() ? PullWaiter.Attempt.retryNow() : PullWaiter.Attempt.empty();
+        }, () -> new Chunk(name, List.of(), null, null));
     }
 
     @Override

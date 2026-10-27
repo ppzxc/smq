@@ -10,7 +10,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * SQLite 저장소의 쓰기 경로. 단일 연결, 단일 lock, 기준 스키마 버전, 영구 실패 상태, {@code SQLITE_BUSY} 판정과
- * 재시도 루프를 한 곳에서 소유한다(ADR-0004, ADR-0007).
+ * 재시도 루프를 한 곳에서 소유한다(ADR-0004, ADR-0007). 꺼내기 대기용 autocommit 읽기 {@link #anyOrUncertain}도
+ * 이 모듈을 거친다.
  *
  * <p>쓰기 실행은 두 가지다. {@link #executeUnverified}는 열 때만 쓰고 결과가 기준 버전이 된다. {@link #execute}는
  * 모든 큐 연산이 쓰고 {@code BEGIN IMMEDIATE} 안에서 트랜잭션마다 버전을 확인한다. 재시도 대기 중에도 lock을 쥔다.
@@ -56,13 +57,33 @@ final class TransactionExecutor {
         return connection;
     }
 
-    ReentrantLock lock() {
-        return lock;
+    /** autocommit 읽기. 연결에 한 번 묻고 그 결과를 돌려준다. */
+    @FunctionalInterface
+    interface ReadProbe {
+        /** 꺼낼 것이 있거나 큐가 없으면 참. 읽기 statement는 이 안에서 닫는다. */
+        boolean apply(Connection connection) throws SQLException;
     }
 
-    /** 영구 실패했거나 파일의 버전이 기준 버전과 다르면 참. autocommit 읽기가 쓴다. */
-    boolean versionChanged(int found) {
-        return failed || found != baselineVersion;
+    /**
+     * 꺼낼 것이 있는지 autocommit으로 본다. 쓰기 락과 재시도 없이 읽고 읽기 트랜잭션을 남기지 않는다.
+     * 확실하지 않으면(비어 보이는데 버전이 바뀌었거나 영구 실패, BUSY) 참을 돌려 쓰기 경로가 다시 확인하고
+     * 던지게 한다. BUSY가 아닌 오류는 예외다.
+     */
+    boolean anyOrUncertain(ReadProbe probe) {
+        lock.lock();
+        try {
+            if (probe.apply(connection)) {
+                return true;
+            }
+            return failed || SqliteSchema.pragmaInt(connection, "user_version") != baselineVersion;
+        } catch (SQLException e) {
+            if (isBusy(e)) {
+                return true;
+            }
+            throw new SmqStorageException("sqlite operation failed", e);
+        } finally {
+            lock.unlock();
+        }
     }
 
     /** 확인 없는 쓰기 트랜잭션. 열 때만 쓴다. 돌려준 버전이 기준 버전이 된다. */

@@ -47,9 +47,11 @@ import org.sqlite.SQLiteException;
 
 /**
  * SQLite 파일 하나를 쓰는 저장소. 이 클래스에는 열기 순서, 큐 연산 SQL, row codec이 있다.
- * 연결, lock, 스키마 버전 확인, {@code SQLITE_BUSY} 재시도는 {@link TransactionExecutor}가 소유한다.
- * 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의 확인하는 쓰기 트랜잭션을 거친다.
- * 꺼내기 대기용 {@link #anyReady}만 쓰기 락과 재시도 없는 autocommit 읽기로 따로 간다.
+ * 단일 연결, 단일 lock, 트랜잭션마다 하는 스키마 버전 확인, {@code SQLITE_BUSY} 재시도(기본 5회, 시도마다 늘어나는
+ * 대기)는 {@link TransactionExecutor}가 소유한다. 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의
+ * 확인하는 쓰기 트랜잭션({@code BEGIN IMMEDIATE})을 거치며 BUSY면 재시도한다.
+ * 읽기 경로는 따로 있다. 꺼내기 대기용 {@link #anyReady}는 같은 실행기의 autocommit 읽기를 써서 쓰기 락과
+ * 재시도 없이 보고, 확실하지 않으면 "있다"고 답해 쓰기 경로가 다시 확인하게 한다.
  * 열 때의 스키마 판정(생성, 거부, 업그레이드)은 상태 없는 {@link SqliteSchema}가 맡는다.
  */
 public final class SqliteStorage implements Storage {
@@ -308,40 +310,26 @@ public final class SqliteStorage implements Storage {
     }
 
     /**
-     * 꺼낼 메시지가 있는지 autocommit으로 본다. 쓰기 락을 잡지 않고, ResultSet과 Statement를 바로 닫아
-     * 읽기 트랜잭션이 열린 채 남지 않는다. 폴링이 쓰기 경합을 만들거나 checkpoint를 굶기지 않게 하기 위해서다.
-     * 있다고 나와도 실제 꺼내기는 쓰기 트랜잭션이 다시 확인한다. 큐가 없거나 스키마 버전이 바뀌었으면 true를 돌려 그쪽에서 오류가 나게 한다.
+     * 꺼낼 메시지가 있는지 autocommit으로 본다. 실행은 {@link TransactionExecutor#anyOrUncertain}이 맡아 쓰기 락과
+     * 재시도 없이, 읽기 트랜잭션을 남기지 않고 한다. 있다고 나와도 실제 꺼내기는 쓰기 트랜잭션이 다시 확인한다.
+     * 큐가 없으면 true를 돌려 그쪽에서 오류가 나게 한다.
      */
     private boolean anyReady(String queue, Instant now) {
-        Connection connection = executor.connection();
-        executor.lock().lock();
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
-                        + " AND " + READY_TIME_CONDITION + "), "
-                        + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
-            ps.setString(1, queue);
-            ps.setLong(2, toNanos(now));
-            ps.setLong(3, toNanos(now));
-            ps.setString(4, queue);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return true; // 일어날 수 없지만, 모르면 쓰기 경로가 확인하게 한다.
-                }
-                if (rs.getInt(1) == 1 || rs.getInt(2) == 0) {
-                    return true;
+        return executor.anyOrUncertain(connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
+                            + " AND " + READY_TIME_CONDITION + "), "
+                            + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
+                ps.setString(1, queue);
+                ps.setLong(2, toNanos(now));
+                ps.setLong(3, toNanos(now));
+                ps.setString(4, queue);
+                try (ResultSet rs = ps.executeQuery()) {
+                    // 행이 없는 일은 없지만, 모르면 쓰기 경로가 확인하게 한다.
+                    return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
                 }
             }
-            // 비어 보여도 스키마 버전이 바뀌었으면 쓰기 경로가 확인하고 던지게 한다. 대기 중인 꺼내기가
-            // 버전 변화를 놓치지 않기 위해서다.
-            return executor.versionChanged(SqliteSchema.pragmaInt(connection, "user_version"));
-        } catch (SQLException e) {
-            if (TransactionExecutor.isBusy(e)) {
-                return true; // 쓰기 트랜잭션 경로가 재시도한다.
-            }
-            throw new SmqStorageException("sqlite operation failed", e);
-        } finally {
-            executor.lock().unlock();
-        }
+        });
     }
 
     @Override

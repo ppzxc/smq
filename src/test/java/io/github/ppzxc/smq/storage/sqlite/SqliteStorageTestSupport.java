@@ -11,4 +11,9 @@ public final class SqliteStorageTestSupport {
     public static SqliteStorage open(Path path, int busyTimeoutMillis, int maxAttempts) {
         return SqliteStorage.open(path, Durability.PROCESS_CRASH, busyTimeoutMillis, maxAttempts);
     }
+
+    public static SqliteStorage open(
+            Path path, int busyTimeoutMillis, int maxAttempts, java.time.Duration lockWaitFloor) {
+        return SqliteStorage.open(path, Durability.PROCESS_CRASH, busyTimeoutMillis, maxAttempts, lockWaitFloor);
+    }
 }

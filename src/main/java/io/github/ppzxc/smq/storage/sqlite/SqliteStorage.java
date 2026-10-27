@@ -84,17 +84,35 @@ public final class SqliteStorage implements Storage {
     private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
 
     private final TransactionExecutor executor;
+    private final Duration lockWaitFloor;
 
-    private SqliteStorage(TransactionExecutor executor) {
+    private SqliteStorage(TransactionExecutor executor, Duration lockWaitFloor) {
         this.executor = executor;
+        this.lockWaitFloor = lockWaitFloor;
     }
 
     public static SqliteStorage open(Path path, Durability durability) {
-        return open(path, durability, BUSY_TIMEOUT_MILLIS, MAX_ATTEMPTS);
+        return open(path, durability, Deadline.DEFAULT_LOCK_WAIT_FLOOR);
+    }
+
+    /**
+     * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0009).
+     *     0 이상이다. 쓰기 트랜잭션 하나가 기본값(100ms)보다 오래 걸리는 저장소에서 늘린다.
+     */
+    public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
+        return open(path, durability, BUSY_TIMEOUT_MILLIS, MAX_ATTEMPTS, lockWaitFloor);
+    }
+
+    static SqliteStorage open(Path path, Durability durability, int busyTimeoutMillis, int maxAttempts) {
+        return open(path, durability, busyTimeoutMillis, maxAttempts, Deadline.DEFAULT_LOCK_WAIT_FLOOR);
     }
 
     /** 테스트가 경합을 짧게 재현할 수 있게 busy timeout과 시도 횟수를 정한다. */
-    static SqliteStorage open(Path path, Durability durability, int busyTimeoutMillis, int maxAttempts) {
+    static SqliteStorage open(
+            Path path, Durability durability, int busyTimeoutMillis, int maxAttempts, Duration lockWaitFloor) {
+        if (lockWaitFloor.isNegative()) {
+            throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
+        }
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(busyTimeoutMillis);
         // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
@@ -115,7 +133,7 @@ public final class SqliteStorage implements Storage {
                     return s.execute("PRAGMA journal_mode = WAL");
                 }
             });
-            return new SqliteStorage(executor);
+            return new SqliteStorage(executor, lockWaitFloor);
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
             if (isNotADatabase(e)) {
@@ -347,7 +365,7 @@ public final class SqliteStorage implements Storage {
     @Override
     public PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
         try {
-            return pull(queue, max, lease, now, Deadline.after(wait));
+            return pull(queue, max, lease, now, Deadline.after(wait, lockWaitFloor));
         } catch (Deadline.Expired e) {
             return PullResult.empty();
         }

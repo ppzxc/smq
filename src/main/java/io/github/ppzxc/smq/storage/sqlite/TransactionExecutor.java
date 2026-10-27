@@ -194,7 +194,7 @@ final class TransactionExecutor {
         }
     }
 
-    /** lock을 잡는다. 마감이 있으면 남은 시간(하한 {@link Deadline#LOCK_WAIT_FLOOR_NANOS}) 안에서만 기다리고, 못 잡으면 {@link Deadline.Expired}를 던진다. */
+    /** lock을 잡는다. 마감이 있으면 남은 시간(열 때 정한 하한) 안에서만 기다리고, 못 잡으면 {@link Deadline.Expired}를 던진다. */
     private void acquire(Deadline deadline) {
         if (!deadline.bounded()) {
             lock.lock();

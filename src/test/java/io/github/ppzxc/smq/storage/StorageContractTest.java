@@ -3,6 +3,9 @@ package io.github.ppzxc.smq.storage;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Message;
+import io.github.ppzxc.smq.MessageId;
+import io.github.ppzxc.smq.Outcome;
+import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -84,6 +87,107 @@ abstract class StorageContractTest {
         var bad = new NewMessage(null, Map.of());
         assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), T0));
         assertEquals(0, s.counts("q", T0).ready());
+    }
+
+    @Test
+    void 빈_꺼내기는_토큰과_기한이_비고_남았다는_표시가_거짓이다() {
+        s.declare("q", QueueOptions.defaults());
+        PullResult empty = s.pull("q", 1, LEASE, T0);
+        assertTrue(empty.messages().isEmpty());
+        assertNull(empty.token());
+        assertNull(empty.leaseDeadline());
+        assertFalse(empty.deadLettersRemain());
+    }
+
+    @Test
+    void 꺼낼_때마다_새_리스_토큰이_나온다() {
+        s.declare("q", QueueOptions.defaults());
+        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of()), new NewMessage(new byte[] {2}, Map.of())), T0);
+        LeaseToken first = s.pull("q", 1, LEASE, T0).token();
+        LeaseToken second = s.pull("q", 1, LEASE, T0).token();
+        assertNotNull(first);
+        assertNotNull(second);
+        assertNotEquals(first, second);
+    }
+
+    @Test
+    void 리스가_만료된_뒤_같은_큐에서_다시_꺼내도_새_리스_토큰이_나온다() {
+        s.declare("q", QueueOptions.defaults());
+        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of())), T0);
+        LeaseToken first = s.pull("q", 1, LEASE, T0).token();
+        PullResult again = s.pull("q", 1, LEASE, T0.plus(LEASE));
+        assertEquals(1, again.messages().size());
+        assertNotEquals(first, again.token());
+    }
+
+    @Test
+    void 리스_기한_정확히에는_다시_꺼낼_수_있고_1ns_앞에는_꺼낼_수_없다() {
+        s.declare("q", QueueOptions.defaults());
+        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of())), T0);
+        s.pull("q", 1, LEASE, T0);
+        Instant deadline = T0.plus(LEASE);
+        assertTrue(s.pull("q", 1, LEASE, deadline.minusNanos(1)).messages().isEmpty());
+        assertEquals(1, s.pull("q", 1, LEASE, deadline).messages().size());
+    }
+
+    @Test
+    void 지연_시각_정확히에는_꺼낼_수_있고_1ns_앞에는_꺼낼_수_없다() {
+        s.declare("q", QueueOptions.defaults());
+        Duration delay = Duration.ofSeconds(5);
+        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of(), delay)), T0);
+        Instant availableAt = T0.plus(delay);
+        assertTrue(s.pull("q", 1, LEASE, availableAt.minusNanos(1)).messages().isEmpty());
+        assertEquals(1, s.pull("q", 1, LEASE, availableAt).messages().size());
+    }
+
+    @Test
+    void 메시지가_전부_낡은_연장도_기한은_now_더하기_d이고_메시지별_결과는_STALE이다() {
+        s.declare("q", QueueOptions.defaults());
+        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of())), T0);
+        PullResult pulled = s.pull("q", 1, LEASE, T0);
+        MessageId id = pulled.messages().getFirst().id();
+        s.settle(pulled.token(), List.of(new Disposition(id, Disposition.Kind.ACK)), T0);
+
+        Instant now = T0.plusSeconds(1);
+        Duration d = Duration.ofSeconds(30);
+        Extended extended = s.extend(pulled.token(), List.of(id), d, now);
+
+        assertEquals(now.plus(d), extended.leaseDeadline());
+        assertEquals(List.of(new Result(id, Outcome.STALE)), extended.results());
+    }
+
+    @Test
+    void 낡은_리스_토큰으로_정산하면_STALE이고_저장소_상태가_바뀌지_않는다() {
+        s.declare("q", QueueOptions.defaults());
+        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of())), T0);
+        PullResult first = s.pull("q", 1, LEASE, T0);
+        MessageId id = first.messages().getFirst().id();
+        Instant second = T0.plus(LEASE);
+        PullResult current = s.pull("q", 1, LEASE, second);
+        assertEquals(1, current.messages().size());
+
+        List<Result> results = s.settle(first.token(), List.of(new Disposition(id, Disposition.Kind.ACK)), second);
+
+        assertEquals(List.of(new Result(id, Outcome.STALE)), results);
+        assertEquals(new QueueCounts(0, 1, 0), s.counts("q", second));
+        Instant expired = second.plus(LEASE);
+        assertEquals(1, s.pull("q", 1, LEASE, expired).messages().size());
+    }
+
+    @Test
+    void 정산_안에_dead_letter_큐_없는_reject가_있으면_정산_전체가_반영되지_않는다() {
+        s.declare("q", QueueOptions.defaults());
+        s.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of()), new NewMessage(new byte[] {2}, Map.of())), T0);
+        PullResult pulled = s.pull("q", 2, LEASE, T0);
+        MessageId acked = pulled.messages().get(0).id();
+        MessageId rejected = pulled.messages().get(1).id();
+
+        assertThrows(RuntimeException.class, () -> s.settle(pulled.token(),
+                List.of(new Disposition(acked, Disposition.Kind.ACK), new Disposition(rejected, Disposition.Kind.REJECT)),
+                T0));
+
+        assertEquals(new QueueCounts(0, 2, 0), s.counts("q", T0));
+        assertEquals(2, s.pull("q", 2, LEASE, T0.plus(LEASE)).messages().size());
     }
 
     /** 최대 전달 횟수 1인 큐에 count개를 발행해 한 번씩 꺼내고 리스가 만료된 시각에 다시 꺼낸 결과를 돌려준다. */

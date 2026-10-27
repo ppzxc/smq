@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
@@ -100,6 +101,7 @@ class SqliteMultiProcessStressTest {
     }
 
     @Test
+    @Timeout(value = 6, unit = TimeUnit.MINUTES)
     void 열두_JVM이_동시에_열고_발행하고_꺼내도_중복도_유실도_없다() throws Exception {
         int count = 12;
         int perWorker = 500;
@@ -129,6 +131,7 @@ class SqliteMultiProcessStressTest {
      * 정산은 했지만 출력하지 못한 메시지(한 번에 꺼내는 5개 이하)만 유실로 허용한다.
      */
     @Test
+    @Timeout(value = 6, unit = TimeUnit.MINUTES)
     void 작업자가_강제_종료돼도_나머지는_계속_진행하고_중복도_유실도_없다() throws Exception {
         int count = 6;
         int perWorker = 400;

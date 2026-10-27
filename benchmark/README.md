@@ -55,7 +55,7 @@ POWER_LOSS 단건은 #57 이후 256B~2KB에서 약 720, 4KB~6KB에서 약 630 ms
 | ns0270 (위 기준선) | 472 | 15,600 | 9,789 | 5,743 | 중앙값 |
 | 개발서버 ns0392 (NVMe, xfs) | 323 | 14,816 | 7,759 | 3,498 | 측정 중 다른 부하(load 4~10). 하한 5건 FAIL이라 신뢰도 낮음 |
 | WSL2 ext4 | 29 | 2,999 | 4,017 | 3,345 | fsync 비용을 과소평가할 수 있음. 하한 4건 FAIL |
-| Windows 11 NTFS (NVMe) | 115 | 8,807 | 3,602 | 891 | 미지원 플랫폼. 하네스가 Windows에서 자식 JVM에 JSON 인자를 못 넘겨 우회 패치로 쟀다 |
+| Windows 11 NTFS (NVMe, 소비자용) | 93 | 7,676 | 5,204 | 2,361 | 2026-10-27 1회 측정. 절대 하한은 적용하지 않는다([ADR 0008](../docs/adr/0008-windows-has-no-absolute-throughput-floor.md)). 이전 값(115/8,807/3,602/891)은 우회 패치 하네스의 짧은 측정이었다 |
 
 funa 운영 노드(ns0325·ns0327·ns0338)는 7.2K HDD이고 컨트롤러 캐시 상태가 제각각(정상, 영구 비활성, 케이블 오류)이라 측정하지 않았다.
 
@@ -66,4 +66,4 @@ funa 운영 노드(ns0325·ns0327·ns0338)는 7.2K HDD이고 컨트롤러 캐시
 3. 4프로세스 PROCESS_CRASH 항목(`proc4/PROCESS_CRASH`)은 3회 사이 편차가 16~27%(#57 뒤 빈 큐는 33k~49k)여서 한 번 FAIL이 나도 노이즈일 수 있다. 이 항목, 4프로세스 PROCESS_CRASH 빈 큐가 분모인 `depth`, 또는 P3·P4의 `scaling`(경계 근처에서 흔들린다)만 FAIL이면 같은 환경에서 두 번 더 재고 중앙값으로 판정한다. 그 밖의 항목은 한 번이라도 FAIL이면 막는다.
 4. `floor`, `scaling`, `depth`, `latency` FAIL도 같은 규칙으로 릴리스를 막는다.
 5. 의도한 성능 변경이면 원인을 PR에 적고 새 결과를 `benchmark/baseline.json`으로 커밋한 뒤에만 릴리스한다.
-6. 기준 환경이 아닌 곳(WSL2, Windows, 개발서버 등)의 결과로는 릴리스를 통과시키지 않는다.
+6. 기준 환경이 아닌 곳(WSL2, Windows, 개발서버 등)의 결과로는 릴리스를 통과시키지 않는다. Windows에는 절대 하한을 두지 않는다. 원인과 근거는 [ADR 0008](../docs/adr/0008-windows-has-no-absolute-throughput-floor.md)에 있다.

@@ -2,11 +2,9 @@ package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.io.InputStream;
+import io.github.ppzxc.smq.storage.StorageFactory;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
@@ -23,19 +21,10 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class SchemaV1SampleTest {
 
-    static final String RESOURCE = "/schema-samples/schema-v1.db";
     static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
 
     @TempDir
     Path dir;
-
-    static Path copySample(Path target) throws Exception {
-        try (InputStream in = SchemaV1SampleTest.class.getResourceAsStream(RESOURCE)) {
-            assertNotNull(in, "src/test/resources" + RESOURCE + " 가 없다");
-            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-        return target;
-    }
 
     private static String text(Message m) {
         return new String(m.payload(), StandardCharsets.UTF_8);
@@ -48,7 +37,7 @@ class SchemaV1SampleTest {
     @Test
     void 견본을_열면_큐_선언과_상태별_개수가_보존되어_있다() throws Exception {
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(copySample(dir.resolve("smq.db"))).clock(clock).open()) {
+        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db"))).clock(clock).open()) {
             assertEquals(QueueOptions.defaults(), smq.queue("v1-dead").options());
             assertEquals(QueueOptions.defaults().maxDeliveries(3, "v1-dead"), smq.queue("v1-orders").options());
             assertEquals(QueueOptions.defaults().singleActiveConsumer(true), smq.queue("v1-serial").options());
@@ -62,7 +51,7 @@ class SchemaV1SampleTest {
     @Test
     void 견본을_열면_메시지_id_전달_횟수_헤더가_보존되고_리스_기한에_재전달된다() throws Exception {
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(copySample(dir.resolve("smq.db"))).clock(clock).open()) {
+        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db"))).clock(clock).open()) {
             Queue orders = smq.queue("v1-orders");
 
             // 준비 상태 메시지
@@ -97,7 +86,7 @@ class SchemaV1SampleTest {
     @Test
     void 견본의_dead_letter_큐와_단일_활성_컨슈머_큐가_그대로_동작한다() throws Exception {
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(copySample(dir.resolve("smq.db"))).clock(clock).open()) {
+        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db"))).clock(clock).open()) {
             Chunk dead = smq.queue("v1-dead").pull(10, Duration.ZERO);
             assertEquals(List.of("poison"), texts(dead));
             Map<String, String> h = dead.messages().getFirst().headers();
@@ -115,7 +104,7 @@ class SchemaV1SampleTest {
 
     @Test
     void user_version을_높인_복사본을_열면_IncompatibleStorageException이다() throws Exception {
-        Path copy = copySample(dir.resolve("future.db"));
+        Path copy = StorageFactory.copyV1Sample(dir.resolve("future.db"));
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy); Statement s = c.createStatement()) {
             s.execute("PRAGMA user_version = 99");
         }

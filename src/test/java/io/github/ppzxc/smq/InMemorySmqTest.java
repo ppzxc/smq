@@ -2,35 +2,15 @@ package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import java.nio.file.Path;
-import java.time.Duration;
-import java.time.InstantSource;
+import io.github.ppzxc.smq.storage.StorageFactory;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 class InMemorySmqTest extends SmqConformanceTest {
 
     @Override
-    TestBuilder builder(Path dir) {
-        Smq.Builder b = Smq.inMemory();
-        return new TestBuilder() {
-            @Override
-            public TestBuilder clock(InstantSource clock) {
-                b.clock(clock);
-                return this;
-            }
-
-            @Override
-            public TestBuilder leaseDuration(Duration leaseDuration) {
-                b.leaseDuration(leaseDuration);
-                return this;
-            }
-
-            @Override
-            public Smq open() {
-                return b.open();
-            }
-        };
+    StorageFactory factory() {
+        return StorageFactory.MEMORY;
     }
 
     @Test

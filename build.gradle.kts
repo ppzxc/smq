@@ -12,7 +12,7 @@ plugins {
 
 group = "io.github.ppzxc"
 // 버전은 하드코딩한다. main은 항상 다음 패치-SNAPSHOT이고, 릴리스 PR에서만 바꾼다.
-version = "0.0.1"
+version = "0.0.2-SNAPSHOT"
 
 java {
     toolchain {

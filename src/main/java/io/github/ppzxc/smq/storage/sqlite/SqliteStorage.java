@@ -130,6 +130,7 @@ public final class SqliteStorage implements Storage {
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
             executor.retryOnBusy(() -> {
                 try (Statement s = executor.connection().createStatement()) {
+                    s.execute("PRAGMA wal_autocheckpoint = 0");
                     return s.execute("PRAGMA journal_mode = WAL");
                 }
             });

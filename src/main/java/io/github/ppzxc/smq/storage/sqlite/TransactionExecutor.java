@@ -1,7 +1,11 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
 import io.github.ppzxc.smq.SmqStorageException;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.concurrent.TimeUnit;
@@ -38,8 +42,22 @@ final class TransactionExecutor {
         T run() throws SQLException;
     }
 
+    /** 커밋 몇 번마다 WAL 파일 크기를 확인할지. 확인은 파일 크기 조회 한 번이다. */
+    private static final int CHECKPOINT_CHECK_EVERY_COMMITS = 8;
+    /** WAL 파일이 이 크기를 넘으면 되감는 체크포인트를 건다. 60초 부하에서 64MB 이하라는 목표의 4분의 1이다. */
+    private static final long CHECKPOINT_WAL_BYTES = 16L * 1024 * 1024;
+    /** 되감는 체크포인트가 쓰기 lock과 읽는 연결을 기다리는 최대 시간. 못 되감으면 다음 커밋에서 다시 한다. */
+    private static final int CHECKPOINT_BUSY_TIMEOUT_MILLIS = 50;
+    private static final Path NO_WAL = Path.of("");
+
     private final Connection connection;
     private final RetryPolicy retry;
+    /** 커밋 횟수. lock 아래에서만 바뀐다. */
+    private long commits;
+    /** 마지막 확인에서 WAL이 한도를 넘었고 아직 되감지 못했다. 그동안은 커밋마다 다시 시도한다. */
+    private boolean walOverLimit;
+    /** 처음 확인할 때 찾는다. */
+    private Path walFile;
     private final ReentrantLock lock = new ReentrantLock();
     /** 열 때 판정한 스키마 버전. {@link #execute}가 이 값과 파일의 버전을 비교한다. */
     private volatile int baselineVersion;
@@ -134,10 +152,73 @@ final class TransactionExecutor {
             try (Statement s = connection.createStatement()) {
                 s.execute("COMMIT");
             }
+            checkpointIfWalIsLarge();
             return result;
         } catch (Throwable t) {
             rollbackQuietly();
             throw t;
+        }
+    }
+
+    /**
+     * 여러 연결이 쉬지 않고 읽으면 SQLite의 자동 체크포인트는 WAL의 앞쪽을 되감지 못하고 WAL이 정산량과 무관하게 자란다(ADR-0010).
+     * 그래서 자동 체크포인트를 끄고(열 때 {@code wal_autocheckpoint = 0}), 커밋 몇 번마다 WAL 파일 크기를 보다가 한도를 넘으면 읽는
+     * 연결을 짧게만 기다리는 {@code TRUNCATE} 체크포인트로 되감고 파일을 줄인다. 못 되감으면(BUSY) 한도 아래로 내려갈 때까지 커밋마다 다시
+     * 시도한다. 이미 커밋된 쓰기의 결과를 바꾸지 않으므로 확인이든 체크포인트든 실패는 삼킨다. lock을 쥔 채 하므로 한 번에
+     * {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS} 이상 기다리지 않는다.
+     */
+    private void checkpointIfWalIsLarge() {
+        if (++commits % CHECKPOINT_CHECK_EVERY_COMMITS != 0 && !walOverLimit) {
+            return;
+        }
+        int busyTimeout = -1;
+        try {
+            if (walFile == null) {
+                walFile = locateWalFile();
+            }
+            walOverLimit = walFile != NO_WAL && walSize() >= CHECKPOINT_WAL_BYTES;
+            if (!walOverLimit) {
+                return;
+            }
+            busyTimeout = SqliteSchema.pragmaInt(connection, "busy_timeout");
+            try (Statement s = connection.createStatement()) {
+                s.execute("PRAGMA busy_timeout = " + CHECKPOINT_BUSY_TIMEOUT_MILLIS);
+                try (ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(TRUNCATE)")) {
+                    // 첫 열이 0이면 WAL을 끝까지 되감았다.
+                    walOverLimit = !rs.next() || rs.getInt(1) != 0;
+                }
+            }
+        } catch (SQLException ignored) {
+            // BUSY면 다음 커밋에서 다시 한다.
+        } finally {
+            if (busyTimeout >= 0) {
+                try (Statement s = connection.createStatement()) {
+                    s.execute("PRAGMA busy_timeout = " + busyTimeout);
+                } catch (SQLException ignored) {
+                    // 연결이 이미 깨졌다면 다음 쓰기가 실패로 드러낸다.
+                }
+            }
+        }
+    }
+
+    /** 주 데이터베이스 파일의 WAL 경로. 파일이 없는 데이터베이스(메모리, 임시)면 {@link #NO_WAL}. */
+    private Path locateWalFile() throws SQLException {
+        try (Statement s = connection.createStatement(); ResultSet rs = s.executeQuery("PRAGMA database_list")) {
+            while (rs.next()) {
+                if ("main".equals(rs.getString(2))) {
+                    String file = rs.getString(3);
+                    return file == null || file.isEmpty() ? NO_WAL : Path.of(file + "-wal");
+                }
+            }
+        }
+        return NO_WAL;
+    }
+
+    private long walSize() {
+        try {
+            return Files.size(walFile);
+        } catch (IOException e) {
+            return 0;
         }
     }
 

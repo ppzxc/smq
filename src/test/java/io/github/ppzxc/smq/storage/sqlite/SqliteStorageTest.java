@@ -404,4 +404,88 @@ class SqliteStorageTest {
             st.execute("ROLLBACK");
         }
     }
+
+    /**
+     * 같은 파일을 여러 연결이 쉬지 않고 쓰고 읽어도 WAL이 정산량에 비례해 자라지 않는다(ADR-0010). 자동 체크포인트만으로는
+     * 서로의 읽기 때문에 WAL이 되감기지 못해 수백 MB까지 커졌다(#102). 처리 시간 4초의 축소판이다.
+     */
+    @Test
+    void 여러_연결이_계속_쓰고_읽어도_WAL_크기가_상한_아래다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        Path wal = dir.resolve("smq.db-wal");
+        int connections = 4;
+        List<SqliteStorage> storages = new ArrayList<>();
+        for (int i = 0; i < connections; i++) {
+            storages.add(SqliteStorage.open(db, Durability.PROCESS_CRASH));
+        }
+        try {
+            storages.get(0).declare("q", QueueOptions.defaults());
+            java.util.concurrent.atomic.AtomicBoolean stop = new java.util.concurrent.atomic.AtomicBoolean();
+            java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+            List<Thread> threads = new ArrayList<>();
+            for (SqliteStorage s : storages) {
+                Thread t = new Thread(() -> {
+                    try {
+                        byte[] payload = new byte[900];
+                        while (!stop.get()) {
+                            s.publish("q", List.of(new NewMessage(payload, Map.of()), new NewMessage(payload, Map.of())),
+                                    Instant.now());
+                            PullResult r = s.pull("q", 132, Duration.ofSeconds(5), Instant.now(), Duration.ofMillis(50));
+                            List<Disposition> acks = r.messages().stream()
+                                    .map(m -> new Disposition(m.id(), Disposition.Kind.ACK)).toList();
+                            if (!acks.isEmpty()) {
+                                s.settle(r.token(), acks, Instant.now());
+                            }
+                        }
+                    } catch (Throwable e) {
+                        failure.set(e);
+                    }
+                });
+                threads.add(t);
+                t.start();
+            }
+            // 다른 프로세스의 읽기를 흉내 낸다. 읽기 트랜잭션이 서로 겹쳐서 항상 하나는 열려 있다.
+            for (int i = 0; i < 2; i++) {
+                int phase = i;
+                Thread reader = new Thread(() -> {
+                    try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db);
+                            Statement st = c.createStatement()) {
+                        st.execute("PRAGMA busy_timeout = 5000");
+                        Thread.sleep(phase * 20L);
+                        while (!stop.get()) {
+                            st.execute("BEGIN");
+                            try (ResultSet rs = st.executeQuery("SELECT count(*) FROM sqlite_master")) {
+                                rs.next();
+                            }
+                            Thread.sleep(40);
+                            st.execute("COMMIT");
+                        }
+                    } catch (Throwable e) {
+                        failure.set(e);
+                    }
+                });
+                threads.add(reader);
+                reader.start();
+            }
+            long max = 0;
+            long end = System.nanoTime() + Duration.ofSeconds(4).toNanos();
+            while (System.nanoTime() < end) {
+                Thread.sleep(50);
+                if (Files.exists(wal)) {
+                    max = Math.max(max, Files.size(wal));
+                }
+            }
+            stop.set(true);
+            for (Thread t : threads) {
+                t.join();
+            }
+            assertNull(failure.get());
+            assertTrue(max <= WAL_LIMIT_BYTES, "WAL 최대 " + max + " 바이트");
+        } finally {
+            storages.forEach(SqliteStorage::close);
+        }
+    }
+
+    /** 4초 축소판의 상한. 60초 부하의 수정 목표(64MB)보다 작고, 정산량(수십 MB 이상의 쓰기)과 무관한 값이다. */
+    private static final long WAL_LIMIT_BYTES = 32L * 1024 * 1024;
 }

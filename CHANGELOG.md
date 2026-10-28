@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-10-28
+
 ### Added
 
 - 첫 공개. Maven Central에 `io.github.ppzxc:smq`로 배포한다.
@@ -14,4 +16,5 @@
 - at-least-once 전달, 지연 NACK, 최대 전달 횟수, dead letter 큐, 지연 발행, 큐 안 FIFO 순서, 단일 활성 컨슈머 큐.
 - Linux와 Windows 지원(DB 파일은 로컬 파일시스템에 둔다).
 
-[Unreleased]: https://github.com/ppzxc/smq/commits/main
+[Unreleased]: https://github.com/ppzxc/smq/compare/0.0.1...HEAD
+[0.0.1]: https://github.com/ppzxc/smq/releases/tag/0.0.1

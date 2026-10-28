@@ -24,6 +24,30 @@ final class Plan {
         return build(storage, FULL_DURATION_MS, FULL_WARMUP_MS, RunSpec.DEEP);
     }
 
+    /** 비율 검사(scaling, depth)를 반복 측정하는 기본 횟수. */
+    static final int DEFAULT_REPEATS = 3;
+
+    /**
+     * 교차 순서 계획. 첫 바퀴는 전체 계획이고, 나머지 바퀴는 비율 조건(scaling과 depth의 분자와 분모가 되는 SQLite S1)만 돈다.
+     * 같은 조건을 연속으로 재면 그 몇 분의 장비 부하가 모든 표본에 같이 실리기 때문이다. 비율 조건이 없으면 한 바퀴뿐이다.
+     */
+    static List<List<RunSpec>> rounds(List<RunSpec> plan, int repeats) {
+        if (repeats < 1) throw new IllegalArgumentException("반복 횟수는 1 이상: " + repeats);
+        List<List<RunSpec>> rounds = new ArrayList<>();
+        rounds.add(plan);
+        List<RunSpec> ratio = plan.stream().filter(Plan::isRatioCondition).toList();
+        if (!ratio.isEmpty()) for (int i = 1; i < repeats; i++) rounds.add(ratio);
+        return rounds;
+    }
+
+    /** scaling(P1~P4 빈 큐 1·4프로세스)과 depth(P1 100만 건 깊이와 빈 큐)의 분자 또는 분모인 SQLite S1 조건. */
+    static boolean isRatioCondition(RunSpec s) {
+        if (s.storage() != Storage.SQLITE || s.scenario() != Scenario.S1) return false;
+        boolean scalingProfile = s.profile() == Profile.P1 || s.profile() == Profile.P2 || s.profile() == Profile.P3
+                || s.profile() == Profile.P4;
+        return scalingProfile && (s.depth() == 0 || (s.profile() == Profile.P1 && s.depth() == RunSpec.DEEP));
+    }
+
     /** 짧은 스모크. 임계값 없이 모든 경로(다중 JVM, 다른 프로세스 S3, 미리 채운 깊이)를 한 번씩 지나가게 한다. */
     static List<RunSpec> smoke(Storage storage) {
         List<RunSpec> plan = new ArrayList<>();

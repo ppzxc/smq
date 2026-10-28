@@ -53,6 +53,43 @@ class PlanTest {
     }
 
     @Test
+    void repeatedRoundsRunTheWholePlanThenOnlyTheRatioConditions() {
+        List<RunSpec> plan = Plan.full(Storage.SQLITE);
+        List<List<RunSpec>> rounds = Plan.rounds(plan, 3);
+        assertEquals(3, rounds.size());
+        assertEquals(plan, rounds.get(0));
+        List<RunSpec> ratio = rounds.get(1);
+        assertEquals(ratio, rounds.get(2));
+        assertEquals(20, ratio.size(), "비율 검사의 분자와 분모가 되는 S1 조건은 약 20개");
+        assertTrue(ratio.stream().allMatch(s -> s.scenario() == Scenario.S1));
+        Set<String> k = keys(ratio);
+        assertTrue(k.contains("sqlite/S1/P3/proc4/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S1/P3/proc1/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S1/P1/proc4/PROCESS_CRASH/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/proc1/PROCESS_CRASH/empty"));
+        assertFalse(k.contains("sqlite/S1/P0/proc1/POWER_LOSS/empty"));
+        assertFalse(k.contains("sqlite/S1/P2S/proc1/POWER_LOSS/empty"));
+        assertFalse(k.contains("sqlite/S1/P2/proc1/POWER_LOSS/1m"));
+    }
+
+    @Test
+    void oneRepeatIsTheCurrentSingleRound() {
+        List<RunSpec> plan = Plan.full(Storage.SQLITE);
+        assertEquals(List.of(plan), Plan.rounds(plan, 1));
+    }
+
+    @Test
+    void repeatCountMustBePositive() {
+        assertThrows(IllegalArgumentException.class, () -> Plan.rounds(Plan.full(Storage.SQLITE), 0));
+    }
+
+    @Test
+    void memoryPlanHasNoRatioConditionsSoItRunsOnce() {
+        List<RunSpec> plan = Plan.full(Storage.MEMORY);
+        assertEquals(List.of(plan), Plan.rounds(plan, 3));
+    }
+
+    @Test
     void fullMemoryPlanIsSingleJvmDiagnostics() {
         List<RunSpec> plan = Plan.full(Storage.MEMORY);
         assertTrue(plan.stream().allMatch(s -> s.processes() == 1 && s.storage() == Storage.MEMORY));

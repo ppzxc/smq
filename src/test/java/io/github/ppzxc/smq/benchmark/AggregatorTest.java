@@ -71,4 +71,31 @@ class AggregatorTest {
         assertEquals(99, back.elapsedNanos());
         assertArrayEquals(new long[] {5, 6}, back.latenciesMicros());
     }
+
+    @Test
+    void roundsAreCollectedPerKeyInRoundOrder() {
+        Map<String, List<Double>> samples = Aggregator.samples(List.of(
+                Map.of("a", 1.0, "b", 10.0), Map.of("a", 2.0), Map.of("a", 3.0, "b", 30.0)));
+        assertEquals(List.of(1.0, 2.0, 3.0), samples.get("a"));
+        assertEquals(List.of(10.0, 30.0), samples.get("b"));
+    }
+
+    @Test
+    void medianOfOddAndEvenSamples() {
+        assertEquals(3.0, Aggregator.median(List.of(5.0, 1.0, 3.0)));
+        assertEquals(2.5, Aggregator.median(List.of(4.0, 1.0, 2.0, 3.0)));
+        assertEquals(7.0, Aggregator.median(List.of(7.0)));
+        assertThrows(IllegalArgumentException.class, () -> Aggregator.median(List.of()));
+    }
+
+    @Test
+    void representativeValuesAreMediansAndOnlyRepeatedEntriesKeepSamples() {
+        Map<String, List<Double>> samples = new java.util.LinkedHashMap<>();
+        samples.put("rep", List.of(9.0, 1.0, 5.0));
+        samples.put("once", List.of(4.0));
+        Report r = Aggregator.report(Map.of("os", "x"), samples);
+        assertEquals(5.0, r.entries().get("rep"));
+        assertEquals(4.0, r.entries().get("once"));
+        assertEquals(Map.of("rep", List.of(9.0, 1.0, 5.0)), r.samples());
+    }
 }

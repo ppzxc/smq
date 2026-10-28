@@ -23,7 +23,7 @@
 | S3 p99 같은 프로세스 | 10 ms | 7.3 / 7.6 / 7.1 / 6.8 / 6.9 / 6.7 | 통과 |
 | S3 p99 다른 프로세스 | 260 ms | 38.6 / 38.0 / 38.1 / 37.9 / 37.5 / 37.6 | 통과 |
 
-하한은 조정하지 않았다. 값이 터무니없지 않다. P3 POWER_LOSS의 4프로세스 비율만 하한 근처에서 흔들리므로, 릴리스 전 이 검사가 FAIL이면 바로 막지 말고 같은 환경에서 다시 재서(아래 절차 3) 판단한다.
+하한은 조정하지 않았다. 값이 터무니없지 않다. P3 POWER_LOSS의 4프로세스 비율만 하한 근처에서 흔들리므로, 이제 하네스가 이 검사를 3회 재서 바퀴별 비율의 중앙값으로 판정하므로, FAIL이면 손으로 다시 재지 않고 그대로 막는다(아래 절차 3).
 
 ## 4KB(P4)와 단건 대 묶음
 
@@ -61,9 +61,9 @@ funa 운영 노드(ns0325·ns0327·ns0338)는 7.2K HDD이고 컨트롤러 캐시
 
 ## 릴리스 전 절차
 
-1. 기준 환경(ns0270 또는 이를 대체한 NVMe ext4 장비)에서 다른 부하 없이 `./gradlew benchmark`를 돌린다. 장비가 바뀌면 컨트롤러 캐시 상태(`ssacli ctrl all show config detail`의 `Cache Status`)도 기록한다.
+1. 기준 환경(ns0270 또는 이를 대체한 NVMe ext4 장비)에서 다른 부하 없이 `./gradlew benchmark`를 돌린다. 비율 검사(`scaling`, `depth`)의 S1 조건 20개는 하네스가 기본 3회 재므로 전체 소요 시간은 단발일 때의 약 1.5~2배다. 장비가 바뀌면 컨트롤러 캐시 상태(`ssacli ctrl all show config detail`의 `Cache Status`)도 기록한다.
 2. 출력의 `regression` 줄에 FAIL이 있으면, 곧 기준선 대비 처리량이 20% 넘게 줄었거나 지연이 20% 넘게 늘었으면 **릴리스를 막는다.** 정확히 20%는 통과다.
-3. 4프로세스 PROCESS_CRASH 항목(`proc4/PROCESS_CRASH`)은 3회 사이 편차가 16~27%(#57 뒤 빈 큐는 33k~49k)여서 한 번 FAIL이 나도 노이즈일 수 있다. 이 항목, 4프로세스 PROCESS_CRASH 빈 큐가 분모인 `depth`, 또는 P3·P4의 `scaling`(경계 근처에서 흔들린다)만 FAIL이면 같은 환경에서 두 번 더 재고 중앙값으로 판정한다. 그 밖의 항목은 한 번이라도 FAIL이면 막는다.
-4. `floor`, `scaling`, `depth`, `latency` FAIL도 같은 규칙으로 릴리스를 막는다.
+3. `scaling`과 `depth`는 하네스가 3회 재서 바퀴별 비율의 중앙값으로 판정한 결과이므로 수동 재측정과 손 계산은 하지 않는다. FAIL이면 그대로 막는다. 비율이 아닌 항목 중 흔들리는 `proc4/PROCESS_CRASH` regression(3회 사이 편차가 16~27%, #57 뒤 빈 큐는 33k~49k)과 S3 p99만 한 번 FAIL이 나도 노이즈일 수 있다. 이 항목들만 같은 환경에서 두 번 더 재고 중앙값으로 판정한다. 그 밖의 항목은 한 번이라도 FAIL이면 막는다.
+4. `floor`, `scaling`, `depth`, `latency` FAIL도 릴리스를 막는다(절차 3의 S3 p99 예외 외에는 재측정 없이).
 5. 의도한 성능 변경이면 원인을 PR에 적고 새 결과를 `benchmark/baseline.json`으로 커밋한 뒤에만 릴리스한다.
 6. 기준 환경이 아닌 곳(WSL2, Windows, 개발서버 등)의 결과로는 릴리스를 통과시키지 않는다. Windows에는 절대 하한을 두지 않는다. 원인과 근거는 [ADR 0008](../docs/adr/0008-windows-has-no-absolute-throughput-floor.md)에 있다.

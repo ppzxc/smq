@@ -137,6 +137,17 @@ gh release create 0.0.1 --target <릴리스 커밋 SHA> --title 0.0.1 --notes-fi
 
 공개 후 `build.gradle.kts`의 `version`을 `0.0.2-SNAPSHOT`으로 올리는 PR을 낸다. main은 항상 "다음 패치-SNAPSHOT"이다. 이 PR은 6단계 뒤에 병합해도 되지만, 공개 워크플로를 다시 돌릴 일이 있으면 그 전에는 병합하지 않는다(버전 확인 단계가 실패한다). 0.0.x 동안은 무엇을 바꾸든 패치 번호만 올리고, 정해진 릴리스 주기는 없다.
 
+## 8. Deployment 기록 정리
+
+`environment: release`를 쓰는 잡(`upload` 1개, `staging` matrix 2개)이 돌 때마다 저장소 메인 페이지의 Deployments에 기록이 쌓인다. 재시도하면 더 늘어난다. 시크릿 격리에 필요한 구조라 워크플로는 바꾸지 않고, 릴리스를 끝낸 뒤 정리한다. 삭제는 되돌릴 수 없고, 실행 이력은 Actions 탭에 남는다.
+
+```bash
+for id in $(gh api repos/ppzxc/smq/deployments --jq '.[].id'); do
+  gh api -X POST repos/ppzxc/smq/deployments/$id/statuses -f state=inactive >/dev/null
+  gh api -X DELETE repos/ppzxc/smq/deployments/$id
+done
+```
+
 ## 문제가 생겼을 때
 
 ### 스테이징 실패: drop하고 다시 올린다

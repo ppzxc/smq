@@ -164,7 +164,7 @@ class SessionTest {
         assertEquals("oom 꼬리", detail.get("stderrTail"));
         assertEquals(852_000_000.0, line.get("walMaxBytes"));
 
-        String txt = Files.readString(s.failureDir(8).resolve("violations.txt"));
+        String txt = Files.readString(s.failureDir(8).resolve("violations.txt")).replace("\r\n", "\n"); // Windows 줄바꿈
         assertTrue(txt.startsWith("seed=8\nverdict=ERROR\nerror=boom\n"), "앞쪽 줄은 그대로");
         assertTrue(txt.contains("errorLocation=child-2"));
         assertTrue(txt.contains("exitCode=1"));

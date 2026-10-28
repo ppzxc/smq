@@ -28,6 +28,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 class SqliteStorageTest {
@@ -536,6 +538,7 @@ class SqliteStorageTest {
      * WAL 헤더의 salt가 바뀌는 것으로 센다(파일 형식: 되감은 뒤 첫 쓰기가 salt를 바꾼다). 같은 양을 연결 하나와 넷이 번갈아 쓴다.
      */
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = "7만 건 넘는 호출이 Windows CI의 테스트 시간 한도를 넘는다. 되감김 횟수는 OS와 무관한 성질이라 Linux에서 검증한다")
     void 연결이_여럿이어도_WAL을_되감는_횟수는_연결_하나일_때와_비슷하다() throws Exception {
         int one = walResets(dir.resolve("one"), 1);
         int four = walResets(dir.resolve("four"), 4);

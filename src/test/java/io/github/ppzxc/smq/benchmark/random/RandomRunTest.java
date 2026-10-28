@@ -60,19 +60,62 @@ class RandomRunTest {
         };
     }
 
+    /**
+     * 자식이 남기는 기록을 고정 입력으로 쓰는 스포너. 락 경합과 무관하게 부모가 프로세스별 기록을 합치는 일만 본다.
+     * {@code silent}에 든 프로세스는 부하 구간 내내 쓰기 락을 못 잡은 자식처럼 아무 기록도 남기지 않는다.
+     */
+    private static ChildSpawner fixedOutputs(java.util.Set<Integer> silent) {
+        return spec -> {
+            int n = spec.process();
+            java.util.List<Published> pub = new java.util.ArrayList<>();
+            java.util.List<Delivery> del = new java.util.ArrayList<>();
+            if (!silent.contains(n)) {
+                Tag tag = new Tag(spec.params().seed(), n, 1);
+                Content content = new Content(77, java.util.Map.of("bench-tag", tag.toString()));
+                pub.add(new Published(tag, content, 1234, 0));
+                del.add(new Delivery(QueueKind.TARGET, tag, 100 + n, 1, content,
+                        new Delivery.Pull(((long) n << 40) | 1, 0, 2000, 3000), Delivery.Settle.NONE));
+            }
+            ChildOutput.write(spec.outDir(), n, new ChildOutput(del.size(), 0, pub, del));
+            return new ChildSpawner.Running() {
+                public void await(long timeoutMs) {
+                }
+
+                public void destroy() {
+                }
+            };
+        };
+    }
+
+    @Test
+    void theParentMergesTheRecordsOfEveryChildProcess() {
+        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of()));
+        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
+        assertEquals(java.util.Set.of(0, 1, 2, 3),
+                r.records().published().stream().map(x -> x.tag().process()).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(java.util.Set.of(0L, 1L, 2L, 3L), r.records().deliveries().stream().map(d -> d.pull().chunk() >>> 40)
+                .collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
+    void aChildThatNeverGotTheWriteLockLeavesTheOthersRecordsMergedAndTheRunPassing() {
+        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of(1, 2, 3)));
+        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
+        assertEquals(java.util.Set.of(0),
+                r.records().published().stream().map(x -> x.tag().process()).collect(java.util.stream.Collectors.toSet()));
+    }
+
     @Test
     void multiProcessRunMergesEveryProcessAndPasses() {
         RunParams p = RunParams.fromSeed(2, Limits.smoke(1_000));
         assertEquals(4, p.processes());
         RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, inProcess());
         assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
-        java.util.Set<Integer> producing = r.records().published().stream().map(x -> x.tag().process())
-                .collect(java.util.stream.Collectors.toSet());
-        assertTrue(producing.size() > 1, "프로세스마다 다른 태그: " + producing);
-        assertTrue(producing.stream().allMatch(n -> n >= 0 && n < p.processes()) || producing.contains(p.processes()));
-        java.util.Set<Long> chunkOwners = r.records().deliveries().stream().map(d -> d.pull().chunk() >>> 40)
-                .collect(java.util.stream.Collectors.toSet());
-        assertTrue(chunkOwners.size() > 1, "청크 번호는 프로세스별로 갈린다: " + chunkOwners);
+        // 어느 프로세스가 실제로 발행하고 꺼내는지는 SQLite 쓰기 락 경합이 정한다. 한 프로세스가 부하 구간 내내 락을 못 잡을 수
+        // 있으므로(ADR-0009의 락 대기 규약) 여기서 프로세스 분포는 단언하지 않는다. 합치기는 아래 고정 입력 테스트가 본다.
+        assertTrue(r.records().published().stream().allMatch(x -> x.tag().process() >= 0 && x.tag().process() <= p.processes()));
         for (int i = 0; i < p.processes(); i++) {
             assertTrue(Files.exists(dir.resolve("p" + i + "-deliveries.jsonl")), "자식 " + i + "의 전달 기록 파일");
         }
@@ -108,7 +151,7 @@ class RandomRunTest {
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
         Session session = new Session(dir, dir.resolve("runs.jsonl"), java.util.Map.of(), Limits.smoke(1_000),
                 (params, runDir) -> RandomRun.execute(params, runDir, (c, pub, del, smp) -> java.util.List.of(v),
-                        inProcess()),
+                        fixedOutputs(java.util.Set.of())),
                 new java.io.PrintStream(bytes, true));
         assertEquals(Session.EXIT_FAILED, session.run(java.util.List.of(2L).iterator(), Long.MAX_VALUE));
         Path failure = session.failureDir(2);

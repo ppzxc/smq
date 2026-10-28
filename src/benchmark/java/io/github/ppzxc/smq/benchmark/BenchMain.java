@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.benchmark;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,7 @@ public final class BenchMain {
         int total = rounds.stream().mapToInt(List::size).sum();
 
         Runner runner = new Runner(workDir);
-        List<Map<String, Double>> measured = new java.util.ArrayList<>();
+        List<Map<String, Double>> measured = new ArrayList<>();
         int n = 0;
         for (int round = 0; round < rounds.size(); round++) {
             for (RunSpec spec : rounds.get(round)) {

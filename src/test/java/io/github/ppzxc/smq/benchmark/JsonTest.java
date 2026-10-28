@@ -2,6 +2,8 @@ package io.github.ppzxc.smq.benchmark;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +74,7 @@ class JsonTest {
 
     @Test
     void committedBaselineIsStillReadable() throws Exception {
-        Report b = Report.fromJson(java.nio.file.Files.readString(java.nio.file.Path.of("benchmark/baseline.json")));
+        Report b = Report.fromJson(Files.readString(Path.of("benchmark/baseline.json")));
         assertFalse(b.entries().isEmpty());
         assertTrue(b.samples().isEmpty());
     }

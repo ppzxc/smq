@@ -113,9 +113,15 @@ class SqliteSmqTest extends SmqConformanceTest {
         Smq smq = builder().clock(clock).leaseDuration(Duration.ofMinutes(10)).lockWaitFloor(Duration.ZERO).open();
         direct.add(smq);
 
-        int roundsWithEmptyChunk = assertConcurrentPullContract(smq);
+        // 빈 청크는 스레드 타이밍에 달려 한 판(300라운드)에 안 나올 수 있다. 계약 검사는 매 판 모두 하고, 빈 청크는 상한까지 판을 거듭해 본다.
+        int attempts = 10;
+        int roundsWithEmptyChunk = 0;
+        for (int attempt = 0; attempt < attempts && roundsWithEmptyChunk == 0; attempt++) {
+            roundsWithEmptyChunk = assertConcurrentPullContract(smq, "race" + attempt + "-");
+        }
 
-        assertTrue(roundsWithEmptyChunk > 0, "하한을 없앴는데도 빈 청크가 한 번도 나오지 않아 이 조건이 경합을 만들지 못했다");
+        assertTrue(roundsWithEmptyChunk > 0,
+                "하한을 없앴는데도 " + attempts + "판 동안 빈 청크가 한 번도 나오지 않아 이 조건이 경합을 만들지 못했다");
     }
 
     @Test

@@ -88,6 +88,19 @@ class ComparatorTest {
     }
 
     @Test
+    void mismatchedSampleCountsAreFailedExplicitlyNotTrimmedToTheShorter() {
+        Check c = scaling(List.of(7000.0, 7000.0, 7000.0), List.of(10000.0, 10000.0));
+        assertEquals(Status.FAIL, c.status());
+        assertTrue(c.detail().contains("표본 수"), c.detail());
+    }
+
+    @Test
+    void aSingleSampleSideStillPairsWithTheFirstRound() {
+        assertEquals(Status.PASS, scaling(List.of(7000.0, 1.0), List.of(10000.0)).status());
+        assertEquals(Status.PASS, scaling(List.of(7000.0), List.of(10000.0, 1.0)).status());
+    }
+
+    @Test
     void ratioIsSkippedWhenOneSideHasNoSamples() {
         assertEquals(Status.SKIP, scaling(List.of(), List.of(10000.0)).status());
         assertEquals(Status.SKIP, find(Comparator.compare(Map.of(P3_4, List.of(7000.0)), Map.of()), SCALING_P3).status());

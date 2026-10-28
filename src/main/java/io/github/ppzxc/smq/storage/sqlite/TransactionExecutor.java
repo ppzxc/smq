@@ -48,14 +48,18 @@ final class TransactionExecutor {
     private static final long CHECKPOINT_WAL_BYTES = 16L * 1024 * 1024;
     /** 되감는 체크포인트가 쓰기 lock과 읽는 연결을 기다리는 최대 시간. 못 되감으면 다음 커밋에서 다시 한다. */
     private static final int CHECKPOINT_BUSY_TIMEOUT_MILLIS = 50;
+    /** 되감기에 실패(BUSY)한 뒤 이 커밋 수만큼은 다시 시도하지 않는다. 커밋마다 {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS}씩 쌓이지 않게 한다. */
+    private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
     private static final Path NO_WAL = Path.of("");
 
     private final Connection connection;
     private final RetryPolicy retry;
     /** 커밋 횟수. lock 아래에서만 바뀐다. */
     private long commits;
-    /** 마지막 확인에서 WAL이 한도를 넘었고 아직 되감지 못했다. 그동안은 커밋마다 다시 시도한다. */
+    /** 마지막 확인에서 WAL이 한도를 넘었고 아직 되감지 못했다. {@link #checkpointRetryAtCommit}부터 다시 시도한다. */
     private boolean walOverLimit;
+    /** {@link #walOverLimit}일 때 다시 시도할 커밋 횟수. */
+    private long checkpointRetryAtCommit;
     /** 처음 확인할 때 찾는다. */
     private Path walFile;
     private final ReentrantLock lock = new ReentrantLock();
@@ -163,12 +167,15 @@ final class TransactionExecutor {
     /**
      * 여러 연결이 쉬지 않고 읽으면 SQLite의 자동 체크포인트는 WAL의 앞쪽을 되감지 못하고 WAL이 정산량과 무관하게 자란다(ADR-0010).
      * 그래서 자동 체크포인트를 끄고(열 때 {@code wal_autocheckpoint = 0}), 커밋 몇 번마다 WAL 파일 크기를 보다가 한도를 넘으면 읽는
-     * 연결을 짧게만 기다리는 {@code TRUNCATE} 체크포인트로 되감고 파일을 줄인다. 못 되감으면(BUSY) 한도 아래로 내려갈 때까지 커밋마다 다시
-     * 시도한다. 이미 커밋된 쓰기의 결과를 바꾸지 않으므로 확인이든 체크포인트든 실패는 삼킨다. lock을 쥔 채 하므로 한 번에
+     * 연결을 짧게만 기다리는 {@code TRUNCATE} 체크포인트로 되감고 파일을 줄인다. 못 되감으면(BUSY) {@link #CHECKPOINT_RETRY_AFTER_COMMITS}번
+     * 커밋 동안은 다시 시도하지 않고 그 뒤에 다시 한다. 이미 커밋된 쓰기의 결과를 바꾸지 않으므로 BUSY는 삼킨다. BUSY가 아닌 오류는
+     * 숨기지 않고 {@link SmqStorageException}으로 던진다(이미 커밋됐으므로 호출자에게는 효력 불명이다). lock을 쥔 채 하므로 한 번에
      * {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS} 이상 기다리지 않는다.
      */
     private void checkpointIfWalIsLarge() {
-        if (++commits % CHECKPOINT_CHECK_EVERY_COMMITS != 0 && !walOverLimit) {
+        commits++;
+        boolean due = walOverLimit ? commits >= checkpointRetryAtCommit : commits % CHECKPOINT_CHECK_EVERY_COMMITS == 0;
+        if (!due) {
             return;
         }
         int busyTimeout = -1;
@@ -188,8 +195,15 @@ final class TransactionExecutor {
                     walOverLimit = !rs.next() || rs.getInt(1) != 0;
                 }
             }
-        } catch (SQLException ignored) {
-            // BUSY면 다음 커밋에서 다시 한다.
+            if (walOverLimit) {
+                checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;
+            }
+        } catch (SQLException e) {
+            if (!isBusy(e)) {
+                throw new SmqStorageException("sqlite checkpoint failed after commit", e);
+            }
+            walOverLimit = true;
+            checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;
         } finally {
             if (busyTimeout >= 0) {
                 try (Statement s = connection.createStatement()) {

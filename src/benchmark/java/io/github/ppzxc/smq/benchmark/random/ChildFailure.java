@@ -42,7 +42,7 @@ final class ChildFailure extends Exception {
     }
 
     /** {@code file}의 마지막 {@code maxBytes}바이트 안쪽 문자열. 파일이 없으면 빈 문자열. */
-    static String stderrTail(Path file, int maxBytes) {
+    static String readTail(Path file, int maxBytes) {
         if (!Files.isRegularFile(file)) {
             return "";
         }

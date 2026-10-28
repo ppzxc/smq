@@ -1335,10 +1335,15 @@ abstract class SmqConformanceTest {
      * 메시지가 남았는데 빈 청크가 나온 라운드 수를 돌려준다(실패 기준이 아니다).
      */
     static int assertConcurrentPullContract(Smq smq) throws Exception {
+        return assertConcurrentPullContract(smq, "race");
+    }
+
+    /** 같은 {@code smq}에서 여러 번 부를 수 있도록 큐 이름 접두어를 받는다. */
+    static int assertConcurrentPullContract(Smq smq, String queuePrefix) throws Exception {
         int roundsWithEmptyChunk = 0;
         // 경합은 아주 짧은 틈에서만 깨지므로, 라운드마다 새 큐로 여러 번 겨룬다.
         for (int round = 0; round < ROUNDS; round++) {
-            Queue q = smq.declare("race" + round, QueueOptions.defaults());
+            Queue q = smq.declare(queuePrefix + round, QueueOptions.defaults());
             q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d"), msg("e"), msg("f")));
 
             List<Chunk> chunks = Collections.synchronizedList(new ArrayList<>());

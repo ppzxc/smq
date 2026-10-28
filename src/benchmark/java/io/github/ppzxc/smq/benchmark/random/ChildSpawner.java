@@ -53,7 +53,7 @@ interface ChildSpawner {
                         jvm.await(timeoutMs);
                     } catch (Exception e) {
                         throw new ChildFailure(spec.process(), jvm.exitCode(),
-                                ChildFailure.stderrTail(err, ChildFailure.STDERR_TAIL_BYTES), e);
+                                ChildFailure.readTail(err, ChildFailure.STDERR_TAIL_BYTES), e);
                     }
                 }
 

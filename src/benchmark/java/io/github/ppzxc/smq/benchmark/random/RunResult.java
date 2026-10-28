@@ -9,7 +9,7 @@ import java.util.List;
  * @param p50Ms 부하 구간에 발행해 지연 없이 처음 꺼낸 메시지의 발행에서 꺼내기까지 걸린 시간. 표본이 없으면 null
  * @param error {@link Verdict#ERROR}일 때 원인 한 줄(기존 필드)
  * @param errorDetail {@link Verdict#ERROR}일 때 발생 위치와 스택 트레이스 전체. 아니면 null
- * @param walMaxBytes 실행 중 표본한 {@code smq.db-wal} 크기의 최댓값(바이트). 한 번도 표본하지 못했으면 null
+ * @param walMaxBytes 실행 중 측정한 {@code smq.db-wal} 크기의 최댓값(바이트). 한 번도 측정하지 못했으면 null
  */
 record RunResult(RunParams params, Verdict verdict, double msgPerSec, double mbPerSec, Double p50Ms, Double p99Ms,
         List<Violation> violations, String error, Records records, ErrorDetail errorDetail, Long walMaxBytes) {

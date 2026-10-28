@@ -89,14 +89,21 @@ final class Comparator {
 
     /**
      * 바퀴별 비율(같은 바퀴의 분자 / 분모)의 중앙값으로 판정한다. 같은 바퀴의 두 값은 시간상 가까워 장비 부하 변화가 상쇄된다.
-     * 표본이 하나면 단발 비율이고 detail도 단발 출력과 같다. 한쪽이라도 표본이 없으면 SKIP이다.
+     * 표본이 하나면 단발 비율이고 detail도 단발 출력과 같다. 한쪽이라도 표본이 없으면 SKIP이다. 양쪽이 둘 이상인데 개수가 다르면
+     * 바퀴가 어긋난 것이므로 FAIL이다.
      */
     private static void ratio(List<Check> out, String name, List<Double> values, List<Double> references) {
-        int rounds = values == null || references == null ? 0 : Math.min(values.size(), references.size());
-        if (rounds == 0) {
+        if (values == null || references == null || values.isEmpty() || references.isEmpty()) {
             out.add(notMeasured(name));
             return;
         }
+        // 한쪽이 단일 표본(단발 측정)이면 첫 바퀴끼리 짝짓는 것이 합법이다. 그 밖의 길이 불일치는 바퀴가 어긋난 것이라 숨기지 않는다.
+        boolean singleSide = values.size() == 1 || references.size() == 1;
+        if (!singleSide && values.size() != references.size()) {
+            out.add(fail(name, "표본 수가 다르다: " + values.size() + "개 / " + references.size() + "개"));
+            return;
+        }
+        int rounds = singleSide ? 1 : values.size();
         List<Double> ratios = new ArrayList<>();
         List<String> parts = new ArrayList<>();
         for (int i = 0; i < rounds; i++) {

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -36,7 +37,7 @@ class RandomRunTest {
     /** 같은 JVM의 스레드로 자식을 흉내 낸다. 자식 JVM 띄우기는 {@code randomBenchSmoke}가 모듈 경로에서 확인한다. */
     private static ChildSpawner inProcess() {
         return spec -> {
-            java.util.concurrent.atomic.AtomicReference<Throwable> error = new java.util.concurrent.atomic.AtomicReference<>();
+            AtomicReference<Throwable> error = new AtomicReference<>();
             Thread t = new Thread(() -> {
                 try {
                     RandomRun.runChild(spec.params(), spec.process(), spec.db(), spec.outDir(), spec.startAt());
@@ -229,10 +230,10 @@ class RandomRunTest {
     void stderrTailKeepsOnlyTheLastBytes() throws Exception {
         Path err = dir.resolve("p0.err");
         Files.writeString(err, "a".repeat(10_000) + "끝");
-        String tail = ChildFailure.stderrTail(err, 100);
+        String tail = ChildFailure.readTail(err, 100);
         assertTrue(tail.endsWith("끝"));
         assertTrue(tail.length() <= 100, "상한: " + tail.length());
-        assertEquals("", ChildFailure.stderrTail(dir.resolve("없음.err"), 100));
+        assertEquals("", ChildFailure.readTail(dir.resolve("없음.err"), 100));
     }
 
     // ---- WAL 최대 크기

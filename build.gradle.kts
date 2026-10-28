@@ -76,11 +76,19 @@ tasks.register<JavaExec>("benchmarkSmoke") {
     benchmarkRunner("--mode", "smoke")
 }
 
-tasks.register<JavaExec>("benchmark") {
-    description = "전체 벤치. 기준 환경에서 수동으로 돌린다. -Pbenchmark.args=\"...\"로 옵션을 더한다."
+abstract class FullBenchmark : JavaExec() {
+    @get:Input
+    @get:Optional
+    @get:Option(option = "repeat", description = "비율 검사의 S1 조건을 재는 횟수 (기본 3, 1이면 단발)")
+    abstract val repeat: Property<String>
+}
+
+tasks.register<FullBenchmark>("benchmark") {
+    description = "전체 벤치. 기준 환경에서 수동으로 돌린다. --repeat 옵션, 그 밖의 옵션은 -Pbenchmark.args=\"...\"로 더한다."
     benchmarkRunner("--mode", "full", "--baseline", benchmarkBaseline.asFile.path,
             "--output", layout.buildDirectory.file("benchmark/result.json").get().asFile.path)
     (findProperty("benchmark.args") as String?)?.let { args(it.split(" ").filter(String::isNotBlank)) }
+    doFirst { repeat.orNull?.let { args("--repeat", it) } }
 }
 
 // 무작위 블랙박스 하네스. 옵션은 `./gradlew randomBench --seed 42 --budget 10m`처럼 태스크 옵션으로 준다.

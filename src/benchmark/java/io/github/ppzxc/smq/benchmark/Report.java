@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +46,7 @@ record Report(Map<String, String> environment, Map<String, Double> entries, Map<
         Map<String, List<Double>> samples = new LinkedHashMap<>();
         if (m.get("samples") instanceof Map<?, ?> sm) {
             sm.forEach((k, v) -> {
-                List<Double> l = new java.util.ArrayList<>();
+                List<Double> l = new ArrayList<>();
                 for (Object o : (List<?>) v) l.add((Double) o);
                 samples.put((String) k, l);
             });

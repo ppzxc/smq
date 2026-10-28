@@ -22,6 +22,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -420,8 +422,8 @@ class SqliteStorageTest {
         }
         try {
             storages.get(0).declare("q", QueueOptions.defaults());
-            java.util.concurrent.atomic.AtomicBoolean stop = new java.util.concurrent.atomic.AtomicBoolean();
-            java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+            AtomicBoolean stop = new AtomicBoolean();
+            AtomicReference<Throwable> failure = new AtomicReference<>();
             List<Thread> threads = new ArrayList<>();
             for (SqliteStorage s : storages) {
                 Thread t = new Thread(() -> {

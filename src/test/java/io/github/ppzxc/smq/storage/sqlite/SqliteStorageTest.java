@@ -10,8 +10,11 @@ import io.github.ppzxc.smq.SmqStorageException;
 import io.github.ppzxc.smq.storage.Disposition;
 import io.github.ppzxc.smq.storage.NewMessage;
 import io.github.ppzxc.smq.storage.PullResult;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -485,6 +488,102 @@ class SqliteStorageTest {
             assertTrue(max <= WAL_LIMIT_BYTES, "WAL 최대 " + max + " 바이트");
         } finally {
             storages.forEach(SqliteStorage::close);
+        }
+    }
+
+    /**
+     * 한도를 넘어 되감은 뒤에도 WAL 파일을 0으로 줄이지 않고 그대로 두어 앞부분부터 다시 쓴다(ADR-0010). 파일이 줄었다 다시
+     * 늘면 커밋마다 파일 크기 변경이 fsync에 실려 단건 청크의 POWER_LOSS 처리량이 3분의 2로 떨어졌다. 한 연결로 쓰기만 하고
+     * 쓸 때마다 파일 크기를 본다. 한 번 한도(8MB)를 넘은 뒤로는 4MB 아래로 내려가면 안 되고 16MB를 넘어서도 안 된다.
+     */
+    @Test
+    void WAL이_한도를_넘어_되감겨도_파일은_줄지_않고_상한_아래다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        Path wal = dir.resolve("smq.db-wal");
+        long grownAt = Long.MAX_VALUE;
+        long min = Long.MAX_VALUE;
+        long max = 0;
+        int afterGrown = 0;
+        try (SqliteStorage s = SqliteStorage.open(db, Durability.PROCESS_CRASH)) {
+            s.declare("q", QueueOptions.defaults());
+            byte[] payload = new byte[900];
+            List<NewMessage> batch = List.of(new NewMessage(payload, Map.of()), new NewMessage(payload, Map.of()));
+            // 한도를 넘은 뒤에도 파일 크기를 넘는 양을 더 쓴다. 쓰고 곧바로 정산해 큐가 자라지 않게 한다.
+            for (int i = 0; i < 100_000 && afterGrown < 8_000; i++) {
+                s.publish("q", batch, Instant.now());
+                PullResult r = s.pull("q", 10, Duration.ofSeconds(5), Instant.now(), Duration.ZERO);
+                s.settle(r.token(), r.messages().stream().map(m -> new Disposition(m.id(), Disposition.Kind.ACK)).toList(),
+                        Instant.now());
+                long size = Files.exists(wal) ? Files.size(wal) : 0;
+                max = Math.max(max, size);
+                if (size >= 8L * 1024 * 1024) {
+                    grownAt = Math.min(grownAt, size);
+                }
+                if (grownAt != Long.MAX_VALUE) {
+                    afterGrown++;
+                    min = Math.min(min, size);
+                }
+            }
+        }
+        assertNotEquals(Long.MAX_VALUE, grownAt, "WAL이 한도까지 자라지 않아 검사할 수 없다");
+        assertTrue(min >= 4L * 1024 * 1024, "되감은 뒤 WAL이 " + min + " 바이트로 줄었다");
+        assertTrue(max <= 16L * 1024 * 1024, "WAL 최대 " + max + " 바이트");
+    }
+
+    /**
+     * 연결이 여럿이어도 WAL을 되감는 횟수는 연결 하나일 때와 비슷하다(ADR-0010). 한 연결이 되감으면 다른 연결도 같은 WAL의 크기를
+     * 보고 다시 되감을 수 있는데, 이미 되감긴 WAL을 또 되감으면 단건 쓰기마다 동기화가 늘어 4프로세스 처리량이 흔들렸다. 되감김은
+     * WAL 헤더의 salt가 바뀌는 것으로 센다(파일 형식: 되감은 뒤 첫 쓰기가 salt를 바꾼다). 같은 양을 연결 하나와 넷이 번갈아 쓴다.
+     */
+    @Test
+    void 연결이_여럿이어도_WAL을_되감는_횟수는_연결_하나일_때와_비슷하다() throws Exception {
+        int one = walResets(dir.resolve("one"), 1);
+        int four = walResets(dir.resolve("four"), 4);
+        assertTrue(one >= 3, "되감김이 " + one + "번이라 비교할 수 없다");
+        assertTrue(four <= one + 2, "연결 하나 " + one + "번, 연결 넷 " + four + "번");
+    }
+
+    /** 연결 {@code connections}개가 번갈아 같은 양을 쓰며 WAL 헤더의 salt가 바뀐 횟수를 센다. */
+    private int walResets(Path sub, int connections) throws Exception {
+        Files.createDirectories(sub);
+        Path db = sub.resolve("smq.db");
+        Path wal = sub.resolve("smq.db-wal");
+        List<SqliteStorage> storages = new ArrayList<>();
+        for (int i = 0; i < connections; i++) {
+            storages.add(SqliteStorage.open(db, Durability.PROCESS_CRASH));
+        }
+        try {
+            storages.get(0).declare("q", QueueOptions.defaults());
+            byte[] payload = new byte[900];
+            List<NewMessage> batch = List.of(new NewMessage(payload, Map.of()), new NewMessage(payload, Map.of()));
+            long salt = -1;
+            int resets = 0;
+            for (int i = 0; i < 24_000; i++) {
+                SqliteStorage s = storages.get(i % connections);
+                s.publish("q", batch, Instant.now());
+                PullResult r = s.pull("q", 10, Duration.ofSeconds(5), Instant.now(), Duration.ZERO);
+                s.settle(r.token(), r.messages().stream().map(m -> new Disposition(m.id(), Disposition.Kind.ACK)).toList(),
+                        Instant.now());
+                long now = walSalt(wal);
+                if (salt != -1 && now != salt) {
+                    resets++;
+                }
+                salt = now;
+            }
+            return resets;
+        } finally {
+            storages.forEach(SqliteStorage::close);
+        }
+    }
+
+    /** WAL 헤더의 salt-1, salt-2(바이트 16~23). WAL이 없거나 짧으면 -1. */
+    private static long walSalt(Path wal) throws Exception {
+        if (!Files.exists(wal)) {
+            return -1;
+        }
+        try (FileChannel ch = FileChannel.open(wal, StandardOpenOption.READ)) {
+            ByteBuffer b = ByteBuffer.allocate(8);
+            return ch.read(b, 16) == 8 ? b.flip().getLong() : -1;
         }
     }
 

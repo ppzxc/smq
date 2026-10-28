@@ -131,6 +131,7 @@ public final class SqliteStorage implements Storage {
             executor.retryOnBusy(() -> {
                 try (Statement s = executor.connection().createStatement()) {
                     s.execute("PRAGMA wal_autocheckpoint = 0");
+                    s.execute("PRAGMA journal_size_limit = " + TransactionExecutor.WAL_FILE_KEEP_BYTES);
                     return s.execute("PRAGMA journal_mode = WAL");
                 }
             });

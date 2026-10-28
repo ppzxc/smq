@@ -117,6 +117,8 @@ SKIP  regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec  [기준선에 �
 
 매개변수는 시드에서 정해진다(이슈 #86의 표): 메시지 크기 0~64KB(로그 균등), 발행 배치와 청크 크기 1~500, 프로듀서·컨슈머 스레드 각 1~4, 내구성 수준, 미리 채운 깊이(0 또는 1천~10만, 데이터 256MB 추정 상한), 정산 비율(ACK 과반), 처리 시간(0~리스 기한의 1.5배, 길면 연장), 리스 기한 200ms~10s, 발행 지연·NACK 지연(비율 0~30%, 0~2s), 최대 전달 횟수(없음 또는 1~5), 단일 활성 컨슈머 20%, 꺼내기 대기 0~500ms.
 
+`ERROR` 결과에는 발생 위치(`harness` 또는 `child-<번호>`), 예외 클래스와 메시지, 스택 트레이스 전체가 남는다. 자식 JVM은 `OutOfMemoryError` 같은 `Error`도 잡아 `p<n>-error.json`으로 부모에 보고하고, 보고 없이 죽으면 부모가 종료 코드와 표준 오류 끝부분(`p<n>.err`, 8KB)으로 판정한다. jsonl 기록에는 `errorDetail`과 `walMaxBytes`가, `violations.txt` 끝에는 같은 내용이 덧붙는다. `walMaxBytes`는 모든 실행(통과 포함)에서 `counts()` 표본 주기로 잰 `smq.db-wal` 크기의 최댓값이다(ADR-0010). `--heap-dump`를 주면 자식 JVM의 OOM에서 힙 덤프를 실행 디렉터리에 남긴다(기본 끔, 덤프가 크다).
+
 산출물은 `build/random-bench/`에 쌓인다.
 
 - `runs-<시각>.jsonl`: 실행마다 JSON 한 줄(시드, 풀어 쓴 매개변수, `msgPerSec`, `mbPerSec`, `p50Ms`, `p99Ms`, 판정, 위반 요약, `workDirFs`, `caveat`). 처리량은 부하 구간에서 ACK된 메시지 수이고, p50/p99는 부하 구간에 발행해 지연 없이 처음 꺼낸 메시지의 발행에서 꺼내기까지 시간이다(표본이 없으면 null).

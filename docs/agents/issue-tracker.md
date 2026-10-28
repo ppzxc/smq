@@ -25,6 +25,7 @@ Every issue title starts with a fixed prefix that records where it came from. `#
 | Map ticket, `wayfinder:prototype`       | `[MAP #NN / PROTOTYPE]`        | `[MAP #1 / PROTOTYPE] 공개 Java API의 모양`      |
 | Map ticket, `wayfinder:task`            | `[MAP #NN / TASK]`             | `[MAP #1 / TASK] ...`                            |
 | Spec published from a map               | `[MAP #NN / SPEC]`             | `[MAP #1 / SPEC] smq v1`                         |
+| Spec published without a map            | `[SPEC]`                       | `[SPEC] 릴리스 게이트 검증 결과를 믿을 수 있게 한다` |
 | Ticket published from a spec            | `[SPEC #NN / TICKET-N]`        | `[SPEC #12 / TICKET-3] SQLite 저장소 구현`       |
 
 - `TICKET-N` numbers the spec's tickets in order from `1`, independent of GitHub issue numbers.

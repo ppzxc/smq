@@ -15,6 +15,7 @@ import io.github.ppzxc.smq.benchmark.Aggregator;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Action;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Pull;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Settle;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -65,6 +66,7 @@ final class RandomRun {
     /** 이 JVM의 프로세스 번호. 단일 프로세스는 0, 다중 프로세스의 부모는 자식 번호(0..n-1) 다음인 n이다. */
     private final int process;
     private final ChildSpawner spawner;
+    private volatile Path runDir;
 
     private final ConcurrentLinkedQueue<Published> published = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<Delivery> deliveries = new ConcurrentLinkedQueue<>();
@@ -85,6 +87,8 @@ final class RandomRun {
     private volatile long loadEndMillis;
     private volatile long depthAtNanos;
     private volatile long depth;
+    private volatile Path walFile;
+    private volatile long walMax = -1;
 
     RandomRun(RunParams params, Checker checker, long drainLimitMillis, int process, ChildSpawner spawner) {
         this.params = params;
@@ -113,13 +117,31 @@ final class RandomRun {
         try {
             return run.runIn(dir);
         } catch (Throwable t) {
-            return RunResult.error(params, t);
+            return run.errorResult(t);
         }
+    }
+
+    /** 예외를 발생 위치가 붙은 {@link Verdict#ERROR} 결과로 바꾼다. 자식 JVM의 실패는 그 자식이 남긴 보고를 우선한다. */
+    private RunResult errorResult(Throwable t) {
+        ErrorDetail detail;
+        if (t instanceof ChildFailure f) {
+            ErrorDetail reported = ChildReport.read(runDir, f.process()).orElse(null);
+            String location = ErrorDetail.child(f.process());
+            detail = reported != null
+                    ? new ErrorDetail(location, reported.exceptionClass(), reported.message(), reported.stackTrace(),
+                            f.exitCode(), f.stderrTail())
+                    : ErrorDetail.of(location, f.getCause() != null ? f.getCause() : f, f.exitCode(), f.stderrTail());
+        } else {
+            detail = ErrorDetail.of(ErrorDetail.HARNESS, t, null, null);
+        }
+        return RunResult.error(params, detail, String.valueOf(t), walMax < 0 ? null : walMax);
     }
 
     private RunResult runIn(Path dir) throws Exception {
         boolean drained;
         Path db = dir.resolve("smq.db");
+        runDir = dir;
+        walFile = dir.resolve("smq.db-wal");
         try (Smq smq = open(db)) {
             Queues q = declare(smq);
             prefill(q.target());
@@ -160,8 +182,8 @@ final class RandomRun {
             }
             runLoad(q, startAt, 0, 0, true);
             long timeout = loadEndMillis + CHILD_KILL_GRACE_MS - System.currentTimeMillis();
-            for (ChildSpawner.Running r : running) {
-                r.await(timeout);
+            for (int i = 0; i < running.size(); i++) {
+                awaitChild(running.get(i), i, timeout);
             }
         } finally {
             running.forEach(ChildSpawner.Running::destroy);
@@ -175,18 +197,31 @@ final class RandomRun {
         }
     }
 
+    /** 자식 하나를 기다린다. 실패는 어느 자식인지 붙여 {@link ChildFailure}로 올린다. */
+    private static void awaitChild(ChildSpawner.Running r, int process, long timeoutMs) throws Exception {
+        try {
+            r.await(timeoutMs);
+        } catch (ChildFailure f) {
+            throw f;
+        } catch (Exception e) {
+            throw new ChildFailure(process, null, "", e);
+        }
+    }
+
     /**
      * 다중 프로세스의 자식 쪽. 부모가 선언해 둔 큐에 붙어 {@code startAt}부터 부하 구간 동안 이 프로세스 몫의 스레드를 돌리고,
      * 끝나면 기록을 {@code outDir}에 쓴다.
      */
     static void runChild(RunParams params, int process, Path db, Path outDir, long startAt) throws Exception {
-        RandomRun run = new RandomRun(params, null, 0, process, null);
-        try (Smq smq = run.open(db)) {
-            run.runLoad(run.declare(smq), startAt, params.producers().get(process), params.consumers().get(process),
-                    false);
-        }
-        ChildOutput.write(outDir, process, new ChildOutput(run.loadAckedMessages.get(), run.loadAckedBytes.get(),
-                List.copyOf(run.published), List.copyOf(run.deliveries)));
+        ChildReport.guard(outDir, process, () -> {
+            RandomRun run = new RandomRun(params, null, 0, process, null);
+            try (Smq smq = run.open(db)) {
+                run.runLoad(run.declare(smq), startAt, params.producers().get(process),
+                        params.consumers().get(process), false);
+            }
+            ChildOutput.write(outDir, process, new ChildOutput(run.loadAckedMessages.get(),
+                    run.loadAckedBytes.get(), List.copyOf(run.published), List.copyOf(run.deliveries)));
+        });
     }
 
     // ---- 미리 채우기
@@ -505,8 +540,22 @@ final class RandomRun {
     }
 
     private void sample(Queue target, Queue dlq, boolean afterDrain) {
+        sampleWal();
         samples.add(sampleOf(QueueKind.TARGET, target.counts(), afterDrain));
         samples.add(sampleOf(QueueKind.DEAD_LETTER, dlq.counts(), afterDrain));
+    }
+
+    /** {@code smq.db-wal}의 지금 크기로 최댓값을 갱신한다. 파일이 아직 없거나 사라졌으면 건너뛴다. */
+    private void sampleWal() {
+        Path wal = walFile;
+        if (wal == null) {
+            return;
+        }
+        try {
+            walMax = Math.max(walMax, Files.size(wal));
+        } catch (java.io.IOException e) {
+            // 아직 없거나 닫히며 지워졌다.
+        }
     }
 
     private static CountsSample sampleOf(QueueKind kind, QueueCounts c, boolean afterDrain) {
@@ -529,7 +578,8 @@ final class RandomRun {
         Double p99 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 99);
         return new RunResult(params, verdict, loadAckedMessages.get() / seconds,
                 loadAckedBytes.get() / 1_000_000.0 / seconds, p50, p99, violations,
-                drained ? null : "소진이 " + drainLimitMillis + "ms 안에 끝나지 않았다", new RunResult.Records(pub, del, smp));
+                drained ? null : "소진이 " + drainLimitMillis + "ms 안에 끝나지 않았다", new RunResult.Records(pub, del, smp), null,
+                walMax < 0 ? null : walMax);
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

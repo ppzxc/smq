@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.SmqStorageException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -165,6 +166,49 @@ class TransactionExecutorTest {
         try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("t.db"));
                 Statement s = other.createStatement()) {
             s.execute("PRAGMA user_version = " + v);
+        }
+    }
+
+    /**
+     * 읽는 연결 때문에 WAL을 되감지 못하는 동안 커밋마다 체크포인트 대기(50ms)가 쌓이면 안 된다(ADR-0010).
+     * 실패한 뒤에는 한동안 다시 시도하지 않는다.
+     */
+    @Test
+    void WAL을_되감지_못해도_커밋마다_체크포인트를_기다리지_않는다() throws Exception {
+        try (Statement s = connection.createStatement()) {
+            s.execute("PRAGMA journal_mode = WAL");
+            s.execute("PRAGMA wal_autocheckpoint = 0");
+        }
+        try (Connection reader = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("t.db"));
+                Statement rs = reader.createStatement()) {
+            rs.execute("BEGIN");
+            try (ResultSet r = rs.executeQuery("SELECT count(*) FROM t")) {
+                r.next();
+            }
+            TransactionExecutor executor = executor(1);
+            executor.execute(c -> {
+                try (Statement s = c.createStatement()) {
+                    s.execute("INSERT INTO t VALUES (1)");
+                    s.execute("CREATE TABLE big (b BLOB)");
+                    s.execute("INSERT INTO big VALUES (zeroblob(20000000))");
+                }
+                return null;
+            });
+            assertTrue(Files.size(dir.resolve("t.db-wal")) > 16L * 1024 * 1024);
+
+            long start = System.nanoTime();
+            for (int i = 0; i < 40; i++) {
+                executor.execute(c -> {
+                    try (Statement s = c.createStatement()) {
+                        s.execute("INSERT INTO t VALUES (2)");
+                    }
+                    return null;
+                });
+            }
+            long millis = (System.nanoTime() - start) / 1_000_000;
+
+            assertTrue(millis < 1000, "40번 커밋에 " + millis + "ms. 커밋마다 체크포인트를 기다린다");
+            rs.execute("COMMIT");
         }
     }
 }

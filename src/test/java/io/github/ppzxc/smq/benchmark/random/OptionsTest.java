@@ -49,4 +49,10 @@ class OptionsTest {
         assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--seed", "x"}, 0));
         assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--nope", "1"}, 0));
     }
+
+    @Test
+    void heapDumpIsOffUnlessAsked() {
+        assertFalse(Options.parse(new String[] {}, 0).heapDump());
+        assertTrue(Options.parse(new String[] {"--heap-dump"}, 0).heapDump());
+    }
 }

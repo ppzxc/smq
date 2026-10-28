@@ -1325,22 +1325,68 @@ abstract class SmqConformanceTest {
     @Test
     void 여러_스레드가_동시에_꺼내도_같은_메시지가_두_리스에_묶이지_않는다() throws Exception {
         Smq smq = open(Duration.ofMinutes(10));
+        int roundsWithEmptyChunk = assertConcurrentPullContract(smq);
+        System.out.println("동시 꺼내기 " + ROUNDS + "라운드 중 메시지가 남았는데 빈 청크가 나온 라운드: " + roundsWithEmptyChunk);
+    }
+
+    /**
+     * ADR-0009 계약: lock 하한을 넘는 경합에서 wait=0 꺼내기는 빈 청크를 돌려줄 수 있다. 그래서 "모두 전달"은 검사하지 않고
+     * 안전성(이중 리스 없음), 보존(유실 없음), 최소 진행(처음 lock을 잡은 풀러는 2건)을 검사한다.
+     * 메시지가 남았는데 빈 청크가 나온 라운드 수를 돌려준다(실패 기준이 아니다).
+     */
+    static int assertConcurrentPullContract(Smq smq) throws Exception {
+        return assertConcurrentPullContract(smq, "race");
+    }
+
+    /** 같은 {@code smq}에서 여러 번 부를 수 있도록 큐 이름 접두어를 받는다. */
+    static int assertConcurrentPullContract(Smq smq, String queuePrefix) throws Exception {
+        int roundsWithEmptyChunk = 0;
         // 경합은 아주 짧은 틈에서만 깨지므로, 라운드마다 새 큐로 여러 번 겨룬다.
         for (int round = 0; round < ROUNDS; round++) {
-            Queue q = smq.declare("race" + round, QueueOptions.defaults());
+            Queue q = smq.declare(queuePrefix + round, QueueOptions.defaults());
             q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d"), msg("e"), msg("f")));
 
             List<Chunk> chunks = Collections.synchronizedList(new ArrayList<>());
             ThrowingRunnable puller = () -> chunks.add(q.pull(2, Duration.ZERO));
             runConcurrently(Collections.nCopies(8, puller));
 
-            List<MessageId> delivered = chunks.stream().flatMap(c -> c.messages().stream()).map(Message::id).toList();
-            assertEquals(6, delivered.size(), "round " + round + " " + delivered);
-            assertEquals(6, Set.copyOf(delivered).size(), "round " + round + " " + delivered);
-            assertTrue(chunks.stream().flatMap(c -> c.messages().stream()).allMatch(m -> m.deliveryCount() == 1),
-                    "round " + round);
-            assertEquals(new QueueCounts(0, 6, 0), q.counts(), "round " + round);
+            QueueCounts counts = q.counts();
+            String detail = "round " + round + " pullers=" + describe(chunks) + " counts=" + counts;
+            List<Message> delivered = chunks.stream().flatMap(c -> c.messages().stream()).toList();
+            List<MessageId> ids = delivered.stream().map(Message::id).toList();
+
+            assertEquals(ids.size(), Set.copyOf(ids).size(), "이중 리스 " + detail);
+            assertTrue(delivered.stream().allMatch(m -> m.deliveryCount() == 1), "전달 횟수가 1이 아니다 " + detail);
+            assertEquals(ids.size(), counts.leased(), "리스 중 수가 꺼낸 수와 다르다 " + detail);
+            assertEquals(6, counts.ready() + counts.leased(), "메시지 유실 " + detail);
+            assertEquals(0, counts.delayed(), "지연됨이 0이 아니다 " + detail);
+            assertTrue(ids.size() >= 2, "lock을 처음 잡은 풀러가 2건을 꺼내지 못했다 " + detail);
+
+            // 풀러 8개가 6건을 2건씩 나누면 3개만 받는 것이 정상이다. 6건보다 적게 나갔다면 메시지가 있는데 빈 청크가 나온 것이다.
+            if (ids.size() < 6) {
+                roundsWithEmptyChunk++;
+            }
+
+            // 경합이 끝난 뒤 대기를 주고 꺼내면 남은 준비 메시지가 전부 나와야 한다.
+            int remaining = (int) counts.ready();
+            if (remaining > 0) {
+                Chunk rest = q.pull(remaining, Duration.ofSeconds(5));
+                assertEquals(remaining, rest.messages().size(), "남은 메시지를 모두 꺼내지 못했다 " + detail);
+                assertTrue(rest.messages().stream().allMatch(m -> m.deliveryCount() == 1),
+                        "남은 메시지의 전달 횟수가 1이 아니다 " + detail);
+                List<MessageId> all = new ArrayList<>(ids);
+                rest.messages().forEach(m -> all.add(m.id()));
+                assertEquals(6, Set.copyOf(all).size(), "남은 메시지가 앞서 꺼낸 것과 겹친다 " + detail);
+            }
         }
+        return roundsWithEmptyChunk;
+    }
+
+    private static String describe(List<Chunk> chunks) {
+        return chunks.stream()
+                .map(c -> c.messages().stream().map(m -> m.id() + "#" + m.deliveryCount()).toList().toString())
+                .toList()
+                .toString();
     }
 
     @Test

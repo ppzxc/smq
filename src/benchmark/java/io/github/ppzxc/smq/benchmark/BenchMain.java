@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.benchmark;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import java.util.Map;
  *   <li>{@code --baseline <파일>}: 기준선과 비교한다(full, sqlite). 파일이 없으면 하한만 검사한다.
  *   <li>{@code --output <파일>}: 결과를 기준선과 같은 형식으로 쓴다.
  *   <li>{@code --work-dir <디렉터리>}: SQLite 파일을 만들 곳. 기준 환경에서는 로컬 NVMe ext4 위여야 한다.
+ *   <li>{@code --repeat <횟수>}: full 모드에서 비율 검사의 분자와 분모가 되는 S1 조건을 재는 횟수. 기본 3, 1이면 단발이다.
  *   <li>{@code --filter <문자열>}: 키에 이 문자열이 든 조건만 돈다. 예: {@code S1/P1}.
  * </ul>
  */
@@ -37,17 +39,27 @@ public final class BenchMain {
                 .filter(s -> s.key().contains(filter)).toList();
         if (plan.isEmpty()) throw new IllegalArgumentException("조건이 하나도 남지 않았다: filter=" + filter);
 
-        Runner runner = new Runner(workDir);
-        Map<String, Double> results = new LinkedHashMap<>();
-        int n = 0;
-        for (RunSpec spec : plan) {
-            System.out.printf("[%d/%d] %s%n", ++n, plan.size(), spec.key());
-            Map<String, Double> m = runner.run(spec);
-            m.forEach((k, v) -> System.out.printf("        %s = %.2f%n", k, v));
-            results.putAll(m);
-        }
+        int repeat = Integer.parseInt(opts.getOrDefault("repeat", String.valueOf(Plan.DEFAULT_REPEATS)));
+        List<List<RunSpec>> rounds = Plan.rounds(plan, full ? repeat : 1);
+        int total = rounds.stream().mapToInt(List::size).sum();
 
-        Report report = new Report(Environment.capture(full ? "full" : "smoke", storage.id(), workDir), results);
+        Runner runner = new Runner(workDir);
+        List<Map<String, Double>> measured = new ArrayList<>();
+        int n = 0;
+        for (int round = 0; round < rounds.size(); round++) {
+            for (RunSpec spec : rounds.get(round)) {
+                System.out.printf("[%d/%d] 바퀴 %d/%d %s%n", ++n, total, round + 1, rounds.size(), spec.key());
+                Map<String, Double> m = runner.run(spec);
+                m.forEach((k, v) -> System.out.printf("        %s = %.2f%n", k, v));
+                measured.add(m);
+            }
+        }
+        // 항목 키 → 바퀴별 표본. 바퀴 순서는 실행 순서와 같고, 한 바퀴에 한 번씩 재므로 같은 바퀴끼리 짝이 맞는다.
+        Map<String, List<Double>> samples = Aggregator.samples(measured);
+        Map<String, Double> results = new LinkedHashMap<>();
+        samples.forEach((k, v) -> results.put(k, Aggregator.median(v)));
+
+        Report report = Aggregator.report(Environment.capture(full ? "full" : "smoke", storage.id(), workDir), samples);
         if (opts.containsKey("output")) {
             Path out = Path.of(opts.get("output")).toAbsolutePath();
             Files.createDirectories(out.getParent());
@@ -61,7 +73,7 @@ public final class BenchMain {
             return;
         }
         Map<String, Double> baseline = loadBaseline(opts.get("baseline"));
-        List<Comparator.Check> checks = Comparator.compare(results, baseline);
+        List<Comparator.Check> checks = Comparator.compare(samples, baseline);
         System.out.println();
         System.out.print(Comparator.render(checks));
         System.out.println();

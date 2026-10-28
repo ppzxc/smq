@@ -35,11 +35,19 @@ final class Comparator {
 
     private Comparator() {}
 
-    static List<Check> compare(Map<String, Double> results, Map<String, Double> baseline) {
+    /**
+     * @param samples 항목 키 → 바퀴별 표본(바퀴 순서). 표본이 하나면 단발 측정이다.
+     * @param baseline 항목 키 → 기준선 값(6회 중앙값이라 하나)
+     */
+    static List<Check> compare(Map<String, List<Double>> samples, Map<String, Double> baseline) {
+        Map<String, Double> results = new TreeMap<>();
+        samples.forEach((k, v) -> {
+            if (!v.isEmpty()) results.put(k, Aggregator.median(v));
+        });
         List<Check> checks = new ArrayList<>();
         floors(results, checks);
-        scaling(results, checks);
-        depth(results, checks);
+        scaling(samples, checks);
+        depth(samples, checks);
         latency(results, checks);
         regressions(results, baseline, checks);
         return checks;
@@ -59,7 +67,7 @@ final class Comparator {
         }
     }
 
-    private static void scaling(Map<String, Double> r, List<Check> out) {
+    private static void scaling(Map<String, List<Double>> r, List<Check> out) {
         for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4)) {
             for (Durability d : Durability.values()) {
                 String name = "scaling S1 " + p + " " + d + " proc4 >= 70% of proc1";
@@ -69,7 +77,7 @@ final class Comparator {
         }
     }
 
-    private static void depth(Map<String, Double> r, List<Check> out) {
+    private static void depth(Map<String, List<Double>> r, List<Check> out) {
         for (String shape : List.of("proc1", "proc4")) {
             for (Durability d : Durability.values()) {
                 String name = "depth S1 P1 " + shape + " " + d + " 1m >= 70% of empty";
@@ -79,13 +87,39 @@ final class Comparator {
         }
     }
 
-    private static void ratio(List<Check> out, String name, Double value, Double reference) {
-        if (value == null || reference == null) {
+    /**
+     * 바퀴별 비율(같은 바퀴의 분자 / 분모)의 중앙값으로 판정한다. 같은 바퀴의 두 값은 시간상 가까워 장비 부하 변화가 상쇄된다.
+     * 표본이 하나면 단발 비율이고 detail도 단발 출력과 같다. 한쪽이라도 표본이 없으면 SKIP이다. 양쪽이 둘 이상인데 개수가 다르면
+     * 바퀴가 어긋난 것이므로 FAIL이다.
+     */
+    private static void ratio(List<Check> out, String name, List<Double> values, List<Double> references) {
+        if (values == null || references == null || values.isEmpty() || references.isEmpty()) {
             out.add(notMeasured(name));
             return;
         }
-        String detail = fmt(value) + " / " + fmt(reference) + " = " + String.format("%.1f%%", 100 * value / reference);
-        out.add(value >= RATIO * reference - EPS ? pass(name, detail) : fail(name, detail));
+        // 한쪽이 단일 표본(단발 측정)이면 첫 바퀴끼리 짝짓는 것이 합법이다. 그 밖의 길이 불일치는 바퀴가 어긋난 것이라 숨기지 않는다.
+        boolean singleSide = values.size() == 1 || references.size() == 1;
+        if (!singleSide && values.size() != references.size()) {
+            out.add(fail(name, "표본 수가 다르다: " + values.size() + "개 / " + references.size() + "개"));
+            return;
+        }
+        int rounds = singleSide ? 1 : values.size();
+        List<Double> ratios = new ArrayList<>();
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < rounds; i++) {
+            double ratio = values.get(i) / references.get(i);
+            ratios.add(ratio);
+            parts.add(fmt(values.get(i)) + " / " + fmt(references.get(i)) + " = " + String.format("%.1f%%", 100 * ratio));
+        }
+        String detail;
+        if (rounds == 1) {
+            detail = parts.get(0);
+        } else {
+            StringBuilder sb = new StringBuilder("중앙값 " + String.format("%.1f%%", 100 * Aggregator.median(ratios)) + ", 바퀴별 ");
+            for (int i = 0; i < rounds; i++) sb.append(i > 0 ? "; " : "").append(i + 1).append("회 ").append(parts.get(i));
+            detail = sb.toString();
+        }
+        out.add(Aggregator.median(ratios) >= RATIO - EPS ? pass(name, detail) : fail(name, detail));
     }
 
     private static void latency(Map<String, Double> r, List<Check> out) {

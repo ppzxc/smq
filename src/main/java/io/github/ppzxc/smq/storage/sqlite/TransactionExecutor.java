@@ -1,7 +1,14 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
 import io.github.ppzxc.smq.SmqStorageException;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.concurrent.TimeUnit;
@@ -38,8 +45,35 @@ final class TransactionExecutor {
         T run() throws SQLException;
     }
 
+    /** 커밋 몇 번마다 WAL 파일 크기를 확인할지. 확인은 파일 크기 조회 한 번이다. */
+    private static final int CHECKPOINT_CHECK_EVERY_COMMITS = 8;
+    /** WAL 파일이 이 크기를 넘으면 되감는 체크포인트를 건다. 60초 부하에서 64MB 이하라는 목표보다 한참 작다. */
+    private static final long CHECKPOINT_WAL_BYTES = 8L * 1024 * 1024;
+    /**
+     * 되감은 WAL 파일을 이 크기까지만 남기고 더 큰 부분은 줄인다({@code journal_size_limit}). 한도의 1.5배이고, 파일은 이 아래에서는
+     * 줄지 않는다.
+     */
+    static final long WAL_FILE_KEEP_BYTES = 12L * 1024 * 1024;
+    /** 되감는 체크포인트가 쓰기 lock과 읽는 연결을 기다리는 최대 시간. 못 되감으면 다음 커밋에서 다시 한다. */
+    private static final int CHECKPOINT_BUSY_TIMEOUT_MILLIS = 50;
+    /** 되감기에 실패(BUSY)한 뒤 이 커밋 수만큼은 다시 시도하지 않는다. 커밋마다 {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS}씩 쌓이지 않게 한다. */
+    private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
+    private static final Path NO_WAL = Path.of("");
+
     private final Connection connection;
     private final RetryPolicy retry;
+    /** 커밋 횟수. lock 아래에서만 바뀐다. */
+    private long commits;
+    /** 마지막 확인에서 WAL이 한도를 넘었고 아직 되감지 못했다. {@link #checkpointRetryAtCommit}부터 다시 시도한다. */
+    private boolean walOverLimit;
+    /** {@link #walOverLimit}일 때 다시 시도할 커밋 횟수. */
+    private long checkpointRetryAtCommit;
+    /** 처음 확인할 때 찾는다. */
+    private Path walFile;
+    /** 마지막으로 되감은 직후의 WAL 파일 크기(최대 {@link #WAL_FILE_KEEP_BYTES}). 파일이 이보다 커져야 다시 되감는다. */
+    private long walSizeAtRestart;
+    /** 마지막으로 본 WAL 헤더의 salt. 되감긴 뒤 첫 쓰기가 바꾸므로 다른 연결이 되감았는지 알 수 있다. */
+    private long walSaltSeen;
     private final ReentrantLock lock = new ReentrantLock();
     /** 열 때 판정한 스키마 버전. {@link #execute}가 이 값과 파일의 버전을 비교한다. */
     private volatile int baselineVersion;
@@ -134,10 +168,108 @@ final class TransactionExecutor {
             try (Statement s = connection.createStatement()) {
                 s.execute("COMMIT");
             }
+            checkpointIfWalIsLarge();
             return result;
         } catch (Throwable t) {
             rollbackQuietly();
             throw t;
+        }
+    }
+
+    /**
+     * 여러 연결이 쉬지 않고 읽으면 SQLite의 자동 체크포인트는 WAL의 앞쪽을 되감지 못하고 WAL이 정산량과 무관하게 자란다(ADR-0010).
+     * 그래서 자동 체크포인트를 끄고(열 때 {@code wal_autocheckpoint = 0}), 커밋 몇 번마다 WAL 파일 크기를 보다가 한도를 넘으면 읽는
+     * 연결을 짧게만 기다리는 {@code RESTART} 체크포인트로 되감는다. 파일은 줄이지 않는다. 줄이면 이후 쓰기마다 파일이 다시 늘면서
+     * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시
+     * 되감을 필요가 없을 때도 계속 건다. 그래서 되감은 직후의 크기를 기억해 파일이 그보다 더 커졌을 때(되감은 구간을 다 채웠을 때)만 다시 건다.
+     * 다른 연결이나 프로세스가 되감은 것은 WAL 헤더의 salt가 바뀐 것으로 안다. 바뀌었으면 그 크기를 새 기준으로 삼고 건너뛴다.
+     * 이미 되감긴 WAL을 연결마다 다시 되감으면 동기화가 늘어 여러 프로세스의 처리량이 흔들린다. 못 되감으면(BUSY) {@link #CHECKPOINT_RETRY_AFTER_COMMITS}번
+     * 커밋 동안은 다시 시도하지 않고 그 뒤에 다시 한다. 이미 커밋된 쓰기의 결과를 바꾸지 않으므로 BUSY는 삼킨다. BUSY가 아닌 오류는
+     * 숨기지 않고 {@link SmqStorageException}으로 던진다(이미 커밋됐으므로 호출자에게는 효력 불명이다). lock을 쥔 채 하므로 한 번에
+     * {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS} 이상 기다리지 않는다.
+     */
+    private void checkpointIfWalIsLarge() {
+        commits++;
+        boolean due = walOverLimit ? commits >= checkpointRetryAtCommit : commits % CHECKPOINT_CHECK_EVERY_COMMITS == 0;
+        if (!due) {
+            return;
+        }
+        int busyTimeout = -1;
+        try {
+            if (walFile == null) {
+                walFile = locateWalFile();
+            }
+            long size = walFile == NO_WAL ? 0 : walSize();
+            walOverLimit = size >= CHECKPOINT_WAL_BYTES && size > walSizeAtRestart;
+            if (!walOverLimit) {
+                return;
+            }
+            long salt = walSalt();
+            if (salt != walSaltSeen) {
+                walSaltSeen = salt;
+                walSizeAtRestart = Math.min(size, WAL_FILE_KEEP_BYTES);
+                walOverLimit = false;
+                return;
+            }
+            busyTimeout = SqliteSchema.pragmaInt(connection, "busy_timeout");
+            try (Statement s = connection.createStatement()) {
+                s.execute("PRAGMA busy_timeout = " + CHECKPOINT_BUSY_TIMEOUT_MILLIS);
+                try (ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
+                    // 첫 열이 0이면 WAL을 끝까지 되감았다.
+                    walOverLimit = !rs.next() || rs.getInt(1) != 0;
+                }
+            }
+            if (walOverLimit) {
+                checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;
+            } else {
+                walSizeAtRestart = Math.min(walSize(), WAL_FILE_KEEP_BYTES);
+                walSaltSeen = walSalt();
+            }
+        } catch (SQLException e) {
+            if (!isBusy(e)) {
+                throw new SmqStorageException("sqlite checkpoint failed after commit", e);
+            }
+            walOverLimit = true;
+            checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;
+        } finally {
+            if (busyTimeout >= 0) {
+                try (Statement s = connection.createStatement()) {
+                    s.execute("PRAGMA busy_timeout = " + busyTimeout);
+                } catch (SQLException ignored) {
+                    // 연결이 이미 깨졌다면 다음 쓰기가 실패로 드러낸다.
+                }
+            }
+        }
+    }
+
+    /** 주 데이터베이스 파일의 WAL 경로. 파일이 없는 데이터베이스(메모리, 임시)면 {@link #NO_WAL}. */
+    private Path locateWalFile() throws SQLException {
+        try (Statement s = connection.createStatement(); ResultSet rs = s.executeQuery("PRAGMA database_list")) {
+            while (rs.next()) {
+                if ("main".equals(rs.getString(2))) {
+                    String file = rs.getString(3);
+                    return file == null || file.isEmpty() ? NO_WAL : Path.of(file + "-wal");
+                }
+            }
+        }
+        return NO_WAL;
+    }
+
+    /** WAL 헤더의 salt-1, salt-2(바이트 16~23). 읽지 못하면 -1. */
+    private long walSalt() {
+        try (FileChannel ch = FileChannel.open(walFile, StandardOpenOption.READ)) {
+            ByteBuffer b = ByteBuffer.allocate(8);
+            return ch.read(b, 16) == 8 ? b.flip().getLong() : -1;
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    private long walSize() {
+        try {
+            return Files.size(walFile);
+        } catch (IOException e) {
+            return 0;
         }
     }
 

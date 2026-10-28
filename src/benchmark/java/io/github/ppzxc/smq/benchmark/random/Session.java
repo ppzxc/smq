@@ -119,6 +119,9 @@ final class Session {
         m.put("verdict", r.verdict().name());
         m.put("violations", r.violations().stream().map(RecordsJson::describe).toList());
         m.put("error", r.error());
+        // 아래 둘은 뒤에 덧붙인 필드다. 위의 기존 필드 의미는 그대로다.
+        m.put("errorDetail", r.errorDetail() == null ? null : r.errorDetail().toMap());
+        m.put("walMaxBytes", r.walMaxBytes());
         m.put("workDirFs", environment.get("workDirFs"));
         m.put("caveat", environment.get("caveat"));
         Files.createDirectories(jsonLines.getParent());
@@ -135,7 +138,7 @@ final class Session {
         writeLines(dir.resolve("violations.txt"), Stream.concat(
                 Stream.of("seed=" + r.params().seed(), "verdict=" + r.verdict(), "error=" + r.error(),
                         r.params().describe()),
-                r.violations().stream().map(RecordsJson::describe)));
+                Stream.concat(r.violations().stream().map(RecordsJson::describe), diagnostics(r))));
         Path target = failureDir(r.params().seed());
         deleteTree(target);
         Files.createDirectories(target.getParent());
@@ -144,6 +147,13 @@ final class Session {
         } catch (IOException e) {
             Files.move(dir, target);
         }
+    }
+
+    /** {@code violations.txt} 끝에 덧붙이는 진단 줄. */
+    private static Stream<String> diagnostics(RunResult r) {
+        Stream<String> detail = r.errorDetail() == null ? Stream.empty() : r.errorDetail().describe().lines();
+        Stream<String> wal = r.walMaxBytes() == null ? Stream.empty() : Stream.of("walMaxBytes=" + r.walMaxBytes());
+        return Stream.concat(detail, wal);
     }
 
     private static void writeLines(Path file, Stream<String> lines) throws IOException {
@@ -160,6 +170,12 @@ final class Session {
         out.println(r.params().describe());
         if (r.error() != null) {
             out.println("원인: " + r.error());
+        }
+        if (r.errorDetail() != null) {
+            out.println(r.errorDetail().describe());
+        }
+        if (r.walMaxBytes() != null) {
+            out.println("smq.db-wal 최대 크기: " + r.walMaxBytes() + " 바이트");
         }
         List<Violation> vs = r.violations();
         out.println("어긴 불변식 " + vs.size() + "개:");

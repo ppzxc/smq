@@ -121,4 +121,138 @@ class RandomRunTest {
         }
         assertTrue(processes.size() > 1, "합친 전달 기록에 여러 프로세스의 태그가 있다: " + processes);
     }
+
+    // ---- ERROR 진단: 발생 위치, 스택 트레이스, 자식 종료 코드와 표준 오류
+
+    /** 자식 {@code failing}만 {@code body}에서 실패하고, 나머지는 바로 끝나는 스포너. 자식 JVM의 보고 경로({@link ChildReport})를 그대로 탄다. */
+    private static ChildSpawner failingChild(int failing, ChildReport.Body body) {
+        return spec -> new ChildSpawner.Running() {
+            public void await(long timeoutMs) throws Exception {
+                if (spec.process() != failing) {
+                    return;
+                }
+                try {
+                    ChildReport.guard(spec.outDir(), spec.process(), body);
+                } catch (Throwable t) {
+                    // 실제 자식 JVM은 종료 코드 1로 끝난다. 부모는 그것만 본다.
+                    throw new ChildFailure(spec.process(), 1, "", t instanceof Exception e ? e : new Exception(t));
+                }
+            }
+
+            public void destroy() {
+            }
+        };
+    }
+
+    @Test
+    void aChildOutOfMemoryErrorIsReportedWithItsLocationAndFullStackTrace() {
+        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, failingChild(1, () -> {
+            throw new OutOfMemoryError("Java heap space");
+        }));
+        assertEquals(Verdict.ERROR, r.verdict());
+        ErrorDetail d = r.errorDetail();
+        assertNotNull(d);
+        assertEquals("child-1", d.location());
+        assertEquals("java.lang.OutOfMemoryError", d.exceptionClass());
+        assertEquals("Java heap space", d.message());
+        assertTrue(d.stackTrace().startsWith("java.lang.OutOfMemoryError: Java heap space"), d.stackTrace());
+        assertTrue(d.stackTrace().contains("\tat "), "스택 프레임");
+        assertEquals(1, d.exitCode());
+    }
+
+    @Test
+    void aChildThatDiesWithoutReportingIsJudgedByItsExitCodeAndStderrTail() {
+        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, spec -> new ChildSpawner.Running() {
+            public void await(long timeoutMs) throws Exception {
+                if (spec.process() == 0) {
+                    throw new ChildFailure(0, 137, "Killed", new IllegalStateException("자식 JVM 실패, 종료 코드 137"));
+                }
+            }
+
+            public void destroy() {
+            }
+        });
+        assertEquals(Verdict.ERROR, r.verdict());
+        ErrorDetail d = r.errorDetail();
+        assertEquals("child-0", d.location());
+        assertEquals(137, d.exitCode());
+        assertEquals("Killed", d.stderrTail());
+        assertEquals("java.lang.IllegalStateException", d.exceptionClass());
+    }
+
+    @Test
+    void anExceptionFromAnUnidentifiedAwaitIsStillAttributedToTheChildThatWasAwaited() {
+        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, spec -> new ChildSpawner.Running() {
+            public void await(long timeoutMs) throws Exception {
+                if (spec.process() == 2) {
+                    throw new java.util.concurrent.TimeoutException("시간 초과");
+                }
+            }
+
+            public void destroy() {
+            }
+        });
+        assertEquals("child-2", r.errorDetail().location());
+        assertEquals("java.util.concurrent.TimeoutException", r.errorDetail().exceptionClass());
+        assertNull(r.errorDetail().exitCode());
+    }
+
+    @Test
+    void anExceptionInTheHarnessJvmIsReportedAsHarness() {
+        RunParams p = RunParams.fromSeed(5, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> {
+            throw new IllegalArgumentException("검사기가 터졌다");
+        });
+        assertEquals(Verdict.ERROR, r.verdict());
+        ErrorDetail d = r.errorDetail();
+        assertEquals("harness", d.location());
+        assertEquals("java.lang.IllegalArgumentException", d.exceptionClass());
+        assertEquals("검사기가 터졌다", d.message());
+        assertTrue(d.stackTrace().contains("\tat "));
+        assertNull(d.exitCode());
+        assertNull(d.stderrTail());
+    }
+
+    @Test
+    void aSpawnFailureIsAHarnessError() {
+        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, spec -> {
+            throw new java.io.IOException("자식을 띄우지 못했다");
+        });
+        assertEquals("harness", r.errorDetail().location());
+    }
+
+    @Test
+    void stderrTailKeepsOnlyTheLastBytes() throws Exception {
+        Path err = dir.resolve("p0.err");
+        Files.writeString(err, "a".repeat(10_000) + "끝");
+        String tail = ChildFailure.stderrTail(err, 100);
+        assertTrue(tail.endsWith("끝"));
+        assertTrue(tail.length() <= 100, "상한: " + tail.length());
+        assertEquals("", ChildFailure.stderrTail(dir.resolve("없음.err"), 100));
+    }
+
+    // ---- WAL 최대 크기
+
+    @Test
+    void everyRunRecordsTheLargestWalSizeSeen() {
+        RunParams p = RunParams.fromSeed(5, Limits.smoke(400));
+        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check);
+        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
+        assertNotNull(r.walMaxBytes());
+        assertTrue(r.walMaxBytes() > 0, "실행 중 WAL이 있었다: " + r.walMaxBytes());
+    }
+
+    @Test
+    void anErrorResultAlsoCarriesTheWalSize() {
+        RunParams p = RunParams.fromSeed(5, Limits.smoke(300));
+        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> {
+            throw new IllegalStateException("검사기");
+        });
+        assertEquals(Verdict.ERROR, r.verdict());
+        assertNotNull(r.walMaxBytes());
+    }
 }

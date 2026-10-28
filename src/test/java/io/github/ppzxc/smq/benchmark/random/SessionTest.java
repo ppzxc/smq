@@ -36,7 +36,7 @@ class SessionTest {
 
     private static RunResult result(RunParams p, Verdict v, double rate, Double p99, List<Violation> violations,
             RunResult.Records records) {
-        return new RunResult(p, v, rate, rate / 1000, p99 == null ? null : p99 / 2, p99, violations, null, records);
+        return new RunResult(p, v, rate, rate / 1000, p99 == null ? null : p99 / 2, p99, violations, null, records, null, null);
     }
 
     /** 실행기가 SQLite 파일을 흉내 내 디렉터리에 남긴다. */
@@ -139,5 +139,52 @@ class SessionTest {
         assertTrue(byThroughput.indexOf("\n  2 ") < byThroughput.indexOf("\n  3 "));
         String byP99 = out.substring(out.indexOf("p99가 높은 순"));
         assertTrue(byP99.indexOf("\n  2 ") < byP99.indexOf("\n  1 "), "p99가 가장 큰 시드가 위");
+    }
+
+    // ---- ERROR 진단 필드
+
+    private static final ErrorDetail CHILD_OOM = new ErrorDetail("child-2", "java.lang.OutOfMemoryError",
+            "Java heap space", "java.lang.OutOfMemoryError: Java heap space\n\tat a.B.c(B.java:1)\n", 1, "oom 꼬리");
+
+    @Test
+    void anErrorKeepsItsLocationStackTraceAndWalSizeInTheJsonLineAndTheViolationsFile() throws IOException {
+        Session s = session(fake(p -> RunResult.error(p, CHILD_OOM, "boom", 852_000_000L)));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(8L).iterator(), Long.MAX_VALUE));
+
+        Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json
+                .parse(Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());
+        assertEquals("ERROR", line.get("verdict"));
+        assertEquals("boom", line.get("error"), "기존 필드 의미는 그대로");
+        Map<?, ?> detail = (Map<?, ?>) line.get("errorDetail");
+        assertEquals("child-2", detail.get("location"));
+        assertEquals("java.lang.OutOfMemoryError", detail.get("exceptionClass"));
+        assertEquals("Java heap space", detail.get("message"));
+        assertTrue(((String) detail.get("stackTrace")).contains("at a.B.c"));
+        assertEquals(1.0, detail.get("exitCode"));
+        assertEquals("oom 꼬리", detail.get("stderrTail"));
+        assertEquals(852_000_000.0, line.get("walMaxBytes"));
+
+        String txt = Files.readString(s.failureDir(8).resolve("violations.txt"));
+        assertTrue(txt.startsWith("seed=8\nverdict=ERROR\nerror=boom\n"), "앞쪽 줄은 그대로");
+        assertTrue(txt.contains("errorLocation=child-2"));
+        assertTrue(txt.contains("exitCode=1"));
+        assertTrue(txt.contains("oom 꼬리"));
+        assertTrue(txt.contains("\tat a.B.c(B.java:1)"), "스택 트레이스 전체");
+        assertTrue(txt.contains("walMaxBytes=852000000"));
+
+        String out = output();
+        assertTrue(out.contains("child-2"));
+        assertTrue(out.contains("at a.B.c"));
+    }
+
+    @Test
+    void passingRunsRecordTheWalSizeAndNoErrorDetail() throws IOException {
+        Session s = session(fake(p -> new RunResult(p, Verdict.PASS, 100, 0.1, 1.0, 2.0, List.of(), null,
+                RunResult.Records.EMPTY, null, 4096L)));
+        assertEquals(Session.EXIT_OK, s.run(List.of(1L).iterator(), Long.MAX_VALUE));
+        Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json
+                .parse(Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());
+        assertEquals(4096.0, line.get("walMaxBytes"));
+        assertNull(line.get("errorDetail"));
     }
 }

@@ -64,7 +64,7 @@ public final class RandomBenchMain {
         System.out.println("환경: " + env);
         System.out.println("기록: " + jsonLines);
         Session session = new Session(o.outDir(), jsonLines, env, limits,
-                (params, dir) -> RandomRun.execute(params, dir, InvariantChecker::check), System.out);
+                (params, dir) -> RandomRun.execute(params, dir, InvariantChecker::check, ChildSpawner.jvm(o.heapDump())), System.out);
         return session.run(seeds, budget);
     }
 }

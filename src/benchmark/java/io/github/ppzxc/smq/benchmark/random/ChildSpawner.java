@@ -29,14 +29,32 @@ interface ChildSpawner {
 
     /** 기존 벤치와 같은 {@link ChildJvm}으로 자식 JVM을 띄운다. 자식도 모듈 경로에서 돈다. */
     static ChildSpawner jvm() {
+        return jvm(false);
+    }
+
+    /**
+     * @param heapDump 켜면 자식 JVM에 {@code -XX:+HeapDumpOnOutOfMemoryError}를 주고 덤프를 실행 디렉터리에 남긴다. 덤프가 커서 기본은
+     *     끈다
+     */
+    static ChildSpawner jvm(boolean heapDump) {
         return spec -> {
+            Path err = spec.outDir().resolve("p" + spec.process() + ".err");
+            List<String> options = heapDump
+                    ? List.of("-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=" + spec.outDir())
+                    : List.of();
             ChildJvm jvm = ChildJvm.start(RandomChildMain.class.getName(),
                     List.of(spec.params().toArg(), Integer.toString(spec.process()), spec.db().toString(),
                             spec.outDir().toString(), Long.toString(spec.startAt())),
-                    spec.outDir().resolve("p" + spec.process() + ".out"), "무작위 하네스 프로세스 " + spec.process());
+                    spec.outDir().resolve("p" + spec.process() + ".out"), err, options,
+                    "무작위 하네스 프로세스 " + spec.process());
             return new Running() {
                 public void await(long timeoutMs) throws Exception {
-                    jvm.await(timeoutMs);
+                    try {
+                        jvm.await(timeoutMs);
+                    } catch (Exception e) {
+                        throw new ChildFailure(spec.process(), jvm.exitCode(),
+                                ChildFailure.stderrTail(err, ChildFailure.STDERR_TAIL_BYTES), e);
+                    }
                 }
 
                 public void destroy() {

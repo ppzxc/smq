@@ -104,6 +104,11 @@ abstract class RandomBench : JavaExec() {
     @get:Optional
     @get:Option(option = "master-seed", description = "실행 시드를 뽑을 마스터 시드 (기본 현재 시각)")
     abstract val masterSeed: Property<String>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "heap-dump", description = "자식 JVM의 OutOfMemoryError에서 힙 덤프를 실행 디렉터리에 남긴다 (기본 끔)")
+    abstract val heapDump: Property<Boolean>
 }
 
 val randomBenchMain = "io.github.ppzxc.smq.benchmark.random.RandomBenchMain"
@@ -117,6 +122,7 @@ tasks.register<RandomBench>("randomBench") {
         budget.orNull?.let { args("--budget", it) }
         load.orNull?.let { args("--load", it) }
         masterSeed.orNull?.let { args("--master-seed", it) }
+        if (heapDump.orNull == true) args("--heap-dump")
     }
 }
 

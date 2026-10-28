@@ -109,6 +109,16 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    void lock_대기_하한을_없애_빈_청크가_실제로_나오는_조건에서도_동시_꺼내기_계약을_지킨다() throws Exception {
+        Smq smq = builder().clock(clock).leaseDuration(Duration.ofMinutes(10)).lockWaitFloor(Duration.ZERO).open();
+        direct.add(smq);
+
+        int roundsWithEmptyChunk = assertConcurrentPullContract(smq);
+
+        assertTrue(roundsWithEmptyChunk > 0, "하한을 없앴는데도 빈 청크가 한 번도 나오지 않아 이 조건이 경합을 만들지 못했다");
+    }
+
+    @Test
     void 같은_파일을_연_두_인스턴스가_동시에_꺼내도_단일_활성_컨슈머_큐의_리스_중인_청크는_하나다() throws Exception {
         Smq first = openDirect(Duration.ofMinutes(10));
         Smq second = openDirect(Duration.ofMinutes(10));

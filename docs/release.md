@@ -49,9 +49,11 @@
 PR head를 체크아웃해서 돌린다. 다른 부하가 없는 베어메탈 Linux(ns0270 또는 이를 대체한 장비)에서 한다.
 
 ```bash
-./gradlew benchmark      # ns0270 기준선과 비교. FAIL이 하나라도 있으면 비정상 종료한다
+./gradlew benchmark      # ns0270 기준선과 비교. FAIL이 하나라도 있으면 비정상 종료한다. 비율 검사는 3회 측정의 중앙값으로 판정한다
 ./gradlew randomBench    # 전체 무작위 테스트. 첫 위반에서 멈추고 비정상 종료한다
 ```
+
+`benchmark`는 비율 검사(scaling, depth)의 S1 조건 약 20개를 기본 3회 재서 하네스가 중앙값으로 판정하므로, 비율 항목이 FAIL이면 손으로 다시 재지 말고 그대로 막는다. 소요 시간은 단발일 때의 약 1.5~2배다(조건 38개에 비율 조건 20개가 두 번 더 돈다). PR 본문에는 `scaling`, `depth` 줄의 바퀴별 값과 중앙값을 그대로 옮긴다. 시간이 부족한 개발 환경에서는 `-Pbenchmark.args="--repeat 1"`로 줄일 수 있지만 게이트에서는 기본값을 쓴다.
 
 벤치 절차와 비교 기준은 [docs/benchmark.md](benchmark.md), 기준선은 [benchmark/README.md](../benchmark/README.md)를 본다. `randomBench`의 옵션(`--seed`, `--budget` 등)과 결과 위치도 docs/benchmark.md에 있다. 위반이 나오면 실패한 실행의 시드로 재현해 고치고, 공개는 미룬다.
 

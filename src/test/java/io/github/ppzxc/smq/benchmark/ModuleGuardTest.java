@@ -15,16 +15,25 @@ class ModuleGuardTest {
 
     @Test
     void rejectsClassLoadedFromClasspath() {
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> ModuleGuard.requireNamed(ModuleGuardTest.class));
+        IllegalStateException e =
+                assertThrows(IllegalStateException.class, () -> ModuleGuard.requireNamed(ModuleGuardTest.class));
         assertTrue(e.getMessage().contains("모듈 경로"));
     }
 
     @Test
     void childCommandCarriesModulePathAndKeepsBenchmarkOnClasspath() {
         List<String> cmd = ModuleGuard.childJvmArgs("/mods/smq.jar:/mods/sqlite.jar", "/cp/benchmark");
-        assertEquals(List.of("--enable-native-access=ALL-UNNAMED", "--enable-native-access=org.xerial.sqlitejdbc",
-                "--module-path", "/mods/smq.jar:/mods/sqlite.jar", "--add-modules", "io.github.ppzxc.smq",
-                "-cp", "/cp/benchmark"), cmd);
+        assertEquals(
+                List.of(
+                        "--enable-native-access=ALL-UNNAMED",
+                        "--enable-native-access=org.xerial.sqlitejdbc",
+                        "--module-path",
+                        "/mods/smq.jar:/mods/sqlite.jar",
+                        "--add-modules",
+                        "io.github.ppzxc.smq",
+                        "-cp",
+                        "/cp/benchmark"),
+                cmd);
     }
 
     @Test

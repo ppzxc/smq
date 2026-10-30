@@ -35,9 +35,12 @@ public final class RandomBenchMain {
         Path workRoot = o.outDir().resolve("work");
         Files.createDirectories(workRoot);
         Map<String, String> env = Environment.capture(o.smoke() ? "smoke" : "random", "sqlite", workRoot);
-        Limits limits = o.smoke() ? Limits.smoke(o.load().toMillis()) : Limits.full(o.load().toMillis());
-        Path jsonLines = o.outDir().resolve("runs-"
-                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".jsonl");
+        Limits limits = o.smoke()
+                ? Limits.smoke(o.load().toMillis())
+                : Limits.full(o.load().toMillis());
+        Path jsonLines = o.outDir()
+                .resolve("runs-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                        + ".jsonl");
 
         Iterator<Long> seeds;
         long budget;
@@ -63,8 +66,14 @@ public final class RandomBenchMain {
         }
         System.out.println("환경: " + env);
         System.out.println("기록: " + jsonLines);
-        Session session = new Session(o.outDir(), jsonLines, env, limits,
-                (params, dir) -> RandomRun.execute(params, dir, InvariantChecker::check, ChildSpawner.jvm(o.heapDump())), System.out);
+        Session session = new Session(
+                o.outDir(),
+                jsonLines,
+                env,
+                limits,
+                (params, dir) ->
+                        RandomRun.execute(params, dir, InvariantChecker::check, ChildSpawner.jvm(o.heapDump())),
+                System.out);
         return session.run(seeds, budget);
     }
 }

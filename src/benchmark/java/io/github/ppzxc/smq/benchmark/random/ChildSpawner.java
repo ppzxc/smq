@@ -15,8 +15,7 @@ interface ChildSpawner {
      * @param outDir 자식이 기록을 쓰는 디렉터리(부모의 실행 디렉터리)
      * @param startAt 부하 구간이 시작하는 시각(epoch ms). 자식은 그때까지 기다렸다가 시작한다
      */
-    record Spec(RunParams params, int process, Path db, Path outDir, long startAt) {
-    }
+    record Spec(RunParams params, int process, Path db, Path outDir, long startAt) {}
 
     interface Running {
         /** 끝나기를 기다린다. 실패했거나 시간을 넘기면 예외를 낸다. */
@@ -42,18 +41,28 @@ interface ChildSpawner {
             List<String> options = heapDump
                     ? List.of("-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=" + spec.outDir())
                     : List.of();
-            ChildJvm jvm = ChildJvm.start(RandomChildMain.class.getName(),
-                    List.of(spec.params().toArg(), Integer.toString(spec.process()), spec.db().toString(),
-                            spec.outDir().toString(), Long.toString(spec.startAt())),
-                    spec.outDir().resolve("p" + spec.process() + ".out"), err, options,
+            ChildJvm jvm = ChildJvm.start(
+                    RandomChildMain.class.getName(),
+                    List.of(
+                            spec.params().toArg(),
+                            Integer.toString(spec.process()),
+                            spec.db().toString(),
+                            spec.outDir().toString(),
+                            Long.toString(spec.startAt())),
+                    spec.outDir().resolve("p" + spec.process() + ".out"),
+                    err,
+                    options,
                     "무작위 하네스 프로세스 " + spec.process());
             return new Running() {
                 public void await(long timeoutMs) throws Exception {
                     try {
                         jvm.await(timeoutMs);
                     } catch (Exception e) {
-                        throw new ChildFailure(spec.process(), jvm.exitCode(),
-                                ChildFailure.readTail(err, ChildFailure.STDERR_TAIL_BYTES), e);
+                        throw new ChildFailure(
+                                spec.process(),
+                                jvm.exitCode(),
+                                ChildFailure.readTail(err, ChildFailure.STDERR_TAIL_BYTES),
+                                e);
                     }
                 }
 

@@ -29,14 +29,16 @@ public final class BenchMain {
         ModuleGuard.requireSmqModule("부모 JVM");
         Map<String, String> opts = parse(args);
         boolean full = opts.getOrDefault("mode", "smoke").equals("full");
-        if (!full && !opts.getOrDefault("mode", "smoke").equals("smoke")) throw new IllegalArgumentException("--mode는 smoke 또는 full");
+        if (!full && !opts.getOrDefault("mode", "smoke").equals("smoke"))
+            throw new IllegalArgumentException("--mode는 smoke 또는 full");
         Storage storage = Storage.valueOf(opts.getOrDefault("storage", "sqlite").toUpperCase());
-        Path workDir = Path.of(opts.getOrDefault("work-dir", "build/benchmark/work")).toAbsolutePath();
+        Path workDir =
+                Path.of(opts.getOrDefault("work-dir", "build/benchmark/work")).toAbsolutePath();
         Files.createDirectories(workDir);
         String filter = opts.getOrDefault("filter", "");
 
-        List<RunSpec> plan = (full ? Plan.full(storage) : Plan.smoke(storage)).stream()
-                .filter(s -> s.key().contains(filter)).toList();
+        List<RunSpec> plan = (full ? Plan.full(storage) : Plan.smoke(storage))
+                .stream().filter(s -> s.key().contains(filter)).toList();
         if (plan.isEmpty()) throw new IllegalArgumentException("조건이 하나도 남지 않았다: filter=" + filter);
 
         int repeat = Integer.parseInt(opts.getOrDefault("repeat", String.valueOf(Plan.DEFAULT_REPEATS)));
@@ -68,8 +70,7 @@ public final class BenchMain {
         }
 
         if (!full || storage != Storage.SQLITE) {
-            System.out.println(full ? "인메모리 결과는 진단값이다. 임계값을 적용하지 않는다."
-                    : "스모크 실행이 끝났다. 임계값은 적용하지 않는다.");
+            System.out.println(full ? "인메모리 결과는 진단값이다. 임계값을 적용하지 않는다." : "스모크 실행이 끝났다. 임계값은 적용하지 않는다.");
             return;
         }
         Map<String, Double> baseline = loadBaseline(opts.get("baseline"));
@@ -92,7 +93,8 @@ public final class BenchMain {
     private static Map<String, String> parse(String[] args) {
         Map<String, String> m = new LinkedHashMap<>();
         for (int i = 0; i < args.length; i++) {
-            if (!args[i].startsWith("--") || i + 1 >= args.length) throw new IllegalArgumentException("잘못된 인자: " + args[i]);
+            if (!args[i].startsWith("--") || i + 1 >= args.length)
+                throw new IllegalArgumentException("잘못된 인자: " + args[i]);
             m.put(args[i].substring(2), args[++i]);
         }
         return m;

@@ -30,10 +30,10 @@ final class ChunkTable {
             for (Pair p : PAIRS) {
                 Double single = results.get(Keys.throughput(key(row, p.single())));
                 Double batch = results.get(Keys.throughput(key(row, p.batch())));
-                String ratio = single == null || batch == null || single <= 0 ? "-"
-                        : String.format("%.1fx", batch / single);
-                sb.append(String.format("%-18s %-6s %10s %10s %8s%n", row.label(), p.size(), fmt(single), fmt(batch),
-                        ratio));
+                String ratio =
+                        single == null || batch == null || single <= 0 ? "-" : String.format("%.1fx", batch / single);
+                sb.append(String.format(
+                        "%-18s %-6s %10s %10s %8s%n", row.label(), p.size(), fmt(single), fmt(batch), ratio));
             }
         }
         return sb.toString();

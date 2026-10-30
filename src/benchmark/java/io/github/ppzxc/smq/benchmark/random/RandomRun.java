@@ -2,10 +2,10 @@ package io.github.ppzxc.smq.benchmark.random;
 
 import io.github.ppzxc.smq.Chunk;
 import io.github.ppzxc.smq.Extension;
-import io.github.ppzxc.smq.OutgoingMessage;
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.Outcomes;
+import io.github.ppzxc.smq.OutgoingMessage;
 import io.github.ppzxc.smq.Queue;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
@@ -45,17 +45,22 @@ final class RandomRun {
     private static final int DRAIN_CHUNK = 500;
     /** 부하 중 쌓여 있어도 되는 메시지 수와 바이트(미리 채운 몫은 따로 더한다). 이 선을 넘으면 프로듀서가 쉰다. */
     private static final long BACKLOG_MESSAGES = 50_000;
+
     private static final long BACKLOG_BYTES = 128L * 1024 * 1024;
     private static final long SAMPLE_INTERVAL_MS = 500;
     /** 소진 상한의 기본 몫. 리스 기한과 NACK 지연(최대 2초)은 따로 더한다. */
     private static final long DRAIN_BASE_MS = 30_000;
     /** 부모가 자식을 띄우고 자식이 SQLite를 열 때까지 주는 여유. 부하 구간은 이만큼 뒤에 시작한다. */
     private static final long CHILD_START_MARGIN_MS = 4_000;
+
     private static final long CHILD_KILL_GRACE_MS = 60_000;
     private static final long DEPTH_REFRESH_NANOS = 100_000_000L;
 
     interface Checker {
-        List<Violation> check(InvariantChecker.Config config, List<Published> published, List<Delivery> deliveries,
+        List<Violation> check(
+                InvariantChecker.Config config,
+                List<Published> published,
+                List<Delivery> deliveries,
                 List<CountsSample> samples);
     }
 
@@ -65,6 +70,7 @@ final class RandomRun {
     private final long drainLimitMillis;
     /** 이 JVM의 프로세스 번호. 단일 프로세스는 0, 다중 프로세스의 부모는 자식 번호(0..n-1) 다음인 n이다. */
     private final int process;
+
     private final ChildSpawner spawner;
     private volatile Path runDir;
 
@@ -99,8 +105,7 @@ final class RandomRun {
         this.spawner = spawner;
     }
 
-    private record Queues(Queue target, Queue deadLetter) {
-    }
+    private record Queues(Queue target, Queue deadLetter) {}
 
     static long drainLimit(RunParams p) {
         return DRAIN_BASE_MS + p.leaseMillis() + 2_000;
@@ -112,8 +117,8 @@ final class RandomRun {
     }
 
     static RunResult execute(RunParams params, Path dir, Checker checker, ChildSpawner spawner) {
-        RandomRun run = new RandomRun(params, checker, drainLimit(params), params.processes() > 1 ? params.processes() : 0,
-                spawner);
+        RandomRun run = new RandomRun(
+                params, checker, drainLimit(params), params.processes() > 1 ? params.processes() : 0, spawner);
         try {
             return run.runIn(dir);
         } catch (Throwable t) {
@@ -128,8 +133,13 @@ final class RandomRun {
             ErrorDetail reported = ChildReport.read(runDir, f.process()).orElse(null);
             String location = ErrorDetail.child(f.process());
             detail = reported != null
-                    ? new ErrorDetail(location, reported.exceptionClass(), reported.message(), reported.stackTrace(),
-                            f.exitCode(), f.stderrTail())
+                    ? new ErrorDetail(
+                            location,
+                            reported.exceptionClass(),
+                            reported.message(),
+                            reported.stackTrace(),
+                            f.exitCode(),
+                            f.stderrTail())
                     : ErrorDetail.of(location, f.getCause() != null ? f.getCause() : f, f.exitCode(), f.stderrTail());
         } else {
             detail = ErrorDetail.of(ErrorDetail.HARNESS, t, null, null);
@@ -148,7 +158,11 @@ final class RandomRun {
             if (params.processes() > 1) {
                 runChildren(q, db, dir);
             } else {
-                runLoad(q, System.currentTimeMillis(), params.producers().getFirst(), params.consumers().getFirst(),
+                runLoad(
+                        q,
+                        System.currentTimeMillis(),
+                        params.producers().getFirst(),
+                        params.consumers().getFirst(),
                         true);
             }
             drained = drain(q.target(), q.deadLetter());
@@ -157,14 +171,17 @@ final class RandomRun {
     }
 
     private Smq open(Path db) {
-        return Smq.sqlite(db).durability(params.durability()).leaseDuration(Duration.ofMillis(params.leaseMillis()))
+        return Smq.sqlite(db)
+                .durability(params.durability())
+                .leaseDuration(Duration.ofMillis(params.leaseMillis()))
                 .open();
     }
 
     /** 대상 큐와 dead letter 큐를 선언한다. 여러 프로세스가 같은 옵션으로 불러도 같은 큐를 얻는다. */
     private Queues declare(Smq smq) {
         Queue dlq = smq.declare(DEAD_LETTER, QueueOptions.defaults());
-        QueueOptions options = QueueOptions.defaults().deadLetterQueue(DEAD_LETTER)
+        QueueOptions options = QueueOptions.defaults()
+                .deadLetterQueue(DEAD_LETTER)
                 .singleActiveConsumer(params.singleActiveConsumer());
         if (params.maxDeliveries() > 0) {
             options = options.maxDeliveries(params.maxDeliveries(), DEAD_LETTER);
@@ -216,11 +233,21 @@ final class RandomRun {
         ChildReport.guard(outDir, process, () -> {
             RandomRun run = new RandomRun(params, null, 0, process, null);
             try (Smq smq = run.open(db)) {
-                run.runLoad(run.declare(smq), startAt, params.producers().get(process),
-                        params.consumers().get(process), false);
+                run.runLoad(
+                        run.declare(smq),
+                        startAt,
+                        params.producers().get(process),
+                        params.consumers().get(process),
+                        false);
             }
-            ChildOutput.write(outDir, process, new ChildOutput(run.loadAckedMessages.get(),
-                    run.loadAckedBytes.get(), List.copyOf(run.published), List.copyOf(run.deliveries)));
+            ChildOutput.write(
+                    outDir,
+                    process,
+                    new ChildOutput(
+                            run.loadAckedMessages.get(),
+                            run.loadAckedBytes.get(),
+                            List.copyOf(run.published),
+                            List.copyOf(run.deliveries)));
         });
     }
 
@@ -277,7 +304,9 @@ final class RandomRun {
             threads.add(thread("consumer-" + i, () -> consumerLoop(target, dlq)));
         }
         if (!threads.isEmpty()) {
-            for (long wait = startAt - System.currentTimeMillis(); wait > 0; wait = startAt - System.currentTimeMillis()) {
+            for (long wait = startAt - System.currentTimeMillis();
+                    wait > 0;
+                    wait = startAt - System.currentTimeMillis()) {
                 sleepMillis(Math.min(wait, 50));
             }
         }
@@ -299,14 +328,16 @@ final class RandomRun {
     }
 
     private Thread thread(String name, Body body) {
-        return new Thread(() -> {
-            try {
-                body.run();
-            } catch (Throwable t) {
-                failure.compareAndSet(null, t);
-                stop.set(true);
-            }
-        }, name);
+        return new Thread(
+                () -> {
+                    try {
+                        body.run();
+                    } catch (Throwable t) {
+                        failure.compareAndSet(null, t);
+                        stop.set(true);
+                    }
+                },
+                name);
     }
 
     private interface Body {
@@ -361,7 +392,9 @@ final class RandomRun {
     }
 
     private void consumeTarget(Queue target) throws InterruptedException {
-        Chunk chunk = target.pull(params.chunkSize(), Duration.ofMillis(params.pullWaitMillis()),
+        Chunk chunk = target.pull(
+                params.chunkSize(),
+                Duration.ofMillis(params.pullWaitMillis()),
                 Duration.ofMillis(params.leaseMillis()));
         long pulledAt = System.currentTimeMillis();
         if (chunk.isEmpty()) {
@@ -375,7 +408,8 @@ final class RandomRun {
         long[] deadline = new long[messages.size()];
         Arrays.fill(deadline, chunk.leaseDeadline().toEpochMilli());
 
-        Script.Processing p = script.processing(tags.getFirst(), messages.getFirst().deliveryCount());
+        Script.Processing p =
+                script.processing(tags.getFirst(), messages.getFirst().deliveryCount());
         boolean finished = process(target, chunk, p, deadline);
 
         Settle[] settles = new Settle[messages.size()];
@@ -455,8 +489,7 @@ final class RandomRun {
     }
 
     /** 꺼낸 청크를 그대로 모두 ACK하고 기록한다. 부하 중 dead letter 큐와 소진 구간이 쓴다. 꺼냈으면 true. */
-    private boolean ackAll(Queue q, QueueKind kind, int max, Duration wait)
-            throws InterruptedException {
+    private boolean ackAll(Queue q, QueueKind kind, int max, Duration wait) throws InterruptedException {
         Chunk chunk = q.pull(max, wait, Duration.ofMillis(params.leaseMillis()));
         long pulledAt = System.currentTimeMillis();
         if (chunk.isEmpty()) {
@@ -498,13 +531,25 @@ final class RandomRun {
         }
     }
 
-    private void recordChunk(QueueKind kind, long chunkId, List<Message> messages, List<Tag> tags, long pulledAt,
-            long[] deadline, Settle[] settles) {
+    private void recordChunk(
+            QueueKind kind,
+            long chunkId,
+            List<Message> messages,
+            List<Tag> tags,
+            long pulledAt,
+            long[] deadline,
+            Settle[] settles) {
         for (int i = 0; i < messages.size(); i++) {
             Message m = messages.get(i);
             Content content = new Content(Script.checksum(m.payload()), m.headers());
-            deliveries.add(new Delivery(kind, tags.get(i), m.id().value(), m.deliveryCount(), content,
-                    new Pull(chunkId, i, pulledAt, deadline[i]), settles[i]));
+            deliveries.add(new Delivery(
+                    kind,
+                    tags.get(i),
+                    m.id().value(),
+                    m.deliveryCount(),
+                    content,
+                    new Pull(chunkId, i, pulledAt, deadline[i]),
+                    settles[i]));
         }
     }
 
@@ -568,17 +613,25 @@ final class RandomRun {
         List<Published> pub = List.copyOf(published);
         List<Delivery> del = List.copyOf(deliveries);
         List<CountsSample> smp = List.copyOf(samples);
-        InvariantChecker.Config config = new InvariantChecker.Config(params.singleActiveConsumer(),
-                params.maxDeliveries());
+        InvariantChecker.Config config =
+                new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
         List<Violation> violations = checker.check(config, pub, del, smp);
         Verdict verdict = !drained ? Verdict.DRAIN_TIMEOUT : violations.isEmpty() ? Verdict.PASS : Verdict.VIOLATION;
         double seconds = params.loadMillis() / 1000.0;
         long[] latencies = latenciesMillis(pub, del);
         Double p50 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 50);
         Double p99 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 99);
-        return new RunResult(params, verdict, loadAckedMessages.get() / seconds,
-                loadAckedBytes.get() / 1_000_000.0 / seconds, p50, p99, violations,
-                drained ? null : "소진이 " + drainLimitMillis + "ms 안에 끝나지 않았다", new RunResult.Records(pub, del, smp), null,
+        return new RunResult(
+                params,
+                verdict,
+                loadAckedMessages.get() / seconds,
+                loadAckedBytes.get() / 1_000_000.0 / seconds,
+                p50,
+                p99,
+                violations,
+                drained ? null : "소진이 " + drainLimitMillis + "ms 안에 끝나지 않았다",
+                new RunResult.Records(pub, del, smp),
+                null,
                 walMax < 0 ? null : walMax);
     }
 
@@ -588,7 +641,9 @@ final class RandomRun {
         pub.forEach(p -> byTag.put(p.tag(), p));
         List<Long> out = new ArrayList<>();
         for (Delivery d : del) {
-            if (d.queue() != QueueKind.TARGET || d.deliveryCount() != 1 || d.pull().atMillis() < loadStartMillis
+            if (d.queue() != QueueKind.TARGET
+                    || d.deliveryCount() != 1
+                    || d.pull().atMillis() < loadStartMillis
                     || d.pull().atMillis() >= loadEndMillis) {
                 continue;
             }

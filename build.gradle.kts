@@ -80,7 +80,6 @@ tasks.withType<JavaCompile> {
 }
 
 spotless {
-    isEnforceCheck = false
     java {
         target("src/*/java/**/*.java", "deploy-test/**/src/**/*.java")
         palantirJavaFormat("2.103.0")

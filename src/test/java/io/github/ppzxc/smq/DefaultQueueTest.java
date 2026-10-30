@@ -90,12 +90,16 @@ class DefaultQueueTest {
         }
 
         @Override
-        public void close() {
-        }
+        public void close() {}
     }
 
     private static DefaultQueue queueOver(ScriptedStorage storage) {
-        return new DefaultQueue(storage, () -> T0, Duration.ofSeconds(10), new PullWaiter(Optional.empty()), "q",
+        return new DefaultQueue(
+                storage,
+                () -> T0,
+                Duration.ofSeconds(10),
+                new PullWaiter(Optional.empty()),
+                "q",
                 QueueOptions.defaults());
     }
 
@@ -117,8 +121,8 @@ class DefaultQueueTest {
 
     @Test
     void 남은_dead_letter_표시가_있으면_기다리지_않고_바로_다시_꺼내_표시가_없어질_때까지_되풀이한다() throws Exception {
-        ScriptedStorage storage = new ScriptedStorage(PullResult.emptyDeadLettersRemain(),
-                PullResult.emptyDeadLettersRemain(), PullResult.empty());
+        ScriptedStorage storage = new ScriptedStorage(
+                PullResult.emptyDeadLettersRemain(), PullResult.emptyDeadLettersRemain(), PullResult.empty());
 
         Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
 
@@ -132,7 +136,9 @@ class DefaultQueueTest {
 
         Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
 
-        assertEquals(List.of(new MessageId(1)), chunk.messages().stream().map(Message::id).toList());
+        assertEquals(
+                List.of(new MessageId(1)),
+                chunk.messages().stream().map(Message::id).toList());
         assertEquals(2, storage.pulls);
     }
 

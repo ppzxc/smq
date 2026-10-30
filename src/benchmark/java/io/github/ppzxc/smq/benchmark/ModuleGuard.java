@@ -34,7 +34,14 @@ public final class ModuleGuard {
         if (modulePath == null || modulePath.isBlank()) {
             throw new IllegalStateException("부모 JVM에 모듈 경로가 없다. 벤치는 모듈 경로로만 돈다");
         }
-        return List.of("--enable-native-access=ALL-UNNAMED", "--enable-native-access=org.xerial.sqlitejdbc",
-                "--module-path", modulePath, "--add-modules", SMQ_MODULE, "-cp", classPath);
+        return List.of(
+                "--enable-native-access=ALL-UNNAMED",
+                "--enable-native-access=org.xerial.sqlitejdbc",
+                "--module-path",
+                modulePath,
+                "--add-modules",
+                SMQ_MODULE,
+                "-cp",
+                classPath);
     }
 }

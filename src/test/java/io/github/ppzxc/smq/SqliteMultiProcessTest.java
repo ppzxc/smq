@@ -44,15 +44,23 @@ class SqliteMultiProcessTest {
         final Thread reader;
 
         Worker(String name, int count, String mode) throws IOException {
-            String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-            process = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
-                    "-cp", System.getProperty("java.class.path"), MultiProcessWorker.class.getName(),
-                    dir.resolve("smq.db").toString(), name, String.valueOf(count), mode)
+            String java =
+                    Path.of(System.getProperty("java.home"), "bin", "java").toString();
+            process = new ProcessBuilder(
+                            java,
+                            "--enable-native-access=ALL-UNNAMED",
+                            "-cp",
+                            System.getProperty("java.class.path"),
+                            MultiProcessWorker.class.getName(),
+                            dir.resolve("smq.db").toString(),
+                            name,
+                            String.valueOf(count),
+                            mode)
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .start();
             reader = new Thread(() -> {
-                try (BufferedReader in = new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                try (BufferedReader in =
+                        new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = in.readLine()) != null) {
                         if (line.equals("READY")) {
@@ -100,7 +108,10 @@ class SqliteMultiProcessTest {
         List<String> got = new ArrayList<>();
         for (Worker w : workers) {
             assertFalse(w.lines.contains("SETTLE_FAILED"));
-            w.lines.stream().filter(l -> l.startsWith("GOT ")).map(l -> l.substring(4)).forEach(got::add);
+            w.lines.stream()
+                    .filter(l -> l.startsWith("GOT "))
+                    .map(l -> l.substring(4))
+                    .forEach(got::add);
         }
         Set<String> expected = new HashSet<>();
         for (int i = 0; i < WORKERS; i++) {
@@ -127,7 +138,9 @@ class SqliteMultiProcessTest {
         Duration slack = Duration.ofMillis(250);
         Worker receiver = new Worker("recv", 0, "pull-wait");
         assertTrue(receiver.ready.await(30, TimeUnit.SECONDS), "수신 JVM이 대기에 들어가지 않았다");
-        try (Smq smq = Smq.sqlite(dir.resolve("smq.db")).leaseDuration(Duration.ofSeconds(120)).open()) {
+        try (Smq smq = Smq.sqlite(dir.resolve("smq.db"))
+                .leaseDuration(Duration.ofSeconds(120))
+                .open()) {
             Queue q = smq.declare("q", QueueOptions.defaults());
             for (int round = 0; round < 5; round++) {
                 // 폴링 간격은 1ms부터 두 배씩 커진다. 상한이 250ms가 아니라 1000ms로 느슨해져도 이 테스트가
@@ -145,8 +158,7 @@ class SqliteMultiProcessTest {
                 long lagMillis = TimeUnit.NANOSECONDS.toMillis(
                         ((Long[]) receiver.gotAtNanos.toArray(new Long[0]))[round] - publishStart);
                 assertTrue(lagMillis >= 0, round + "회: 발행보다 먼저 받았다(" + lagMillis + "ms)");
-                assertTrue(lagMillis <= upperBound.plus(slack).toMillis(),
-                        round + "회: 발행 뒤 " + lagMillis + "ms에 받았다");
+                assertTrue(lagMillis <= upperBound.plus(slack).toMillis(), round + "회: 발행 뒤 " + lagMillis + "ms에 받았다");
             }
         }
     }

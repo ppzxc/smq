@@ -17,7 +17,11 @@ public final class RandomChildMain {
             System.exit(2);
         }
         ModuleGuard.requireSmqModule("무작위 자식 JVM");
-        RandomRun.runChild(RunParams.fromArg(args[0]), Integer.parseInt(args[1]), Path.of(args[2]), Path.of(args[3]),
+        RandomRun.runChild(
+                RunParams.fromArg(args[0]),
+                Integer.parseInt(args[1]),
+                Path.of(args[2]),
+                Path.of(args[3]),
                 Long.parseLong(args[4]));
     }
 }

@@ -37,10 +37,16 @@ class SchemaV1SampleTest {
     @Test
     void 견본을_열면_큐_선언과_상태별_개수가_보존되어_있다() throws Exception {
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db"))).clock(clock).open()) {
+        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db")))
+                .clock(clock)
+                .open()) {
             assertEquals(QueueOptions.defaults(), smq.queue("v1-dead").options());
-            assertEquals(QueueOptions.defaults().maxDeliveries(3, "v1-dead"), smq.queue("v1-orders").options());
-            assertEquals(QueueOptions.defaults().singleActiveConsumer(true), smq.queue("v1-serial").options());
+            assertEquals(
+                    QueueOptions.defaults().maxDeliveries(3, "v1-dead"),
+                    smq.queue("v1-orders").options());
+            assertEquals(
+                    QueueOptions.defaults().singleActiveConsumer(true),
+                    smq.queue("v1-serial").options());
 
             assertEquals(new QueueCounts(1, 0, 0), smq.queue("v1-dead").counts());
             assertEquals(new QueueCounts(2, 2, 1), smq.queue("v1-orders").counts());
@@ -51,15 +57,20 @@ class SchemaV1SampleTest {
     @Test
     void 견본을_열면_메시지_id_전달_횟수_헤더가_보존되고_리스_기한에_재전달된다() throws Exception {
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db"))).clock(clock).open()) {
+        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db")))
+                .clock(clock)
+                .open()) {
             Queue orders = smq.queue("v1-orders");
 
             // 준비 상태 메시지
             Chunk ready = orders.pull(10, Duration.ZERO, Duration.ofMinutes(1));
             assertEquals(List.of("m3", "m4"), texts(ready));
-            assertEquals(List.of(1, 1), ready.messages().stream().map(Message::deliveryCount).toList());
+            assertEquals(
+                    List.of(1, 1),
+                    ready.messages().stream().map(Message::deliveryCount).toList());
             assertEquals(Map.of("kind", "ready"), ready.messages().getFirst().headers());
-            assertEquals(List.of(new MessageId(IDS_M3), new MessageId(IDS_M4)),
+            assertEquals(
+                    List.of(new MessageId(IDS_M3), new MessageId(IDS_M4)),
                     ready.messages().stream().map(Message::id).toList());
             assertTrue(orders.settle(ready.ackAll()).allOk());
 
@@ -69,9 +80,14 @@ class SchemaV1SampleTest {
             clock.advance(Duration.ofSeconds(1));
             Chunk redelivered = orders.pull(10, Duration.ZERO, Duration.ofHours(10));
             assertEquals(List.of("m1", "m2"), texts(redelivered));
-            assertEquals(List.of(3, 2), redelivered.messages().stream().map(Message::deliveryCount).toList());
-            assertEquals(Map.of("kind", "retried", "n", "1"), redelivered.messages().getFirst().headers());
-            assertEquals(new MessageId(IDS_M1), redelivered.messages().getFirst().id());
+            assertEquals(
+                    List.of(3, 2),
+                    redelivered.messages().stream().map(Message::deliveryCount).toList());
+            assertEquals(
+                    Map.of("kind", "retried", "n", "1"),
+                    redelivered.messages().getFirst().headers());
+            assertEquals(
+                    new MessageId(IDS_M1), redelivered.messages().getFirst().id());
 
             // 지연됨 메시지는 지연 시간이 지나야 나온다
             assertEquals(new QueueCounts(0, 2, 1), orders.counts());
@@ -86,7 +102,9 @@ class SchemaV1SampleTest {
     @Test
     void 견본의_dead_letter_큐와_단일_활성_컨슈머_큐가_그대로_동작한다() throws Exception {
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db"))).clock(clock).open()) {
+        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db")))
+                .clock(clock)
+                .open()) {
             Chunk dead = smq.queue("v1-dead").pull(10, Duration.ZERO);
             assertEquals(List.of("poison"), texts(dead));
             Map<String, String> h = dead.messages().getFirst().headers();
@@ -105,7 +123,8 @@ class SchemaV1SampleTest {
     @Test
     void user_version을_높인_복사본을_열면_IncompatibleStorageException이다() throws Exception {
         Path copy = StorageFactory.copyV1Sample(dir.resolve("future.db"));
-        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy); Statement s = c.createStatement()) {
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy);
+                Statement s = c.createStatement()) {
             s.execute("PRAGMA user_version = 99");
         }
         assertThrows(IncompatibleStorageException.class, () -> Smq.sqlite(copy).open());

@@ -18,7 +18,13 @@ import java.util.OptionalLong;
  *   <li>{@code --out-dir <디렉터리>}: 산출물 위치. 기본 {@code build/random-bench}.
  * </ul>
  */
-record Options(OptionalLong seed, Duration budget, long masterSeed, Duration load, boolean smoke, Path outDir,
+record Options(
+        OptionalLong seed,
+        Duration budget,
+        long masterSeed,
+        Duration load,
+        boolean smoke,
+        Path outDir,
         boolean heapDump) {
 
     static final Duration DEFAULT_BUDGET = Duration.ofMinutes(30);

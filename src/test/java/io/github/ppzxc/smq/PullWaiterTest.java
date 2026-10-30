@@ -56,24 +56,35 @@ class PullWaiterTest {
     @Test
     void 꺼내는_중에_저장소가_닫혀_예외가_나도_닫힌_상태면_빈_결과다() throws Exception {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
-        String result = waiter.await(Duration.ofSeconds(30), () -> {
-            waiter.close();
-            throw new IllegalStateException("storage closed");
-        }, () -> "empty");
+        String result = waiter.await(
+                Duration.ofSeconds(30),
+                () -> {
+                    waiter.close();
+                    throw new IllegalStateException("storage closed");
+                },
+                () -> "empty");
         assertEquals("empty", result);
     }
 
     @Test
     void 닫히지_않았을_때의_예외는_그대로_던진다() {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
-        assertThrows(IllegalStateException.class, () -> waiter.await(Duration.ofSeconds(30), () -> {
-            throw new IllegalStateException("boom");
-        }, () -> "empty"));
+        assertThrows(
+                IllegalStateException.class,
+                () -> waiter.await(
+                        Duration.ofSeconds(30),
+                        () -> {
+                            throw new IllegalStateException("boom");
+                        },
+                        () -> "empty"));
     }
 
     private static List<Duration> awaitsUntilFifthAttempt(PullWaiter waiter, RecordingHint hint) throws Exception {
         AtomicInteger attempts = new AtomicInteger();
-        waiter.await(Duration.ofSeconds(30), () -> attempts.incrementAndGet() < 6 ? Attempt.empty() : Attempt.found("got"), () -> "empty");
+        waiter.await(
+                Duration.ofSeconds(30),
+                () -> attempts.incrementAndGet() < 6 ? Attempt.empty() : Attempt.found("got"),
+                () -> "empty");
         return hint.awaits;
     }
 
@@ -81,28 +92,43 @@ class PullWaiterTest {
     void 저장소_힌트가_있으면_폴링_간격을_늘리지_않고_상한만큼_힌트를_기다린다() throws Exception {
         RecordingHint hint = new RecordingHint();
         List<Duration> awaits = awaitsUntilFifthAttempt(new PullWaiter(hint, true), hint);
-        assertEquals(List.of(Duration.ofMillis(250), Duration.ofMillis(250), Duration.ofMillis(250),
-                Duration.ofMillis(250), Duration.ofMillis(250)), awaits);
+        assertEquals(
+                List.of(
+                        Duration.ofMillis(250),
+                        Duration.ofMillis(250),
+                        Duration.ofMillis(250),
+                        Duration.ofMillis(250),
+                        Duration.ofMillis(250)),
+                awaits);
     }
 
     @Test
     void 저장소_힌트가_없으면_폴링_간격이_1ms에서_250ms까지_늘어난다() throws Exception {
         RecordingHint hint = new RecordingHint();
         List<Duration> awaits = awaitsUntilFifthAttempt(new PullWaiter(hint, false), hint);
-        assertEquals(List.of(Duration.ofMillis(1), Duration.ofMillis(2), Duration.ofMillis(4),
-                Duration.ofMillis(8), Duration.ofMillis(16)), awaits);
+        assertEquals(
+                List.of(
+                        Duration.ofMillis(1),
+                        Duration.ofMillis(2),
+                        Duration.ofMillis(4),
+                        Duration.ofMillis(8),
+                        Duration.ofMillis(16)),
+                awaits);
     }
 
     @Test
     void 바로_다시_꺼내라는_표시가_없고_시간이_다했으면_한_번만_꺼내고_빈_결과다() throws Exception {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
         AtomicInteger attempts = new AtomicInteger();
-        String result = waiter.await(Duration.ZERO, () -> {
-            if (attempts.incrementAndGet() > 3) {
-                throw new AssertionError("표시가 없는데 다시 꺼냈다");
-            }
-            return Attempt.empty();
-        }, () -> "empty");
+        String result = waiter.await(
+                Duration.ZERO,
+                () -> {
+                    if (attempts.incrementAndGet() > 3) {
+                        throw new AssertionError("표시가 없는데 다시 꺼냈다");
+                    }
+                    return Attempt.empty();
+                },
+                () -> "empty");
         assertEquals("empty", result);
         assertEquals(1, attempts.get());
     }
@@ -112,13 +138,16 @@ class PullWaiterTest {
         RecordingHint hint = new RecordingHint();
         PullWaiter waiter = new PullWaiter(hint, true);
         AtomicInteger attempts = new AtomicInteger();
-        String result = waiter.await(Duration.ofSeconds(30), () -> {
-            int n = attempts.incrementAndGet();
-            if (n > 10) {
-                throw new AssertionError("표시가 없어졌는데도 다시 꺼냈다");
-            }
-            return n == 5 ? Attempt.found("got") : n < 3 ? Attempt.retryNow() : Attempt.empty();
-        }, () -> "empty");
+        String result = waiter.await(
+                Duration.ofSeconds(30),
+                () -> {
+                    int n = attempts.incrementAndGet();
+                    if (n > 10) {
+                        throw new AssertionError("표시가 없어졌는데도 다시 꺼냈다");
+                    }
+                    return n == 5 ? Attempt.found("got") : n < 3 ? Attempt.retryNow() : Attempt.empty();
+                },
+                () -> "empty");
         assertEquals("got", result);
         assertEquals(5, attempts.get());
         // 3번째 시도부터 표시가 없으므로 3번째와 4번째 뒤에만 기다린다.
@@ -129,16 +158,19 @@ class PullWaiterTest {
     void 바로_다시_꺼내라는_표시가_계속되어도_닫히면_멈춘다() throws Exception {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
         AtomicInteger attempts = new AtomicInteger();
-        String result = waiter.await(Duration.ofSeconds(30), () -> {
-            int n = attempts.incrementAndGet();
-            if (n > 3) {
-                throw new AssertionError("닫힌 뒤에도 다시 꺼냈다");
-            }
-            if (n == 3) {
-                waiter.close();
-            }
-            return Attempt.retryNow();
-        }, () -> "empty");
+        String result = waiter.await(
+                Duration.ofSeconds(30),
+                () -> {
+                    int n = attempts.incrementAndGet();
+                    if (n > 3) {
+                        throw new AssertionError("닫힌 뒤에도 다시 꺼냈다");
+                    }
+                    if (n == 3) {
+                        waiter.close();
+                    }
+                    return Attempt.retryNow();
+                },
+                () -> "empty");
         assertEquals("empty", result);
         assertEquals(3, attempts.get());
     }
@@ -147,16 +179,21 @@ class PullWaiterTest {
     void 바로_다시_꺼내라는_표시가_계속되어도_interrupt되면_InterruptedException() {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
         AtomicInteger attempts = new AtomicInteger();
-        assertThrows(InterruptedException.class, () -> waiter.await(Duration.ofSeconds(30), () -> {
-            int n = attempts.incrementAndGet();
-            if (n > 3) {
-                throw new AssertionError("interrupt된 뒤에도 다시 꺼냈다");
-            }
-            if (n == 3) {
-                Thread.currentThread().interrupt();
-            }
-            return Attempt.retryNow();
-        }, () -> "empty"));
+        assertThrows(
+                InterruptedException.class,
+                () -> waiter.await(
+                        Duration.ofSeconds(30),
+                        () -> {
+                            int n = attempts.incrementAndGet();
+                            if (n > 3) {
+                                throw new AssertionError("interrupt된 뒤에도 다시 꺼냈다");
+                            }
+                            if (n == 3) {
+                                Thread.currentThread().interrupt();
+                            }
+                            return Attempt.retryNow();
+                        },
+                        () -> "empty"));
         assertEquals(3, attempts.get());
     }
 }

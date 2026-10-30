@@ -33,6 +33,10 @@ class ChunkTableTest {
     void rowsCoverAllFourSizesAndThreeConditions() {
         String t = ChunkTable.render(Map.of());
         for (String size : new String[] {"256B", "2KB", "4KB", "6KB"}) assertTrue(t.contains(size), size);
-        assertEquals(12, t.lines().filter(l -> l.startsWith("S1 ") || l.startsWith("S2 ")).count());
+        assertEquals(
+                12,
+                t.lines()
+                        .filter(l -> l.startsWith("S1 ") || l.startsWith("S2 "))
+                        .count());
     }
 }

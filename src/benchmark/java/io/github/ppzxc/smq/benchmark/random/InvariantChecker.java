@@ -35,8 +35,7 @@ final class InvariantChecker {
      * @param singleActiveConsumer 대상 큐가 단일 활성 컨슈머로 선언됐는가
      * @param maxDeliveries 대상 큐의 최대 전달 횟수. 없으면 0
      */
-    record Config(boolean singleActiveConsumer, int maxDeliveries) {
-    }
+    record Config(boolean singleActiveConsumer, int maxDeliveries) {}
 
     /** 한 메시지(큐와 메시지 id)의 전달을 deliveryCount 순으로 모은 것. */
     private record Message(QueueKind queue, long id, List<Delivery> deliveries) {
@@ -53,8 +52,8 @@ final class InvariantChecker {
         }
     }
 
-    static List<Violation> check(Config config, List<Published> published, List<Delivery> deliveries,
-            List<CountsSample> samples) {
+    static List<Violation> check(
+            Config config, List<Published> published, List<Delivery> deliveries, List<CountsSample> samples) {
         List<Violation> out = new ArrayList<>();
         Map<Tag, Published> byTag = new LinkedHashMap<>();
         for (Published p : published) {
@@ -67,12 +66,18 @@ final class InvariantChecker {
         for (Delivery d : deliveries) {
             Published p = byTag.get(d.tag());
             if (p == null) {
-                out.add(new Violation(Invariant.GHOST, List.of(d.tag()), List.of(d.messageId()),
+                out.add(new Violation(
+                        Invariant.GHOST,
+                        List.of(d.tag()),
+                        List.of(d.messageId()),
                         "발행하지 않은 태그가 " + d.queue() + "에서 전달됐다"));
             } else {
                 String diff = contentDiff(p.content(), d.content());
                 if (diff != null) {
-                    out.add(new Violation(Invariant.GHOST, List.of(d.tag()), List.of(d.messageId()),
+                    out.add(new Violation(
+                            Invariant.GHOST,
+                            List.of(d.tag()),
+                            List.of(d.messageId()),
                             d.queue() + " 전달이 발행 내용과 다르다: " + diff));
                 }
                 known.add(d);
@@ -84,12 +89,17 @@ final class InvariantChecker {
         Map<Tag, List<Message>> deadLetters = new LinkedHashMap<>();
         for (Message m : messages.values()) {
             checkMessage(config, byTag.get(m.tag()), m, out);
-            (m.queue() == QueueKind.TARGET ? targets : deadLetters).computeIfAbsent(m.tag(), t -> new ArrayList<>())
+            (m.queue() == QueueKind.TARGET ? targets : deadLetters)
+                    .computeIfAbsent(m.tag(), t -> new ArrayList<>())
                     .add(m);
         }
         for (Published p : published) {
-            checkOutcome(config, p.tag(), targets.getOrDefault(p.tag(), List.of()),
-                    deadLetters.getOrDefault(p.tag(), List.of()), out);
+            checkOutcome(
+                    config,
+                    p.tag(),
+                    targets.getOrDefault(p.tag(), List.of()),
+                    deadLetters.getOrDefault(p.tag(), List.of()),
+                    out);
         }
 
         checkChunkOrder(deliveries, out);
@@ -105,11 +115,14 @@ final class InvariantChecker {
     private static Map<String, Message> groupMessages(List<Delivery> known) {
         Map<String, List<Delivery>> grouped = new LinkedHashMap<>();
         for (Delivery d : known) {
-            grouped.computeIfAbsent(d.queue() + "#" + d.messageId(), k -> new ArrayList<>()).add(d);
+            grouped.computeIfAbsent(d.queue() + "#" + d.messageId(), k -> new ArrayList<>())
+                    .add(d);
         }
         Map<String, Message> out = new LinkedHashMap<>();
         grouped.forEach((k, list) -> {
-            List<Delivery> sorted = list.stream().sorted(Comparator.comparingInt(Delivery::deliveryCount)).toList();
+            List<Delivery> sorted = list.stream()
+                    .sorted(Comparator.comparingInt(Delivery::deliveryCount))
+                    .toList();
             out.put(k, new Message(sorted.getFirst().queue(), sorted.getFirst().messageId(), sorted));
         });
         return out;
@@ -121,20 +134,34 @@ final class InvariantChecker {
         List<Long> ids = List.of(m.id());
 
         if (ds.stream().anyMatch(d -> !d.tag().equals(m.tag()))) {
-            out.add(new Violation(Invariant.GHOST, ds.stream().map(Delivery::tag).distinct().toList(), ids,
+            out.add(new Violation(
+                    Invariant.GHOST,
+                    ds.stream().map(Delivery::tag).distinct().toList(),
+                    ids,
                     m.queue() + " 메시지 id 하나가 서로 다른 태그로 전달됐다"));
         }
 
         for (int i = 0; i < ds.size(); i++) {
             if (ds.get(i).deliveryCount() != i + 1) {
-                out.add(new Violation(Invariant.DUPLICATE, tags, ids, m.queue() + " deliveryCount가 1부터 빈틈없이 늘지 않는다: "
-                        + ds.stream().map(d -> String.valueOf(d.deliveryCount())).collect(Collectors.joining(","))));
+                out.add(new Violation(
+                        Invariant.DUPLICATE,
+                        tags,
+                        ids,
+                        m.queue() + " deliveryCount가 1부터 빈틈없이 늘지 않는다: "
+                                + ds.stream()
+                                        .map(d -> String.valueOf(d.deliveryCount()))
+                                        .collect(Collectors.joining(","))));
                 break;
             }
         }
         if (m.queue() == QueueKind.TARGET && config.maxDeliveries() > 0) {
-            ds.stream().filter(d -> d.deliveryCount() > config.maxDeliveries()).findFirst()
-                    .ifPresent(d -> out.add(new Violation(Invariant.DUPLICATE, tags, ids,
+            ds.stream()
+                    .filter(d -> d.deliveryCount() > config.maxDeliveries())
+                    .findFirst()
+                    .ifPresent(d -> out.add(new Violation(
+                            Invariant.DUPLICATE,
+                            tags,
+                            ids,
                             "최대 전달 횟수 " + config.maxDeliveries() + "를 넘어 " + d.deliveryCount() + "번째로 전달됐다")));
         }
 
@@ -142,7 +169,10 @@ final class InvariantChecker {
             long due = pub.atMillis() + pub.delayMillis();
             long at = ds.getFirst().pull().atMillis();
             if (at < due - TOLERANCE_MILLIS) {
-                out.add(new Violation(Invariant.DELAY, tags, ids,
+                out.add(new Violation(
+                        Invariant.DELAY,
+                        tags,
+                        ids,
                         "발행 지연 " + pub.delayMillis() + "ms 보다 " + (due - at) + "ms 일찍 전달됐다"));
             }
         }
@@ -152,48 +182,61 @@ final class InvariantChecker {
             Delivery cur = ds.get(i);
             long at = cur.pull().atMillis();
             if (prev.settle().applied(Action.ACK) || prev.settle().applied(Action.REJECT)) {
-                out.add(new Violation(Invariant.DUPLICATE, tags, ids, m.queue() + " " + prev.settle().action()
-                        + "이 반영된 뒤 " + cur.deliveryCount() + "번째로 다시 전달됐다"));
+                out.add(new Violation(
+                        Invariant.DUPLICATE,
+                        tags,
+                        ids,
+                        m.queue() + " " + prev.settle().action() + "이 반영된 뒤 " + cur.deliveryCount() + "번째로 다시 전달됐다"));
             } else if (prev.settle().applied(Action.NACK)) {
                 long due = prev.settle().atMillis() + prev.settle().nackDelayMillis();
                 if (at < due - TOLERANCE_MILLIS) {
-                    out.add(new Violation(Invariant.DELAY, tags, ids, m.queue() + " NACK 지연 "
-                            + prev.settle().nackDelayMillis() + "ms 보다 " + (due - at) + "ms 일찍 재전달됐다"));
+                    out.add(new Violation(
+                            Invariant.DELAY,
+                            tags,
+                            ids,
+                            m.queue() + " NACK 지연 " + prev.settle().nackDelayMillis() + "ms 보다 " + (due - at)
+                                    + "ms 일찍 재전달됐다"));
                 }
             } else if (at < prev.pull().leaseDeadlineMillis() - TOLERANCE_MILLIS) {
-                out.add(new Violation(Invariant.DUPLICATE, tags, ids, m.queue() + " 리스 만료 "
-                        + (prev.pull().leaseDeadlineMillis() - at) + "ms 전에 NACK 없이 재전달됐다"));
+                out.add(new Violation(
+                        Invariant.DUPLICATE,
+                        tags,
+                        ids,
+                        m.queue() + " 리스 만료 " + (prev.pull().leaseDeadlineMillis() - at) + "ms 전에 NACK 없이 재전달됐다"));
             }
         }
     }
 
     // ---- 태그 단위: 유실, dead letter 이동
 
-    private static void checkOutcome(Config config, Tag tag, List<Message> targets, List<Message> deadLetters,
-            List<Violation> out) {
+    private static void checkOutcome(
+            Config config, Tag tag, List<Message> targets, List<Message> deadLetters, List<Violation> out) {
         List<Tag> tags = List.of(tag);
         List<Long> targetIds = targets.stream().map(Message::id).toList();
         List<Long> dlIds = deadLetters.stream().map(Message::id).toList();
 
         if (targets.size() > 1) {
-            out.add(new Violation(Invariant.DUPLICATE, tags, targetIds,
-                    "한 번 발행한 태그가 대상 큐에 " + targets.size() + "개 메시지로 들어갔다"));
+            out.add(new Violation(
+                    Invariant.DUPLICATE, tags, targetIds, "한 번 발행한 태그가 대상 큐에 " + targets.size() + "개 메시지로 들어갔다"));
             return;
         }
-        long acks = targets.stream().flatMap(m -> m.deliveries().stream())
-                .filter(d -> d.settle().applied(Action.ACK)).count();
+        long acks = targets.stream()
+                .flatMap(m -> m.deliveries().stream())
+                .filter(d -> d.settle().applied(Action.ACK))
+                .count();
         Delivery last = targets.isEmpty() ? null : targets.getFirst().last();
 
         // 한 메시지가 두 번 OK로 ACK되는 경우는 ACK 뒤 재전달로 이미 보고된다.
         if (acks >= 1 && !deadLetters.isEmpty()) {
-            out.add(new Violation(Invariant.DEAD_LETTER, tags, concat(targetIds, dlIds),
-                    "OK로 ACK된 메시지가 dead letter 큐로도 옮겨졌다"));
+            out.add(new Violation(
+                    Invariant.DEAD_LETTER, tags, concat(targetIds, dlIds), "OK로 ACK된 메시지가 dead letter 큐로도 옮겨졌다"));
         } else if (deadLetters.size() > 1) {
-            out.add(new Violation(Invariant.DEAD_LETTER, tags, dlIds,
-                    "한 태그가 dead letter 큐로 " + deadLetters.size() + "번 옮겨졌다"));
+            out.add(new Violation(
+                    Invariant.DEAD_LETTER, tags, dlIds, "한 태그가 dead letter 큐로 " + deadLetters.size() + "번 옮겨졌다"));
         } else if (deadLetters.size() == 1) {
             Message dl = deadLetters.getFirst();
-            String problem = moveProblem(config, last, dl.deliveries().getFirst().content().headers());
+            String problem = moveProblem(
+                    config, last, dl.deliveries().getFirst().content().headers());
             if (problem != null) {
                 out.add(new Violation(Invariant.DEAD_LETTER, tags, concat(targetIds, dlIds), problem));
             }
@@ -202,11 +245,11 @@ final class InvariantChecker {
             }
         } else if (acks == 0) {
             if (last != null && mustHaveMoved(config, last)) {
-                out.add(new Violation(Invariant.DEAD_LETTER, tags, targetIds,
-                        "reject나 최대 전달 횟수 소진인데 dead letter 큐로 옮겨지지 않았다"));
+                out.add(new Violation(
+                        Invariant.DEAD_LETTER, tags, targetIds, "reject나 최대 전달 횟수 소진인데 dead letter 큐로 옮겨지지 않았다"));
             } else {
-                out.add(new Violation(Invariant.LOSS, tags, targetIds,
-                        last == null ? "발행했지만 한 번도 전달되지 않았다" : "전달됐지만 OK로 ACK되지 않았다"));
+                out.add(new Violation(
+                        Invariant.LOSS, tags, targetIds, last == null ? "발행했지만 한 번도 전달되지 않았다" : "전달됐지만 OK로 ACK되지 않았다"));
             }
         }
     }
@@ -228,7 +271,8 @@ final class InvariantChecker {
                 problems.add("reason=rejected인데 마지막 전달이 reject되지 않았다");
             }
         } else if (REASON_MAX_DELIVERIES.equals(reason)) {
-            if (config.maxDeliveries() <= 0 || last.deliveryCount() != config.maxDeliveries()
+            if (config.maxDeliveries() <= 0
+                    || last.deliveryCount() != config.maxDeliveries()
                     || last.settle().applied(Action.REJECT)) {
                 problems.add("reason=max-deliveries인데 최대 전달 횟수를 소진한 기록이 아니다");
             }
@@ -236,12 +280,10 @@ final class InvariantChecker {
             problems.add(REASON + " 헤더가 없거나 알 수 없다: " + reason);
         }
         if (!String.valueOf(last.messageId()).equals(headers.get(ORIGINAL_MESSAGE_ID))) {
-            problems.add(ORIGINAL_MESSAGE_ID + "=" + headers.get(ORIGINAL_MESSAGE_ID)
-                    + " 기록은 " + last.messageId());
+            problems.add(ORIGINAL_MESSAGE_ID + "=" + headers.get(ORIGINAL_MESSAGE_ID) + " 기록은 " + last.messageId());
         }
         if (!String.valueOf(last.deliveryCount()).equals(headers.get(LAST_DELIVERY_COUNT))) {
-            problems.add(LAST_DELIVERY_COUNT + "=" + headers.get(LAST_DELIVERY_COUNT)
-                    + " 기록은 " + last.deliveryCount());
+            problems.add(LAST_DELIVERY_COUNT + "=" + headers.get(LAST_DELIVERY_COUNT) + " 기록은 " + last.deliveryCount());
         }
         return problems.isEmpty() ? null : String.join("; ", problems);
     }
@@ -254,21 +296,25 @@ final class InvariantChecker {
             chunks.computeIfAbsent(d.pull().chunk(), k -> new ArrayList<>()).add(d);
         }
         for (List<Delivery> chunk : chunks.values()) {
-            List<Delivery> sorted = chunk.stream().sorted(Comparator.comparingInt(d -> d.pull().position())).toList();
+            List<Delivery> sorted = chunk.stream()
+                    .sorted(Comparator.comparingInt(d -> d.pull().position()))
+                    .toList();
             for (int i = 1; i < sorted.size(); i++) {
                 Delivery prev = sorted.get(i - 1);
                 Delivery cur = sorted.get(i);
                 if (cur.messageId() <= prev.messageId()) {
-                    out.add(new Violation(Invariant.CHUNK_ORDER, List.of(prev.tag(), cur.tag()),
-                            List.of(prev.messageId(), cur.messageId()), "청크 " + prev.pull().chunk()
-                                    + " 안에서 메시지 id가 " + prev.messageId() + " 다음에 " + cur.messageId() + "다"));
+                    out.add(new Violation(
+                            Invariant.CHUNK_ORDER,
+                            List.of(prev.tag(), cur.tag()),
+                            List.of(prev.messageId(), cur.messageId()),
+                            "청크 " + prev.pull().chunk() + " 안에서 메시지 id가 " + prev.messageId() + " 다음에 " + cur.messageId()
+                                    + "다"));
                 }
             }
         }
     }
 
-    private record Lease(Delivery first, long start, long end) {
-    }
+    private record Lease(Delivery first, long start, long end) {}
 
     /** 청크의 리스는 꺼낸 시각부터 기한까지다. 청크 전체를 정산했다면 가장 늦은 정산 시각에 풀린다. */
     private static void checkSingleActive(List<Delivery> deliveries, List<Violation> out) {
@@ -280,18 +326,30 @@ final class InvariantChecker {
         }
         List<Lease> leases = new ArrayList<>();
         for (List<Delivery> chunk : chunks.values()) {
-            long end = chunk.stream().mapToLong(d -> d.pull().leaseDeadlineMillis()).max().orElseThrow();
+            long end = chunk.stream()
+                    .mapToLong(d -> d.pull().leaseDeadlineMillis())
+                    .max()
+                    .orElseThrow();
             if (chunk.stream().allMatch(d -> d.settle().action() != Action.NONE)) {
-                end = Math.min(end, chunk.stream().mapToLong(d -> d.settle().atMillis()).max().orElseThrow());
+                end = Math.min(
+                        end,
+                        chunk.stream()
+                                .mapToLong(d -> d.settle().atMillis())
+                                .max()
+                                .orElseThrow());
             }
-            Delivery first = chunk.stream().min(Comparator.comparingInt(d -> d.pull().position())).orElseThrow();
+            Delivery first = chunk.stream()
+                    .min(Comparator.comparingInt(d -> d.pull().position()))
+                    .orElseThrow();
             leases.add(new Lease(first, first.pull().atMillis(), end));
         }
         leases.sort(Comparator.comparingLong(Lease::start));
         Lease widest = null;
         for (Lease cur : leases) {
             if (widest != null && cur.start() < widest.end() - TOLERANCE_MILLIS) {
-                out.add(new Violation(Invariant.SINGLE_ACTIVE, List.of(widest.first().tag(), cur.first().tag()),
+                out.add(new Violation(
+                        Invariant.SINGLE_ACTIVE,
+                        List.of(widest.first().tag(), cur.first().tag()),
                         List.of(widest.first().messageId(), cur.first().messageId()),
                         "청크 " + widest.first().pull().chunk() + "의 리스가 " + (widest.end() - cur.start())
                                 + "ms 더 살아 있는데 청크 " + cur.first().pull().chunk() + "가 꺼내졌다"));
@@ -307,8 +365,8 @@ final class InvariantChecker {
     private static void checkCounts(List<CountsSample> samples, List<Violation> out) {
         Set<QueueKind> drained = EnumSet.noneOf(QueueKind.class);
         for (CountsSample s : samples) {
-            String where = s.queue() + (s.afterDrain() ? " 소진 뒤" : " 부하 중") + " counts=("
-                    + s.ready() + ", " + s.leased() + ", " + s.delayed() + ")";
+            String where = s.queue() + (s.afterDrain() ? " 소진 뒤" : " 부하 중") + " counts=(" + s.ready() + ", "
+                    + s.leased() + ", " + s.delayed() + ")";
             if (s.ready() < 0 || s.leased() < 0 || s.delayed() < 0) {
                 out.add(new Violation(Invariant.COUNTS, List.of(), List.of(), where + "에 음수가 있다"));
             } else if (s.afterDrain() && (s.ready() != 0 || s.leased() != 0 || s.delayed() != 0)) {

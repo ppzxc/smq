@@ -13,7 +13,12 @@ import java.util.Map;
  * @param exitCode 자식 JVM이 비정상 종료했을 때의 종료 코드. 알 수 없거나 자식이 아니면 null
  * @param stderrTail 자식 JVM 표준 오류의 끝부분(상한 있음). 자식이 아니면 null
  */
-record ErrorDetail(String location, String exceptionClass, String message, String stackTrace, Integer exitCode,
+record ErrorDetail(
+        String location,
+        String exceptionClass,
+        String message,
+        String stackTrace,
+        Integer exitCode,
         String stderrTail) {
 
     static final String HARNESS = "harness";

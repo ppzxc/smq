@@ -14,11 +14,19 @@ final class Summary {
             return "";
         }
         StringBuilder sb = new StringBuilder("\n");
-        sb.append(table("처리량이 낮은 순", results.stream()
-                .sorted(Comparator.comparingDouble(RunResult::msgPerSec)).limit(rows).toList()));
-        sb.append(table("p99가 높은 순", results.stream()
-                .sorted(Comparator.comparing((RunResult r) -> r.p99Ms() == null ? -1.0 : r.p99Ms()).reversed())
-                .limit(rows).toList()));
+        sb.append(table(
+                "처리량이 낮은 순",
+                results.stream()
+                        .sorted(Comparator.comparingDouble(RunResult::msgPerSec))
+                        .limit(rows)
+                        .toList()));
+        sb.append(table(
+                "p99가 높은 순",
+                results.stream()
+                        .sorted(Comparator.comparing((RunResult r) -> r.p99Ms() == null ? -1.0 : r.p99Ms())
+                                .reversed())
+                        .limit(rows)
+                        .toList()));
         return sb.toString();
     }
 
@@ -26,8 +34,14 @@ final class Summary {
         StringBuilder sb = new StringBuilder(title).append('\n');
         sb.append(String.format("  %-20s %10s %8s %9s %9s  %s%n", "seed", "msg/s", "MB/s", "p50", "p99", "판정"));
         for (RunResult r : rows) {
-            sb.append(String.format("  %-20d %10.0f %8.2f %9s %9s  %s%n", r.params().seed(), r.msgPerSec(),
-                    r.mbPerSec(), ms(r, RunResult::p50Ms), ms(r, RunResult::p99Ms), r.verdict()));
+            sb.append(String.format(
+                    "  %-20d %10.0f %8.2f %9s %9s  %s%n",
+                    r.params().seed(),
+                    r.msgPerSec(),
+                    r.mbPerSec(),
+                    ms(r, RunResult::p50Ms),
+                    ms(r, RunResult::p99Ms),
+                    r.verdict()));
         }
         return sb.append('\n').toString();
     }

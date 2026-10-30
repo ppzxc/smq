@@ -30,13 +30,19 @@ class SessionTest {
     }
 
     private Session session(Session.Executor executor) {
-        return new Session(dir, dir.resolve("runs.jsonl"), Map.of("workDirFs", "ext4", "caveat", "테스트"), LIMITS,
-                executor, new PrintStream(bytes, true, StandardCharsets.UTF_8));
+        return new Session(
+                dir,
+                dir.resolve("runs.jsonl"),
+                Map.of("workDirFs", "ext4", "caveat", "테스트"),
+                LIMITS,
+                executor,
+                new PrintStream(bytes, true, StandardCharsets.UTF_8));
     }
 
-    private static RunResult result(RunParams p, Verdict v, double rate, Double p99, List<Violation> violations,
-            RunResult.Records records) {
-        return new RunResult(p, v, rate, rate / 1000, p99 == null ? null : p99 / 2, p99, violations, null, records, null, null);
+    private static RunResult result(
+            RunParams p, Verdict v, double rate, Double p99, List<Violation> violations, RunResult.Records records) {
+        return new RunResult(
+                p, v, rate, rate / 1000, p99 == null ? null : p99 / 2, p99, violations, null, records, null, null);
     }
 
     /** 실행기가 SQLite 파일을 흉내 내 디렉터리에 남긴다. */
@@ -53,8 +59,8 @@ class SessionTest {
         };
     }
 
-    private static final Violation LOSS = new Violation(Invariant.LOSS, List.of(new Tag(7, 0, 3)), List.of(99L),
-            "전달됐지만 OK로 ACK되지 않았다");
+    private static final Violation LOSS =
+            new Violation(Invariant.LOSS, List.of(new Tag(7, 0, 3)), List.of(99L), "전달됐지만 OK로 ACK되지 않았다");
 
     @Test
     void passingRunsAppendOneJsonLineEachAndDeleteTheirFiles() throws IOException {
@@ -78,7 +84,8 @@ class SessionTest {
     void firstViolationStopsTheSessionAndPreservesFilesAndRecords() throws IOException {
         RunResult.Records records = new RunResult.Records(
                 List.of(new Published(new Tag(7, 0, 3), new Content(5, Map.of("bench-tag", "7/0/3")), 100, 0)),
-                List.of(), List.of(new CountsSample(QueueKind.TARGET, true, 1, 0, 0)));
+                List.of(),
+                List.of(new CountsSample(QueueKind.TARGET, true, 1, 0, 0)));
         Session s = session(fake(p -> p.seed() == 2
                 ? result(p, Verdict.VIOLATION, 10, null, List.of(LOSS), records)
                 : result(p, Verdict.PASS, 1000, 5.0, List.of(), RunResult.Records.EMPTY)));
@@ -130,8 +137,8 @@ class SessionTest {
 
     @Test
     void summaryIsSortedByThroughputAndP99() {
-        Session s = session(fake(p -> result(p, Verdict.PASS, p.seed() * 100.0, p.seed() == 2 ? 900.0 : 5.0,
-                List.of(), RunResult.Records.EMPTY)));
+        Session s = session(fake(p -> result(
+                p, Verdict.PASS, p.seed() * 100.0, p.seed() == 2 ? 900.0 : 5.0, List.of(), RunResult.Records.EMPTY)));
         s.run(List.of(3L, 1L, 2L).iterator(), Long.MAX_VALUE);
         String out = output();
         String byThroughput = out.substring(out.indexOf("처리량이 낮은 순"), out.indexOf("p99가 높은 순"));
@@ -143,16 +150,21 @@ class SessionTest {
 
     // ---- ERROR 진단 필드
 
-    private static final ErrorDetail CHILD_OOM = new ErrorDetail("child-2", "java.lang.OutOfMemoryError",
-            "Java heap space", "java.lang.OutOfMemoryError: Java heap space\n\tat a.B.c(B.java:1)\n", 1, "oom 꼬리");
+    private static final ErrorDetail CHILD_OOM = new ErrorDetail(
+            "child-2",
+            "java.lang.OutOfMemoryError",
+            "Java heap space",
+            "java.lang.OutOfMemoryError: Java heap space\n\tat a.B.c(B.java:1)\n",
+            1,
+            "oom 꼬리");
 
     @Test
     void anErrorKeepsItsLocationStackTraceAndWalSizeInTheJsonLineAndTheViolationsFile() throws IOException {
         Session s = session(fake(p -> RunResult.error(p, CHILD_OOM, "boom", 852_000_000L)));
         assertEquals(Session.EXIT_FAILED, s.run(List.of(8L).iterator(), Long.MAX_VALUE));
 
-        Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json
-                .parse(Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());
+        Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json.parse(
+                Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());
         assertEquals("ERROR", line.get("verdict"));
         assertEquals("boom", line.get("error"), "기존 필드 의미는 그대로");
         Map<?, ?> detail = (Map<?, ?>) line.get("errorDetail");
@@ -179,11 +191,11 @@ class SessionTest {
 
     @Test
     void passingRunsRecordTheWalSizeAndNoErrorDetail() throws IOException {
-        Session s = session(fake(p -> new RunResult(p, Verdict.PASS, 100, 0.1, 1.0, 2.0, List.of(), null,
-                RunResult.Records.EMPTY, null, 4096L)));
+        Session s = session(fake(p -> new RunResult(
+                p, Verdict.PASS, 100, 0.1, 1.0, 2.0, List.of(), null, RunResult.Records.EMPTY, null, 4096L)));
         assertEquals(Session.EXIT_OK, s.run(List.of(1L).iterator(), Long.MAX_VALUE));
-        Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json
-                .parse(Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());
+        Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json.parse(
+                Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());
         assertEquals(4096.0, line.get("walMaxBytes"));
         assertNull(line.get("errorDetail"));
     }

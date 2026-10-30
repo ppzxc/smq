@@ -80,7 +80,8 @@ abstract class StorageContractTest {
     @Test
     void 옮겨진_메시지는_새_메시지라_전달_횟수를_처음부터_센다() {
         pullAfterExhausting("over", DeadLetters.MAX_MOVES_PER_PULL + 1);
-        Message moved = storage.pull("dead-over", 1, LEASE, T0.plus(LEASE)).messages().getFirst();
+        Message moved =
+                storage.pull("dead-over", 1, LEASE, T0.plus(LEASE)).messages().getFirst();
         assertEquals(1, moved.deliveryCount());
     }
 
@@ -130,7 +131,8 @@ abstract class StorageContractTest {
         storage.publish("q", List.of(message(1)), T0);
         storage.pull("q", 1, LEASE, T0);
         Instant deadline = T0.plus(LEASE);
-        assertTrue(storage.pull("q", 1, LEASE, deadline.minusNanos(1)).messages().isEmpty());
+        assertTrue(
+                storage.pull("q", 1, LEASE, deadline.minusNanos(1)).messages().isEmpty());
         assertEquals(1, storage.pull("q", 1, LEASE, deadline).messages().size());
     }
 
@@ -140,7 +142,9 @@ abstract class StorageContractTest {
         Duration delay = Duration.ofSeconds(5);
         storage.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of(), delay)), T0);
         Instant availableAt = T0.plus(delay);
-        assertTrue(storage.pull("q", 1, LEASE, availableAt.minusNanos(1)).messages().isEmpty());
+        assertTrue(storage.pull("q", 1, LEASE, availableAt.minusNanos(1))
+                .messages()
+                .isEmpty());
         assertEquals(1, storage.pull("q", 1, LEASE, availableAt).messages().size());
     }
 
@@ -170,7 +174,8 @@ abstract class StorageContractTest {
         PullResult current = storage.pull("q", 1, LEASE, second);
         assertEquals(1, current.messages().size());
 
-        List<Result> results = storage.settle(first.token(), List.of(new Disposition(id, Disposition.Kind.ACK)), second);
+        List<Result> results =
+                storage.settle(first.token(), List.of(new Disposition(id, Disposition.Kind.ACK)), second);
 
         assertEquals(List.of(new Result(id, Outcome.STALE)), results);
         assertEquals(new QueueCounts(0, 1, 0), storage.counts("q", second));
@@ -186,9 +191,14 @@ abstract class StorageContractTest {
         MessageId acked = pulled.messages().get(0).id();
         MessageId rejected = pulled.messages().get(1).id();
 
-        assertThrows(RuntimeException.class, () -> storage.settle(pulled.token(),
-                List.of(new Disposition(acked, Disposition.Kind.ACK), new Disposition(rejected, Disposition.Kind.REJECT)),
-                T0));
+        assertThrows(
+                RuntimeException.class,
+                () -> storage.settle(
+                        pulled.token(),
+                        List.of(
+                                new Disposition(acked, Disposition.Kind.ACK),
+                                new Disposition(rejected, Disposition.Kind.REJECT)),
+                        T0));
 
         assertEquals(new QueueCounts(0, 2, 0), storage.counts("q", T0));
         assertEquals(2, storage.pull("q", 2, LEASE, T0.plus(LEASE)).messages().size());

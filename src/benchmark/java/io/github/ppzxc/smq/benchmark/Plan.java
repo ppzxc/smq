@@ -43,7 +43,9 @@ final class Plan {
     /** scaling(P1~P4 빈 큐 1·4프로세스)과 depth(P1 100만 건 깊이와 빈 큐)의 분자 또는 분모인 SQLite S1 조건. */
     static boolean isRatioCondition(RunSpec s) {
         if (s.storage() != Storage.SQLITE || s.scenario() != Scenario.S1) return false;
-        boolean scalingProfile = s.profile() == Profile.P1 || s.profile() == Profile.P2 || s.profile() == Profile.P3
+        boolean scalingProfile = s.profile() == Profile.P1
+                || s.profile() == Profile.P2
+                || s.profile() == Profile.P3
                 || s.profile() == Profile.P4;
         return scalingProfile && (s.depth() == 0 || (s.profile() == Profile.P1 && s.depth() == RunSpec.DEEP));
     }
@@ -71,8 +73,8 @@ final class Plan {
 
     private static List<RunSpec> build(Storage storage, long d, long w, int deep) {
         boolean sqlite = storage == Storage.SQLITE;
-        List<Durability> durabilities = sqlite ? List.of(Durability.POWER_LOSS, Durability.PROCESS_CRASH)
-                : Collections.singletonList(null);
+        List<Durability> durabilities =
+                sqlite ? List.of(Durability.POWER_LOSS, Durability.PROCESS_CRASH) : Collections.singletonList(null);
         List<Integer> processCounts = sqlite ? List.of(1, 4) : List.of(1);
         List<RunSpec> plan = new ArrayList<>();
         // S1: P0은 1프로세스, 빈 큐만. P1~P4는 프로세스 {1,4} x 내구성 수준.
@@ -87,8 +89,8 @@ final class Plan {
         for (int n : processCounts)
             for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, n, dur, deep, d, w));
         // S2: P1~P4와 단건 프로파일(P0, P2S, P3S, P4S), 1프로세스, 빈 큐.
-        for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4, Profile.P0, Profile.P2S, Profile.P3S,
-                Profile.P4S))
+        for (Profile p : List.of(
+                Profile.P1, Profile.P2, Profile.P3, Profile.P4, Profile.P0, Profile.P2S, Profile.P3S, Profile.P4S))
             plan.add(RunSpec.s2(storage, p, d, w));
         // S3: P1만.
         plan.add(RunSpec.s3(storage, Profile.P1, Topology.SAME_PROCESS, d, w));

@@ -57,14 +57,26 @@ record Report(Map<String, String> environment, Map<String, Double> entries, Map<
     /** 사람이 읽기 좋게 항목을 줄마다 나눈 JSON. 기준선을 커밋할 때 diff가 읽히게 한다. */
     String toPrettyJson() {
         StringBuilder sb = new StringBuilder("{\n  \"environment\": {\n");
-        appendMap(sb, environment.entrySet().stream().map(e -> Map.entry(e.getKey(), (Object) e.getValue())).toList());
+        appendMap(
+                sb,
+                environment.entrySet().stream()
+                        .map(e -> Map.entry(e.getKey(), (Object) e.getValue()))
+                        .toList());
         sb.append("  },\n  \"entries\": {\n");
-        appendMap(sb, entries.entrySet().stream().map(e -> Map.entry(e.getKey(), (Object) e.getValue())).toList());
+        appendMap(
+                sb,
+                entries.entrySet().stream()
+                        .map(e -> Map.entry(e.getKey(), (Object) e.getValue()))
+                        .toList());
         if (samples.isEmpty()) {
             sb.append("  }\n}\n");
         } else {
             sb.append("  },\n  \"samples\": {\n");
-            appendMap(sb, samples.entrySet().stream().map(e -> Map.entry(e.getKey(), (Object) e.getValue())).toList());
+            appendMap(
+                    sb,
+                    samples.entrySet().stream()
+                            .map(e -> Map.entry(e.getKey(), (Object) e.getValue()))
+                            .toList());
             sb.append("  }\n}\n");
         }
         return sb.toString();
@@ -72,8 +84,11 @@ record Report(Map<String, String> environment, Map<String, Double> entries, Map<
 
     private static void appendMap(StringBuilder sb, List<Map.Entry<String, Object>> items) {
         for (int i = 0; i < items.size(); i++) {
-            sb.append("    ").append(Json.write(items.get(i).getKey())).append(": ")
-                    .append(Json.write(items.get(i).getValue())).append(i + 1 < items.size() ? ",\n" : "\n");
+            sb.append("    ")
+                    .append(Json.write(items.get(i).getKey()))
+                    .append(": ")
+                    .append(Json.write(items.get(i).getValue()))
+                    .append(i + 1 < items.size() ? ",\n" : "\n");
         }
     }
 }

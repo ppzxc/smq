@@ -2,8 +2,8 @@ package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.nio.charset.StandardCharsets;
 import io.github.ppzxc.smq.storage.StorageFactory;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -178,7 +178,9 @@ abstract class SmqConformanceTest {
         q.publish(msg("a"));
         assertEquals(T0.plusSeconds(45), q.pull(1, Duration.ZERO).leaseDeadline());
         q.publish(msg("b"));
-        assertEquals(T0.plusSeconds(7), q.pull(1, Duration.ZERO, Duration.ofSeconds(7)).leaseDeadline());
+        assertEquals(
+                T0.plusSeconds(7),
+                q.pull(1, Duration.ZERO, Duration.ofSeconds(7)).leaseDeadline());
     }
 
     @Test
@@ -268,7 +270,8 @@ abstract class SmqConformanceTest {
         assertThrows(IllegalArgumentException.class, () -> q.pull(-1, Duration.ZERO));
         assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ofSeconds(-1)));
         assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ZERO, Duration.ZERO));
-        assertThrows(IllegalArgumentException.class, () -> smq.queue("q").pull(1, Duration.ZERO, Duration.ofSeconds(-1)));
+        assertThrows(
+                IllegalArgumentException.class, () -> smq.queue("q").pull(1, Duration.ZERO, Duration.ofSeconds(-1)));
     }
 
     @Test
@@ -308,11 +311,13 @@ abstract class SmqConformanceTest {
 
     @Test
     void maxDeliveries는_dead_letter_큐_없이_지정할_수_없고_지정하지_않으면_무제한이다() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new QueueOptions(OptionalInt.of(3), Optional.empty(), false));
-        assertThrows(IllegalArgumentException.class, () -> QueueOptions.defaults().maxDeliveries(0, "dead"));
+        assertThrows(
+                IllegalArgumentException.class, () -> new QueueOptions(OptionalInt.of(3), Optional.empty(), false));
+        assertThrows(
+                IllegalArgumentException.class, () -> QueueOptions.defaults().maxDeliveries(0, "dead"));
         assertTrue(QueueOptions.defaults().maxDeliveries().isEmpty());
-        assertTrue(QueueOptions.defaults().deadLetterQueue("dead").maxDeliveries().isEmpty());
+        assertTrue(
+                QueueOptions.defaults().deadLetterQueue("dead").maxDeliveries().isEmpty());
         Smq smq = open();
         smq.declare("dead", QueueOptions.defaults());
         Queue q = smq.declare("orders", QueueOptions.defaults().deadLetterQueue("dead"));
@@ -323,11 +328,14 @@ abstract class SmqConformanceTest {
     @Test
     void 자기_자신을_dead_letter_큐로_지정하면_오류이고_없는_큐를_지정하면_선언_오류다() {
         Smq smq = open();
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> smq.declare("orders", QueueOptions.defaults().deadLetterQueue("orders")));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> smq.declare("orders", QueueOptions.defaults().maxDeliveries(3, "orders")));
-        QueueNotFoundException e = assertThrows(QueueNotFoundException.class,
+        QueueNotFoundException e = assertThrows(
+                QueueNotFoundException.class,
                 () -> smq.declare("orders", QueueOptions.defaults().maxDeliveries(3, "missing")));
         assertEquals("missing", e.queue());
         assertThrows(QueueNotFoundException.class, () -> smq.queue("orders"));
@@ -341,8 +349,8 @@ abstract class SmqConformanceTest {
         assertTrue(q.options().singleActiveConsumer());
         assertTrue(smq.queue("ordered").options().singleActiveConsumer());
         assertEquals(single, smq.declare("ordered", single).options());
-        QueueDeclarationConflictException e = assertThrows(QueueDeclarationConflictException.class,
-                () -> smq.declare("ordered", QueueOptions.defaults()));
+        QueueDeclarationConflictException e = assertThrows(
+                QueueDeclarationConflictException.class, () -> smq.declare("ordered", QueueOptions.defaults()));
         assertEquals(single, e.existing());
         assertFalse(smq.declare("plain", QueueOptions.defaults()).options().singleActiveConsumer());
         assertThrows(QueueDeclarationConflictException.class, () -> smq.declare("plain", single));
@@ -423,7 +431,11 @@ abstract class SmqConformanceTest {
             assertEquals(Outcome.STALE, stale.byMessage().get(m.id()));
         }
         assertEquals(new QueueCounts(0, 1, 0), fresh.counts());
-        assertEquals(Outcome.OK, fresh.settle(freshChunk.ackAll()).byMessage().get(freshChunk.messages().getFirst().id()));
+        assertEquals(
+                Outcome.OK,
+                fresh.settle(freshChunk.ackAll())
+                        .byMessage()
+                        .get(freshChunk.messages().getFirst().id()));
     }
 
     @Test
@@ -431,16 +443,22 @@ abstract class SmqConformanceTest {
         Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
         Chunk first = q.pull(2, Duration.ZERO);
-        assertEquals(List.of(1, 1), first.messages().stream().map(Message::deliveryCount).toList());
+        assertEquals(
+                List.of(1, 1),
+                first.messages().stream().map(Message::deliveryCount).toList());
 
         clock.advance(Duration.ofSeconds(10));
         Chunk second = q.pull(10, Duration.ZERO);
         assertEquals(ids, second.messages().stream().map(Message::id).toList());
-        assertEquals(List.of(2, 2, 1), second.messages().stream().map(Message::deliveryCount).toList());
+        assertEquals(
+                List.of(2, 2, 1),
+                second.messages().stream().map(Message::deliveryCount).toList());
 
         clock.advance(Duration.ofSeconds(10));
         Chunk third = q.pull(10, Duration.ZERO);
-        assertEquals(List.of(3, 3, 2), third.messages().stream().map(Message::deliveryCount).toList());
+        assertEquals(
+                List.of(3, 3, 2),
+                third.messages().stream().map(Message::deliveryCount).toList());
     }
 
     @Test
@@ -596,7 +614,8 @@ abstract class SmqConformanceTest {
         assertEquals(Set.of(ids.get(1)), r.byMessage().keySet());
 
         clock.advance(Duration.ofSeconds(10));
-        assertEquals(List.of(ids.get(0), ids.get(2)),
+        assertEquals(
+                List.of(ids.get(0), ids.get(2)),
                 q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
@@ -610,7 +629,8 @@ abstract class SmqConformanceTest {
         assertEquals(Set.copyOf(ids), r.byMessage().keySet());
 
         Chunk next = q.pull(10, Duration.ZERO);
-        assertEquals(List.of(ids.get(1)), next.messages().stream().map(Message::id).toList());
+        assertEquals(
+                List.of(ids.get(1)), next.messages().stream().map(Message::id).toList());
         assertEquals(2, next.messages().getFirst().deliveryCount());
     }
 
@@ -632,7 +652,9 @@ abstract class SmqConformanceTest {
         assertTrue(q.settle(c.settle().nack(ids.get(1)).ackRest()).allOk());
         // 아직 꺼내지 않은 c보다 NACK한 b가 먼저다.
         Chunk next = q.pull(10, Duration.ZERO);
-        assertEquals(List.of(ids.get(1), ids.get(2)), next.messages().stream().map(Message::id).toList());
+        assertEquals(
+                List.of(ids.get(1), ids.get(2)),
+                next.messages().stream().map(Message::id).toList());
     }
 
     @Test
@@ -641,7 +663,8 @@ abstract class SmqConformanceTest {
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
         Chunk c = q.pull(1, Duration.ZERO);
         assertThrows(IllegalArgumentException.class, () -> c.settle().ack(ids.get(1)));
-        assertThrows(IllegalArgumentException.class, () -> c.settle().ack(ids.get(0)).nack(ids.get(0)));
+        assertThrows(
+                IllegalArgumentException.class, () -> c.settle().ack(ids.get(0)).nack(ids.get(0)));
     }
 
     @Test
@@ -694,7 +717,8 @@ abstract class SmqConformanceTest {
         Outcomes second = q.settle(c.settle().ackRest());
         assertEquals(List.of(ids.get(0), ids.get(1)), second.stale());
         assertEquals(Outcome.OK, second.byMessage().get(ids.get(2)));
-        assertEquals(List.of(ids.get(1)),
+        assertEquals(
+                List.of(ids.get(1)),
                 q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
@@ -726,8 +750,14 @@ abstract class SmqConformanceTest {
         ids = new ArrayList<>(ids);
         ids.addAll(q.publish(List.of(msg("c"), msg("d"))));
         Chunk c = q.pull(3, Duration.ZERO);
-        assertTrue(q.settle(c.settle().nack(ids.get(0)).ack(ids.get(1)).nack(ids.get(2)).build()).allOk());
-        assertEquals(List.of(ids.get(0), ids.get(2), ids.get(3)),
+        assertTrue(q.settle(c.settle()
+                        .nack(ids.get(0))
+                        .ack(ids.get(1))
+                        .nack(ids.get(2))
+                        .build())
+                .allOk());
+        assertEquals(
+                List.of(ids.get(0), ids.get(2), ids.get(3)),
                 q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
@@ -739,7 +769,9 @@ abstract class SmqConformanceTest {
         clock.advance(Duration.ofSeconds(9));
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
         clock.advance(Duration.ofSeconds(1));
-        assertEquals(List.of(id), q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
+        assertEquals(
+                List.of(id),
+                q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
     @Test
@@ -747,10 +779,13 @@ abstract class SmqConformanceTest {
         Queue q = open().declare("q", QueueOptions.defaults());
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
         Chunk c = q.pull(2, Duration.ZERO);
-        assertTrue(q.settle(c.settle().nack(ids.get(0), Duration.ofSeconds(5)).ackRest()).allOk());
+        assertTrue(q.settle(c.settle().nack(ids.get(0), Duration.ofSeconds(5)).ackRest())
+                .allOk());
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
         clock.advance(Duration.ofSeconds(5));
-        assertEquals(List.of(ids.get(0)), q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
+        assertEquals(
+                List.of(ids.get(0)),
+                q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
     @Test
@@ -758,10 +793,12 @@ abstract class SmqConformanceTest {
         Queue q = open().declare("q", QueueOptions.defaults());
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
         Chunk c = q.pull(3, Duration.ZERO);
-        assertTrue(q.settle(c.settle().ack(ids.get(0)).nackRest(Duration.ofSeconds(5))).allOk());
+        assertTrue(q.settle(c.settle().ack(ids.get(0)).nackRest(Duration.ofSeconds(5)))
+                .allOk());
         assertTrue(q.pull(10, Duration.ZERO).isEmpty());
         clock.advance(Duration.ofSeconds(5));
-        assertEquals(List.of(ids.get(1), ids.get(2)),
+        assertEquals(
+                List.of(ids.get(1), ids.get(2)),
                 q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
@@ -773,7 +810,9 @@ abstract class SmqConformanceTest {
         assertTrue(q.settle(c.nackAll(Duration.ofSeconds(5))).allOk());
         assertTrue(q.pull(10, Duration.ZERO).isEmpty());
         clock.advance(Duration.ofSeconds(5));
-        assertEquals(ids, q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
+        assertEquals(
+                ids,
+                q.pull(10, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
     @Test
@@ -784,10 +823,14 @@ abstract class SmqConformanceTest {
         MessageId ready = q.publish(msg("c"));
         Chunk first = q.pull(1, Duration.ZERO);
         assertEquals(List.of(nacked), first.messages().stream().map(Message::id).toList());
-        assertTrue(q.settle(first.settle().nack(nacked, Duration.ofSeconds(5)).build()).allOk());
-        assertEquals(List.of(ready), q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
+        assertTrue(q.settle(first.settle().nack(nacked, Duration.ofSeconds(5)).build())
+                .allOk());
+        assertEquals(
+                List.of(ready),
+                q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
         clock.advance(Duration.ofSeconds(5));
-        assertEquals(List.of(delayed, nacked),
+        assertEquals(
+                List.of(delayed, nacked),
                 q.pull(2, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
@@ -799,7 +842,8 @@ abstract class SmqConformanceTest {
         assertEquals(new QueueCounts(3, 0, 1), q.counts());
         Chunk c = q.pull(2, Duration.ZERO);
         assertEquals(new QueueCounts(1, 2, 1), q.counts());
-        assertTrue(q.settle(c.settle().nack(ids.get(0), Duration.ofSeconds(5)).ackRest()).allOk());
+        assertTrue(q.settle(c.settle().nack(ids.get(0), Duration.ofSeconds(5)).ackRest())
+                .allOk());
         assertEquals(new QueueCounts(1, 0, 2), q.counts());
         clock.advance(Duration.ofSeconds(5));
         assertEquals(new QueueCounts(2, 0, 1), q.counts());
@@ -819,7 +863,10 @@ abstract class SmqConformanceTest {
             assertThrows(IllegalArgumentException.class, () -> c.nackAll(bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ZERO, bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> q.extend(c, bad), String.valueOf(bad));
-            assertThrows(IllegalArgumentException.class, () -> new BuilderSettings().leaseDuration(bad), String.valueOf(bad));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> new BuilderSettings().leaseDuration(bad),
+                    String.valueOf(bad));
         }
         assertThrows(IllegalArgumentException.class, () -> new OutgoingMessage(new byte[0], Map.of(), null));
         // 잘못된 인자는 아무것도 바꾸지 않는다.
@@ -1015,12 +1062,21 @@ abstract class SmqConformanceTest {
         assertEquals("poison", text(moved));
         assertNotEquals(id, moved.id());
         assertEquals(1, moved.deliveryCount());
-        assertEquals(Map.of("trace", "t-1",
-                "smq-original-queue", "orders",
-                "smq-original-message-id", String.valueOf(id.value()),
-                "smq-last-delivery-count", "2",
-                "smq-moved-at", T0.plusSeconds(5).toString(),
-                "smq-reason", "rejected"), moved.headers());
+        assertEquals(
+                Map.of(
+                        "trace",
+                        "t-1",
+                        "smq-original-queue",
+                        "orders",
+                        "smq-original-message-id",
+                        String.valueOf(id.value()),
+                        "smq-last-delivery-count",
+                        "2",
+                        "smq-moved-at",
+                        T0.plusSeconds(5).toString(),
+                        "smq-reason",
+                        "rejected"),
+                moved.headers());
     }
 
     @Test
@@ -1031,7 +1087,9 @@ abstract class SmqConformanceTest {
         MessageId id = q.publish(msg("a"));
         Chunk c = q.pull(1, Duration.ZERO);
         assertTrue(q.settle(c.settle().reject(id).build()).allOk());
-        assertEquals(Outcome.STALE, q.settle(c.settle().reject(id).build()).byMessage().get(id));
+        assertEquals(
+                Outcome.STALE,
+                q.settle(c.settle().reject(id).build()).byMessage().get(id));
         assertEquals(new QueueCounts(1, 0, 0), smq.queue("dead").counts());
     }
 
@@ -1058,8 +1116,13 @@ abstract class SmqConformanceTest {
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
         Chunk c = q.pull(3, Duration.ZERO);
 
-        NoDeadLetterQueueException e = assertThrows(NoDeadLetterQueueException.class,
-                () -> q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).reject(ids.get(2)).build()));
+        NoDeadLetterQueueException e = assertThrows(
+                NoDeadLetterQueueException.class,
+                () -> q.settle(c.settle()
+                        .ack(ids.get(0))
+                        .nack(ids.get(1))
+                        .reject(ids.get(2))
+                        .build()));
         assertEquals("q", e.queue());
 
         assertEquals(new QueueCounts(0, 3, 0), q.counts());
@@ -1091,7 +1154,8 @@ abstract class SmqConformanceTest {
         Queue middle = smq.declare("middle", QueueOptions.defaults().deadLetterQueue("last"));
         Queue q = smq.declare("q", QueueOptions.defaults().deadLetterQueue("middle"));
         MessageId id = q.publish(msg("a"));
-        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().reject(id).build()).allOk());
+        assertTrue(
+                q.settle(q.pull(1, Duration.ZERO).settle().reject(id).build()).allOk());
 
         Chunk inMiddle = middle.pull(1, Duration.ZERO);
         Message m = inMiddle.messages().getFirst();
@@ -1105,7 +1169,8 @@ abstract class SmqConformanceTest {
         assertEquals(String.valueOf(m.id().value()), end.headers().get("smq-original-message-id"));
         assertEquals("rejected", end.headers().get("smq-reason"));
 
-        assertThrows(NoDeadLetterQueueException.class,
+        assertThrows(
+                NoDeadLetterQueueException.class,
                 () -> last.settle(lastChunk.settle().reject(end.id()).build()));
         assertTrue(last.settle(lastChunk.ackAll()).allOk());
     }
@@ -1116,7 +1181,8 @@ abstract class SmqConformanceTest {
         Queue dead = smq.declare("dead", QueueOptions.defaults());
         Queue q = smq.declare("q", QueueOptions.defaults().deadLetterQueue("dead"));
         MessageId id = q.publish(msg("a").withHeaders(Map.of("smq-reason", "mine", "trace", "t-1")));
-        assertTrue(q.settle(q.pull(1, Duration.ZERO).settle().reject(id).build()).allOk());
+        assertTrue(
+                q.settle(q.pull(1, Duration.ZERO).settle().reject(id).build()).allOk());
 
         Message moved = dead.pull(1, Duration.ZERO).messages().getFirst();
         assertEquals("rejected", moved.headers().get("smq-reason"));
@@ -1142,12 +1208,21 @@ abstract class SmqConformanceTest {
         assertEquals(new QueueCounts(1, 0, 0), dead.counts());
         Message moved = dead.pull(1, Duration.ZERO).messages().getFirst();
         assertEquals("a", text(moved));
-        assertEquals(Map.of("trace", "t-1",
-                "smq-original-queue", "q",
-                "smq-original-message-id", String.valueOf(a.value()),
-                "smq-last-delivery-count", "2",
-                "smq-moved-at", T0.plusSeconds(3).toString(),
-                "smq-reason", "max-deliveries"), moved.headers());
+        assertEquals(
+                Map.of(
+                        "trace",
+                        "t-1",
+                        "smq-original-queue",
+                        "q",
+                        "smq-original-message-id",
+                        String.valueOf(a.value()),
+                        "smq-last-delivery-count",
+                        "2",
+                        "smq-moved-at",
+                        T0.plusSeconds(3).toString(),
+                        "smq-reason",
+                        "max-deliveries"),
+                moved.headers());
     }
 
     @Test
@@ -1188,7 +1263,8 @@ abstract class SmqConformanceTest {
         Queue dead = smq.declare("dead", QueueOptions.defaults());
         Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
         q.publish(msg("a"));
-        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(5))).allOk());
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(5)))
+                .allOk());
 
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
         assertEquals(new QueueCounts(0, 0, 1), q.counts());
@@ -1250,10 +1326,11 @@ abstract class SmqConformanceTest {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
         Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
-        MessageId normal = q.publish(OutgoingMessage.of("normal".getBytes(StandardCharsets.UTF_8))
-                .withDelay(Duration.ofSeconds(5)));
+        MessageId normal = q.publish(
+                OutgoingMessage.of("normal".getBytes(StandardCharsets.UTF_8)).withDelay(Duration.ofSeconds(5)));
         q.publish(msg("poison"));
-        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(1))).allOk());
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(1)))
+                .allOk());
         clock.advance(Duration.ofSeconds(5));
 
         Chunk c = q.pull(1, Duration.ZERO);
@@ -1265,11 +1342,14 @@ abstract class SmqConformanceTest {
 
     @Test
     void 단일_활성_컨슈머_큐는_리스_중인_청크가_있으면_같은_컨슈머가_다시_꺼내도_빈_청크다() throws Exception {
-        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        Queue q = open(Duration.ofSeconds(10))
+                .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
         q.publish(List.of(msg("a"), msg("b"), msg("c")));
 
         Chunk first = q.pull(1, Duration.ZERO);
-        assertEquals(List.of("a"), first.messages().stream().map(SmqConformanceTest::text).toList());
+        assertEquals(
+                List.of("a"),
+                first.messages().stream().map(SmqConformanceTest::text).toList());
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
         assertTrue(q.pull(10, Duration.ZERO).isEmpty());
         assertEquals(new QueueCounts(2, 1, 0), q.counts());
@@ -1286,7 +1366,8 @@ abstract class SmqConformanceTest {
 
     @Test
     void 단일_활성_컨슈머_큐는_정산하면_다음_꺼내기가_청크를_받는다() throws Exception {
-        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        Queue q = open(Duration.ofSeconds(10))
+                .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
         q.publish(List.of(msg("a"), msg("b"), msg("c")));
 
         Chunk first = q.pull(1, Duration.ZERO);
@@ -1295,14 +1376,17 @@ abstract class SmqConformanceTest {
         assertEquals("b", text(second.messages().getFirst()));
 
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
-        assertTrue(q.settle(second.settle().nack(second.messages().getFirst().id()).build()).allOk());
+        assertTrue(
+                q.settle(second.settle().nack(second.messages().getFirst().id()).build())
+                        .allOk());
         Chunk again = q.pull(1, Duration.ZERO);
         assertEquals("b", text(again.messages().getFirst()));
     }
 
     @Test
     void 단일_활성_컨슈머_큐는_리스가_만료되면_다음_꺼내기가_청크를_받는다() throws Exception {
-        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        Queue q = open(Duration.ofSeconds(10))
+                .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
         q.publish(List.of(msg("a"), msg("b")));
 
         assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
@@ -1365,7 +1449,8 @@ abstract class SmqConformanceTest {
 
             QueueCounts counts = q.counts();
             String detail = "round " + round + " pullers=" + describe(chunks) + " counts=" + counts;
-            List<Message> delivered = chunks.stream().flatMap(c -> c.messages().stream()).toList();
+            List<Message> delivered =
+                    chunks.stream().flatMap(c -> c.messages().stream()).toList();
             List<MessageId> ids = delivered.stream().map(Message::id).toList();
 
             assertEquals(ids.size(), Set.copyOf(ids).size(), "이중 리스 " + detail);
@@ -1385,7 +1470,8 @@ abstract class SmqConformanceTest {
             if (remaining > 0) {
                 Chunk rest = q.pull(remaining, Duration.ofSeconds(5));
                 assertEquals(remaining, rest.messages().size(), "남은 메시지를 모두 꺼내지 못했다 " + detail);
-                assertTrue(rest.messages().stream().allMatch(m -> m.deliveryCount() == 1),
+                assertTrue(
+                        rest.messages().stream().allMatch(m -> m.deliveryCount() == 1),
                         "남은 메시지의 전달 횟수가 1이 아니다 " + detail);
                 List<MessageId> all = new ArrayList<>(ids);
                 rest.messages().forEach(m -> all.add(m.id()));
@@ -1397,7 +1483,10 @@ abstract class SmqConformanceTest {
 
     private static String describe(List<Chunk> chunks) {
         return chunks.stream()
-                .map(c -> c.messages().stream().map(m -> m.id() + "#" + m.deliveryCount()).toList().toString())
+                .map(c -> c.messages().stream()
+                        .map(m -> m.id() + "#" + m.deliveryCount())
+                        .toList()
+                        .toString())
                 .toList()
                 .toString();
     }
@@ -1415,7 +1504,9 @@ abstract class SmqConformanceTest {
             runConcurrently(Collections.nCopies(4, settler));
 
             for (Message m : chunk.messages()) {
-                long ok = results.stream().filter(r -> r.byMessage().get(m.id()) == Outcome.OK).count();
+                long ok = results.stream()
+                        .filter(r -> r.byMessage().get(m.id()) == Outcome.OK)
+                        .count();
                 assertEquals(1, ok, "round " + round + " " + m.id());
             }
             assertEquals(new QueueCounts(0, 0, 0), q.counts(), "round " + round);
@@ -1456,20 +1547,28 @@ abstract class SmqConformanceTest {
 
     @Test
     void 단일_활성_컨슈머_큐는_일부_ACK하고_나머지를_지연_없이_NACK하면_다음_꺼내기가_청크를_받는다() throws Exception {
-        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        Queue q = open(Duration.ofSeconds(10))
+                .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
         q.publish(List.of(msg("a"), msg("b"), msg("c")));
 
         Chunk first = q.pull(2, Duration.ZERO);
         MessageId a = first.messages().getFirst().id();
-        assertTrue(q.settle(first.settle().ack(a).nack(first.messages().getLast().id()).build()).allOk());
+        assertTrue(q.settle(first.settle()
+                        .ack(a)
+                        .nack(first.messages().getLast().id())
+                        .build())
+                .allOk());
 
         Chunk next = q.pull(10, Duration.ZERO);
-        assertEquals(List.of("b", "c"), next.messages().stream().map(SmqConformanceTest::text).toList());
+        assertEquals(
+                List.of("b", "c"),
+                next.messages().stream().map(SmqConformanceTest::text).toList());
     }
 
     @Test
     void 단일_활성_컨슈머_큐는_지연_NACK_직후에도_리스가_풀려_다음_꺼내기가_허용된다() throws Exception {
-        Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        Queue q = open(Duration.ofSeconds(10))
+                .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
         q.publish(List.of(msg("a"), msg("b")));
 
         Chunk first = q.pull(1, Duration.ZERO);
@@ -1483,10 +1582,12 @@ abstract class SmqConformanceTest {
     void 단일_활성_컨슈머_큐는_리스_중이면_최대_전달_횟수에_도달한_준비_메시지도_옮기지_않고_리스가_끝나면_옮긴다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
-        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead").singleActiveConsumer(true));
+        Queue q = smq.declare(
+                "q", QueueOptions.defaults().maxDeliveries(1, "dead").singleActiveConsumer(true));
         MessageId x = q.publish(msg("x"));
         q.publish(msg("y"));
-        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(5))).allOk());
+        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(5)))
+                .allOk());
         // x는 지연 중이라 y가 리스를 받는다(10초).
         Chunk holding = q.pull(1, Duration.ZERO);
         assertEquals("y", text(holding.messages().getFirst()));
@@ -1502,8 +1603,13 @@ abstract class SmqConformanceTest {
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
         assertEquals(new QueueCounts(0, 0, 0), q.counts());
         assertEquals(new QueueCounts(2, 0, 0), dead.counts());
-        assertEquals(x.value(), Long.parseLong(
-                dead.pull(1, Duration.ZERO).messages().getFirst().headers().get("smq-original-message-id")));
+        assertEquals(
+                x.value(),
+                Long.parseLong(dead.pull(1, Duration.ZERO)
+                        .messages()
+                        .getFirst()
+                        .headers()
+                        .get("smq-original-message-id")));
     }
 
     @Test

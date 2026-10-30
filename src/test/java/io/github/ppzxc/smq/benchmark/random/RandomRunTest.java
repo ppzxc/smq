@@ -54,8 +54,7 @@ class RandomRunTest {
                     }
                 }
 
-                public void destroy() {
-                }
+                public void destroy() {}
             };
         };
     }
@@ -73,16 +72,20 @@ class RandomRunTest {
                 Tag tag = new Tag(spec.params().seed(), n, 1);
                 Content content = new Content(77, java.util.Map.of("bench-tag", tag.toString()));
                 pub.add(new Published(tag, content, 1234, 0));
-                del.add(new Delivery(QueueKind.TARGET, tag, 100 + n, 1, content,
-                        new Delivery.Pull(((long) n << 40) | 1, 0, 2000, 3000), Delivery.Settle.NONE));
+                del.add(new Delivery(
+                        QueueKind.TARGET,
+                        tag,
+                        100 + n,
+                        1,
+                        content,
+                        new Delivery.Pull(((long) n << 40) | 1, 0, 2000, 3000),
+                        Delivery.Settle.NONE));
             }
             ChildOutput.write(spec.outDir(), n, new ChildOutput(del.size(), 0, pub, del));
             return new ChildSpawner.Running() {
-                public void await(long timeoutMs) {
-                }
+                public void await(long timeoutMs) {}
 
-                public void destroy() {
-                }
+                public void destroy() {}
             };
         };
     }
@@ -90,21 +93,32 @@ class RandomRunTest {
     @Test
     void theParentMergesTheRecordsOfEveryChildProcess() {
         RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of()));
+        RunResult r =
+                RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of()));
         assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
-        assertEquals(java.util.Set.of(0, 1, 2, 3),
-                r.records().published().stream().map(x -> x.tag().process()).collect(java.util.stream.Collectors.toSet()));
-        assertEquals(java.util.Set.of(0L, 1L, 2L, 3L), r.records().deliveries().stream().map(d -> d.pull().chunk() >>> 40)
-                .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(
+                java.util.Set.of(0, 1, 2, 3),
+                r.records().published().stream()
+                        .map(x -> x.tag().process())
+                        .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(
+                java.util.Set.of(0L, 1L, 2L, 3L),
+                r.records().deliveries().stream()
+                        .map(d -> d.pull().chunk() >>> 40)
+                        .collect(java.util.stream.Collectors.toSet()));
     }
 
     @Test
     void aChildThatNeverGotTheWriteLockLeavesTheOthersRecordsMergedAndTheRunPassing() {
         RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of(1, 2, 3)));
+        RunResult r = RandomRun.execute(
+                p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of(1, 2, 3)));
         assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
-        assertEquals(java.util.Set.of(0),
-                r.records().published().stream().map(x -> x.tag().process()).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(
+                java.util.Set.of(0),
+                r.records().published().stream()
+                        .map(x -> x.tag().process())
+                        .collect(java.util.stream.Collectors.toSet()));
     }
 
     @Test
@@ -115,7 +129,8 @@ class RandomRunTest {
         assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
         // 어느 프로세스가 실제로 발행하고 꺼내는지는 SQLite 쓰기 락 경합이 정한다. 한 프로세스가 부하 구간 내내 락을 못 잡을 수
         // 있으므로(ADR-0009의 락 대기 규약) 여기서 프로세스 분포는 단언하지 않는다. 합치기는 아래 고정 입력 테스트가 본다.
-        assertTrue(r.records().published().stream().allMatch(x -> x.tag().process() >= 0 && x.tag().process() <= p.processes()));
+        assertTrue(r.records().published().stream()
+                .allMatch(x -> x.tag().process() >= 0 && x.tag().process() <= p.processes()));
         for (int i = 0; i < p.processes(); i++) {
             assertTrue(Files.exists(dir.resolve("p" + i + "-deliveries.jsonl")), "자식 " + i + "의 전달 기록 파일");
         }
@@ -133,10 +148,16 @@ class RandomRunTest {
 
     @Test
     void childRecordsRoundTripThroughTheirFiles() throws Exception {
-        Published pub = new Published(new Tag(9, 2, 5), new Content(77, java.util.Map.of("bench-tag", "9/2/5")), 1234, 50);
-        Delivery del = new Delivery(QueueKind.DEAD_LETTER, new Tag(9, 2, 5), 31, 3,
+        Published pub =
+                new Published(new Tag(9, 2, 5), new Content(77, java.util.Map.of("bench-tag", "9/2/5")), 1234, 50);
+        Delivery del = new Delivery(
+                QueueKind.DEAD_LETTER,
+                new Tag(9, 2, 5),
+                31,
+                3,
                 new Content(77, java.util.Map.of("bench-tag", "9/2/5", "smq-reason", "rejected")),
-                new Delivery.Pull((2L << 40) | 7, 1, 2000, 3000), Delivery.Settle.nack(2500, 100));
+                new Delivery.Pull((2L << 40) | 7, 1, 2000, 3000),
+                Delivery.Settle.nack(2500, 100));
         ChildOutput.write(dir, 2, new ChildOutput(11, 2222, java.util.List.of(pub), java.util.List.of(del)));
         ChildOutput back = ChildOutput.read(dir, 2);
         assertEquals(java.util.List.of(pub), back.published());
@@ -149,9 +170,13 @@ class RandomRunTest {
     void aViolationInAMultiProcessRunKeepsEveryProcessDeliveriesInTheFailureDir() throws Exception {
         Violation v = new Violation(Invariant.GHOST, java.util.List.of(), java.util.List.of(), "합성");
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-        Session session = new Session(dir, dir.resolve("runs.jsonl"), java.util.Map.of(), Limits.smoke(1_000),
-                (params, runDir) -> RandomRun.execute(params, runDir, (c, pub, del, smp) -> java.util.List.of(v),
-                        fixedOutputs(java.util.Set.of())),
+        Session session = new Session(
+                dir,
+                dir.resolve("runs.jsonl"),
+                java.util.Map.of(),
+                Limits.smoke(1_000),
+                (params, runDir) -> RandomRun.execute(
+                        params, runDir, (c, pub, del, smp) -> java.util.List.of(v), fixedOutputs(java.util.Set.of())),
                 new java.io.PrintStream(bytes, true));
         assertEquals(Session.EXIT_FAILED, session.run(java.util.List.of(2L).iterator(), Long.MAX_VALUE));
         Path failure = session.failureDir(2);
@@ -183,8 +208,7 @@ class RandomRunTest {
                 }
             }
 
-            public void destroy() {
-            }
+            public void destroy() {}
         };
     }
 
@@ -215,8 +239,7 @@ class RandomRunTest {
                 }
             }
 
-            public void destroy() {
-            }
+            public void destroy() {}
         });
         assertEquals(Verdict.ERROR, r.verdict());
         ErrorDetail d = r.errorDetail();
@@ -236,8 +259,7 @@ class RandomRunTest {
                 }
             }
 
-            public void destroy() {
-            }
+            public void destroy() {}
         });
         assertEquals("child-2", r.errorDetail().location());
         assertEquals("java.util.concurrent.TimeoutException", r.errorDetail().exceptionClass());

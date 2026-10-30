@@ -30,7 +30,8 @@ class SqliteSchemaModuleTest {
     }
 
     private static String query(Connection c, String sql) throws SQLException {
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery(sql)) {
+        try (Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery(sql)) {
             return rs.getString(1);
         }
     }
@@ -109,13 +110,16 @@ class SqliteSchemaModuleTest {
     void v1에서_v3까지_한_번에_차례로_올린다() throws Exception {
         createV1File();
         try (Connection c = connect()) {
-            SqliteSchema v3 = new SqliteSchema(3, Map.of(
-                    1, conn -> exec(conn, "CREATE TABLE step_a (n INTEGER)"),
-                    2, conn -> {
-                        // v2 단계의 결과가 보이는 상태에서 v3 단계가 실행된다.
-                        exec(conn, "CREATE TABLE step_b AS SELECT count(*) AS n FROM step_a");
-                        assertEquals("2", query(conn, "PRAGMA user_version"));
-                    }));
+            SqliteSchema v3 = new SqliteSchema(
+                    3,
+                    Map.of(
+                            1, conn -> exec(conn, "CREATE TABLE step_a (n INTEGER)"),
+                            2,
+                                    conn -> {
+                                        // v2 단계의 결과가 보이는 상태에서 v3 단계가 실행된다.
+                                        exec(conn, "CREATE TABLE step_b AS SELECT count(*) AS n FROM step_a");
+                                        assertEquals("2", query(conn, "PRAGMA user_version"));
+                                    }));
             assertEquals(3, establishInTransaction(v3, c));
             assertEquals("3", query(c, "PRAGMA user_version"));
             assertEquals("0", query(c, "SELECT n FROM step_b"));
@@ -126,9 +130,11 @@ class SqliteSchemaModuleTest {
     void 업그레이드_단계가_중간에_실패하면_파일은_원래_버전으로_남는다() throws Exception {
         createV1File();
         try (Connection c = connect()) {
-            SqliteSchema v3 = new SqliteSchema(3, Map.of(
-                    1, conn -> exec(conn, "CREATE TABLE step_a (n INTEGER)"),
-                    2, conn -> exec(conn, "THIS IS NOT SQL")));
+            SqliteSchema v3 = new SqliteSchema(
+                    3,
+                    Map.of(
+                            1, conn -> exec(conn, "CREATE TABLE step_a (n INTEGER)"),
+                            2, conn -> exec(conn, "THIS IS NOT SQL")));
             assertThrows(SQLException.class, () -> establishInTransaction(v3, c));
             assertEquals("1", query(c, "PRAGMA user_version"));
             assertEquals("0", query(c, "SELECT count(*) FROM sqlite_schema WHERE name = 'step_a'"));
@@ -139,8 +145,7 @@ class SqliteSchemaModuleTest {
     void 중간_단계가_빠진_목록이면_지원하지_않는_버전으로_거부한다() throws Exception {
         createV1File();
         try (Connection c = connect()) {
-            SqliteSchema gap = new SqliteSchema(3, Map.of(
-                    1, conn -> exec(conn, "CREATE TABLE step_a (n INTEGER)")));
+            SqliteSchema gap = new SqliteSchema(3, Map.of(1, conn -> exec(conn, "CREATE TABLE step_a (n INTEGER)")));
             IncompatibleStorageException e =
                     assertThrows(IncompatibleStorageException.class, () -> establishInTransaction(gap, c));
             assertEquals("unsupported schema version: found 1, supported 3", e.getMessage());

@@ -6,5 +6,4 @@ package io.github.ppzxc.smq.benchmark.random;
  * @param atMillis 발행 호출 직전의 벽시계 시각(epoch ms). 지연 판정이 거짓 위반을 내지 않도록 호출 전에 잰다.
  * @param delayMillis 발행 지연. 없으면 0
  */
-record Published(Tag tag, Content content, long atMillis, long delayMillis) {
-}
+record Published(Tag tag, Content content, long atMillis, long delayMillis) {}

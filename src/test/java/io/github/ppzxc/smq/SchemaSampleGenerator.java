@@ -39,7 +39,8 @@ public final class SchemaSampleGenerator {
 
     static void generate(Path out) throws Exception {
         MutableClock clock = new MutableClock(SchemaV1SampleTest.T0);
-        try (Smq smq = Smq.sqlite(out).clock(clock).leaseDuration(Duration.ofHours(1)).open()) {
+        try (Smq smq =
+                Smq.sqlite(out).clock(clock).leaseDuration(Duration.ofHours(1)).open()) {
             smq.declare("v1-dead", QueueOptions.defaults());
             Queue orders = smq.declare("v1-orders", QueueOptions.defaults().maxDeliveries(3, "v1-dead"));
             Queue serial = smq.declare("v1-serial", QueueOptions.defaults().singleActiveConsumer(true));
@@ -47,7 +48,8 @@ public final class SchemaSampleGenerator {
             // dead letter 큐에 reject된 메시지 하나
             orders.publish(msg("poison", Map.of("kind", "poison")));
             Chunk poison = orders.pull(1, Duration.ZERO);
-            orders.settle(poison.settle().reject(poison.messages().getFirst().id()).build());
+            orders.settle(
+                    poison.settle().reject(poison.messages().getFirst().id()).build());
 
             // orders: m1은 한 번 NACK되어 전달 2회로 다시 리스 중, m2는 리스 중, m3 m4는 준비, m5는 지연됨
             orders.publish(List.of(

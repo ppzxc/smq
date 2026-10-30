@@ -50,8 +50,13 @@ final class ChildReport {
         }
         try {
             Map<?, ?> m = (Map<?, ?>) Json.parse(Files.readString(f));
-            return Optional.of(new ErrorDetail((String) m.get("location"), (String) m.get("exceptionClass"),
-                    (String) m.get("message"), (String) m.get("stackTrace"), null, null));
+            return Optional.of(new ErrorDetail(
+                    (String) m.get("location"),
+                    (String) m.get("exceptionClass"),
+                    (String) m.get("message"),
+                    (String) m.get("stackTrace"),
+                    null,
+                    null));
         } catch (IOException | RuntimeException e) {
             return Optional.empty();
         }

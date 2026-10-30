@@ -20,7 +20,8 @@ class ModuleDescriptorTest {
 
     private static ModuleDescriptor descriptor() throws IOException, URISyntaxException {
         // 루트의 /module-info.class는 JDK 모듈 것이 먼저 잡히므로 Smq의 코드 위치에서 읽는다.
-        Path root = Path.of(Smq.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path root = Path.of(
+                Smq.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         if (Files.isDirectory(root)) {
             try (InputStream in = Files.newInputStream(root.resolve("module-info.class"))) {
                 return ModuleDescriptor.read(in);
@@ -37,9 +38,8 @@ class ModuleDescriptorTest {
         ModuleDescriptor d = descriptor();
 
         assertEquals("io.github.ppzxc.smq", d.name());
-        Set<String> exported = d.exports().stream()
-                .map(ModuleDescriptor.Exports::source)
-                .collect(Collectors.toSet());
+        Set<String> exported =
+                d.exports().stream().map(ModuleDescriptor.Exports::source).collect(Collectors.toSet());
         assertEquals(Set.of("io.github.ppzxc.smq"), exported);
         assertTrue(d.exports().stream().noneMatch(ModuleDescriptor.Exports::isQualified), "한정 export는 두지 않는다");
     }
@@ -62,9 +62,8 @@ class ModuleDescriptorTest {
                 Set.of(ModuleDescriptor.Requires.Modifier.STATIC, ModuleDescriptor.Requires.Modifier.TRANSITIVE),
                 jspecify.modifiers());
 
-        Set<ModuleDescriptor.Requires> runtimeRequires = declared.stream()
-                .filter(r -> !r.name().equals("org.jspecify"))
-                .collect(Collectors.toSet());
+        Set<ModuleDescriptor.Requires> runtimeRequires =
+                declared.stream().filter(r -> !r.name().equals("org.jspecify")).collect(Collectors.toSet());
         assertTrue(
                 runtimeRequires.stream()
                         .noneMatch(r -> r.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE)),

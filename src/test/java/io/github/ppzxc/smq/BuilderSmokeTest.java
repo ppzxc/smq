@@ -32,7 +32,10 @@ class BuilderSmokeTest {
     @Test
     void SQLite_builder로_한_바퀴_돌고_시각과_리스_기간이_반영된다() throws Exception {
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(dir.resolve("smq.db")).clock(clock).leaseDuration(LEASE).open()) {
+        try (Smq smq = Smq.sqlite(dir.resolve("smq.db"))
+                .clock(clock)
+                .leaseDuration(LEASE)
+                .open()) {
             roundTrip(smq, clock);
         }
     }
@@ -41,8 +44,10 @@ class BuilderSmokeTest {
     void 공개_builder_둘_다_양수가_아닌_리스_기간을_IllegalArgumentException으로_거부한다() {
         for (Duration bad : new Duration[] {Duration.ZERO, Duration.ofSeconds(-1), null}) {
             assertThrows(IllegalArgumentException.class, () -> Smq.inMemory().leaseDuration(bad), "inMemory " + bad);
-            assertThrows(IllegalArgumentException.class,
-                    () -> Smq.sqlite(dir.resolve("smq.db")).leaseDuration(bad), "sqlite " + bad);
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> Smq.sqlite(dir.resolve("smq.db")).leaseDuration(bad),
+                    "sqlite " + bad);
         }
     }
 

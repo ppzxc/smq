@@ -4,11 +4,13 @@ import com.vanniktech.maven.publish.SourcesJar
 import java.util.zip.ZipFile
 import org.gradle.plugins.signing.SigningExtension
 import org.gradle.api.tasks.options.Option
+import org.gradle.external.javadoc.StandardJavadocDocletOptions
 import net.ltgt.gradle.errorprone.errorprone
 import net.ltgt.gradle.nullaway.nullaway
 
 plugins {
     `java-library`
+    jacoco
     id("com.vanniktech.maven.publish") version "0.37.0"
     id("net.ltgt.errorprone") version "5.1.1"
     id("net.ltgt.nullaway") version "3.3.0"
@@ -65,6 +67,7 @@ tasks.withType<JavaCompile> {
             onlyNullMarked.set(true)
             if (isMainCompilation) {
                 error()
+                requireExplicitNullMarking { error() }
             } else {
                 disable()
             }
@@ -83,6 +86,50 @@ spotless {
     java {
         target("src/*/java/**/*.java", "deploy-test/**/src/**/*.java")
         palantirJavaFormat("2.103.0")
+    }
+}
+
+tasks.javadoc {
+    (options as StandardJavadocDocletOptions).apply {
+        addStringOption("Xdoclint:all,-missing", "-quiet")
+        addBooleanOption("Werror", true)
+        encoding = "UTF-8"
+    }
+}
+
+val minimumCoverage = "0.90".toBigDecimal()
+
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+tasks.test {
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.test)
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = minimumCoverage
+            }
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = minimumCoverage
+            }
+        }
     }
 }
 
@@ -189,7 +236,7 @@ val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
         }
     }
 }
-tasks.check { dependsOn(verifyJarExcludesBenchmark) }
+tasks.check { dependsOn(verifyJarExcludesBenchmark, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
 
 tasks.test {
     useJUnitPlatform()

@@ -1,6 +1,6 @@
 # 추후 기능 요구사항
 
-smq v1 범위에서 뺀 기능 목록이다. v1 범위는 [v1 기능 범위 확정](https://github.com/ppzxc/smq/issues/5)에서 정했고, 각 기능의 RabbitMQ 쪽 배경은 [RabbitMQ 핵심 기능 조사](../research/rabbitmq-core-features.md)에 있다.
+smq v1 범위에서 뺀 기능 목록이다. v1 범위는 [v1 기능 범위 확정](https://github.com/ppzxc/smq/issues/5)에서 정했고, 각 기능의 RabbitMQ 쪽 배경은 [RabbitMQ 핵심 기능 조사](research/rabbitmq-core-features.md)에 있다.
 
 v1의 목표: **청크 단위로 꺼내 ACK/NACK하는, 재시도 가능한 내구성 큐.** 아래 기능은 그 목표 밖이다. 다음 버전의 지도를 그릴 때 출발점으로 쓴다.
 

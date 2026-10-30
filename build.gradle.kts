@@ -198,6 +198,11 @@ abstract class RandomBench : JavaExec() {
     @get:Optional
     @get:Option(option = "heap-dump", description = "자식 JVM의 OutOfMemoryError에서 힙 덤프를 실행 디렉터리에 남긴다 (기본 끔)")
     abstract val heapDump: Property<Boolean>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "jfr", description = "부모와 자식 JVM에 Java Flight Recorder 연속 레코딩을 켠다 (기본 끔)")
+    abstract val jfr: Property<Boolean>
 }
 
 val randomBenchMain = "io.github.ppzxc.smq.benchmark.random.RandomBenchMain"
@@ -212,6 +217,7 @@ tasks.register<RandomBench>("randomBench") {
         load.orNull?.let { args("--load", it) }
         masterSeed.orNull?.let { args("--master-seed", it) }
         if (heapDump.orNull == true) args("--heap-dump")
+        if (jfr.orNull == true) args("--jfr")
     }
 }
 

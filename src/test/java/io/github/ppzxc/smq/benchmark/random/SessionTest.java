@@ -42,7 +42,18 @@ class SessionTest {
     private static RunResult result(
             RunParams p, Verdict v, double rate, Double p99, List<Violation> violations, RunResult.Records records) {
         return new RunResult(
-                p, v, rate, rate / 1000, p99 == null ? null : p99 / 2, p99, violations, null, records, null, null);
+                p,
+                v,
+                rate,
+                rate / 1000,
+                p99 == null ? null : p99 / 2,
+                p99,
+                violations,
+                null,
+                records,
+                null,
+                null,
+                null);
     }
 
     /** 실행기가 SQLite 파일을 흉내 내 디렉터리에 남긴다. */
@@ -192,7 +203,7 @@ class SessionTest {
     @Test
     void passingRunsRecordTheWalSizeAndNoErrorDetail() throws IOException {
         Session s = session(fake(p -> new RunResult(
-                p, Verdict.PASS, 100, 0.1, 1.0, 2.0, List.of(), null, RunResult.Records.EMPTY, null, 4096L)));
+                p, Verdict.PASS, 100, 0.1, 1.0, 2.0, List.of(), null, RunResult.Records.EMPTY, null, 4096L, null)));
         assertEquals(Session.EXIT_OK, s.run(List.of(1L).iterator(), Long.MAX_VALUE));
         Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json.parse(
                 Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());

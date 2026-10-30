@@ -15,6 +15,7 @@ import java.util.OptionalLong;
  *   <li>{@code --load <기간>}: 부하 구간 길이. 기본 10초.
  *   <li>{@code --smoke}: 고정 시드 {@link #SMOKE_SEEDS}를 실행당 2초씩 돈다(미리 채운 깊이와 리스 기한을 줄인 한도).
  *   <li>{@code --heap-dump}: 자식 JVM에 {@code -XX:+HeapDumpOnOutOfMemoryError}를 주고 덤프를 실행 디렉터리에 남긴다. 기본은 끈다(덤프가 크다).
+ *   <li>{@code --jfr}: 부모와 자식 JVM에 Java Flight Recorder 연속 레코딩을 켠다. 실행 디렉터리에 {@code .jfr} 파일을 남긴다.
  *   <li>{@code --out-dir <디렉터리>}: 산출물 위치. 기본 {@code build/random-bench}.
  * </ul>
  */
@@ -25,7 +26,8 @@ record Options(
         Duration load,
         boolean smoke,
         Path outDir,
-        boolean heapDump) {
+        boolean heapDump,
+        boolean jfr) {
 
     static final Duration DEFAULT_BUDGET = Duration.ofMinutes(30);
     static final Duration SMOKE_LOAD = Duration.ofSeconds(2);
@@ -38,6 +40,7 @@ record Options(
         Duration load = null;
         boolean smoke = false;
         boolean heapDump = false;
+        boolean jfr = false;
         Path out = Path.of("build/random-bench");
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -47,6 +50,10 @@ record Options(
             }
             if (a.equals("--heap-dump")) {
                 heapDump = true;
+                continue;
+            }
+            if (a.equals("--jfr")) {
+                jfr = true;
                 continue;
             }
             if (!a.startsWith("--") || i + 1 >= args.length) {
@@ -68,7 +75,7 @@ record Options(
         if (smoke && seed.isPresent()) {
             throw new IllegalArgumentException("--smoke와 --seed는 함께 쓸 수 없다");
         }
-        return new Options(seed, budget, master, load, smoke, out.toAbsolutePath(), heapDump);
+        return new Options(seed, budget, master, load, smoke, out.toAbsolutePath(), heapDump, jfr);
     }
 
     private static long parseLong(String option, String v) {

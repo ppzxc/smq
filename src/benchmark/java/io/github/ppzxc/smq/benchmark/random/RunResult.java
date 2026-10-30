@@ -10,6 +10,7 @@ import java.util.List;
  * @param error {@link Verdict#ERROR}일 때 원인 한 줄(기존 필드)
  * @param errorDetail {@link Verdict#ERROR}일 때 발생 위치와 스택 트레이스 전체. 아니면 null
  * @param walMaxBytes 실행 중 측정한 {@code smq.db-wal} 크기의 최댓값(바이트). 한 번도 측정하지 못했으면 null
+ * @param jvmMetrics 부모 JVM의 JVM 메트릭 요약. 표본이 없으면 null
  */
 record RunResult(
         RunParams params,
@@ -22,7 +23,8 @@ record RunResult(
         String error,
         Records records,
         ErrorDetail errorDetail,
-        Long walMaxBytes) {
+        Long walMaxBytes,
+        JvmMetricsSampler.Summary jvmMetrics) {
 
     /** 검사기에 넘긴 기록. 실패한 실행에서 파일로 보존한다. */
     record Records(List<Published> published, List<Delivery> deliveries, List<CountsSample> samples) {
@@ -40,6 +42,6 @@ record RunResult(
 
     static RunResult error(RunParams params, ErrorDetail detail, String summary, Long walMaxBytes) {
         return new RunResult(
-                params, Verdict.ERROR, 0, 0, null, null, List.of(), summary, Records.EMPTY, detail, walMaxBytes);
+                params, Verdict.ERROR, 0, 0, null, null, List.of(), summary, Records.EMPTY, detail, walMaxBytes, null);
     }
 }

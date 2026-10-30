@@ -95,6 +95,7 @@ final class RandomRun {
     private volatile long depth;
     private volatile Path walFile;
     private volatile long walMax = -1;
+    private volatile JvmMetricsSampler.Summary jvmSummary;
 
     RandomRun(RunParams params, Checker checker, long drainLimitMillis, int process, ChildSpawner spawner) {
         this.params = params;
@@ -152,7 +153,8 @@ final class RandomRun {
         Path db = dir.resolve("smq.db");
         runDir = dir;
         walFile = dir.resolve("smq.db-wal");
-        try (Smq smq = open(db)) {
+        try (JvmMetricsSampler sampler = JvmMetricsSampler.start(dir);
+                Smq smq = open(db)) {
             Queues q = declare(smq);
             prefill(q.target());
             if (params.processes() > 1) {
@@ -166,6 +168,7 @@ final class RandomRun {
                         true);
             }
             drained = drain(q.target(), q.deadLetter());
+            jvmSummary = sampler.summary();
         }
         return judge(drained);
     }
@@ -232,7 +235,8 @@ final class RandomRun {
     static void runChild(RunParams params, int process, Path db, Path outDir, long startAt) throws Exception {
         ChildReport.guard(outDir, process, () -> {
             RandomRun run = new RandomRun(params, null, 0, process, null);
-            try (Smq smq = run.open(db)) {
+            try (JvmMetricsSampler sampler = JvmMetricsSampler.startChild(outDir, process);
+                    Smq smq = run.open(db)) {
                 run.runLoad(
                         run.declare(smq),
                         startAt,
@@ -632,7 +636,8 @@ final class RandomRun {
                 drained ? null : "소진이 " + drainLimitMillis + "ms 안에 끝나지 않았다",
                 new RunResult.Records(pub, del, smp),
                 null,
-                walMax < 0 ? null : walMax);
+                walMax < 0 ? null : walMax,
+                jvmSummary);
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

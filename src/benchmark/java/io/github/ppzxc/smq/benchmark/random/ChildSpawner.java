@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.benchmark.random;
 import io.github.ppzxc.smq.benchmark.ChildJvm;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -28,19 +29,27 @@ interface ChildSpawner {
 
     /** 기존 벤치와 같은 {@link ChildJvm}으로 자식 JVM을 띄운다. 자식도 모듈 경로에서 돈다. */
     static ChildSpawner jvm() {
-        return jvm(false);
+        return jvm(false, false);
     }
 
     /**
      * @param heapDump 켜면 자식 JVM에 {@code -XX:+HeapDumpOnOutOfMemoryError}를 주고 덤프를 실행 디렉터리에 남긴다. 덤프가 커서 기본은
      *     끈다
+     * @param jfr 켜면 자식 JVM에 Java Flight Recorder 연속 레코딩을 켠다. 실행 디렉터리에 {@code .jfr} 파일을 남긴다
      */
-    static ChildSpawner jvm(boolean heapDump) {
+    static ChildSpawner jvm(boolean heapDump, boolean jfr) {
         return spec -> {
             Path err = spec.outDir().resolve("p" + spec.process() + ".err");
-            List<String> options = heapDump
-                    ? List.of("-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=" + spec.outDir())
-                    : List.of();
+            List<String> options = new ArrayList<>();
+            if (heapDump) {
+                options.add("-XX:+HeapDumpOnOutOfMemoryError");
+                options.add("-XX:HeapDumpPath=" + spec.outDir());
+            }
+            if (jfr) {
+                options.add("-XX:StartFlightRecording=disk=true,dumponexit=true,"
+                        + "filename=" + spec.outDir().resolve("p" + spec.process() + ".jfr")
+                        + ",settings=profile");
+            }
             ChildJvm jvm = ChildJvm.start(
                     RandomChildMain.class.getName(),
                     List.of(

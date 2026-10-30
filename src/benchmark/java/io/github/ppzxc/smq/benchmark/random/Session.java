@@ -128,6 +128,7 @@ final class Session {
         // 아래 둘은 뒤에 덧붙인 필드다. 위의 기존 필드 의미는 그대로다.
         m.put("errorDetail", r.errorDetail() == null ? null : r.errorDetail().toMap());
         m.put("walMaxBytes", r.walMaxBytes());
+        m.put("jvmMetrics", r.jvmMetrics() == null ? null : r.jvmMetrics().toMap());
         m.put("workDirFs", environment.get("workDirFs"));
         m.put("caveat", environment.get("caveat"));
         Files.createDirectories(jsonLines.getParent());
@@ -169,7 +170,8 @@ final class Session {
                 ? Stream.empty()
                 : r.errorDetail().describe().lines();
         Stream<String> wal = r.walMaxBytes() == null ? Stream.empty() : Stream.of("walMaxBytes=" + r.walMaxBytes());
-        return Stream.concat(detail, wal);
+        Stream<String> jvm = r.jvmMetrics() == null ? Stream.empty() : Stream.of("jvmMetrics=" + r.jvmMetrics());
+        return Stream.of(detail, wal, jvm).flatMap(s -> s);
     }
 
     private static void writeLines(Path file, Stream<String> lines) throws IOException {
@@ -192,6 +194,9 @@ final class Session {
         }
         if (r.walMaxBytes() != null) {
             out.println("smq.db-wal 최대 크기: " + r.walMaxBytes() + " 바이트");
+        }
+        if (r.jvmMetrics() != null) {
+            out.println("JVM 메트릭: " + r.jvmMetrics().toMap());
         }
         List<Violation> vs = r.violations();
         out.println("어긴 불변식 " + vs.size() + "개:");

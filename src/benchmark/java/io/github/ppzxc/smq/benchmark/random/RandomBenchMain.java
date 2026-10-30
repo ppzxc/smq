@@ -11,6 +11,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.SplittableRandom;
+import jdk.jfr.Configuration;
+import jdk.jfr.Recording;
 
 /** 무작위 하네스의 부모 JVM 진입점. 옵션은 {@link Options}를 본다. 모든 실행이 통과하면 0, 첫 위반에서 멈추면 1로 끝낸다. */
 public final class RandomBenchMain {
@@ -66,14 +68,38 @@ public final class RandomBenchMain {
         }
         System.out.println("환경: " + env);
         System.out.println("기록: " + jsonLines);
-        Session session = new Session(
-                o.outDir(),
-                jsonLines,
-                env,
-                limits,
-                (params, dir) ->
-                        RandomRun.execute(params, dir, InvariantChecker::check, ChildSpawner.jvm(o.heapDump())),
-                System.out);
-        return session.run(seeds, budget);
+
+        Recording jfrRecording = null;
+        if (o.jfr()) {
+            try {
+                Configuration config = Configuration.getConfiguration("profile");
+                jfrRecording = new Recording(config);
+                Path jfrFile = o.outDir().resolve("parent.jfr");
+                jfrRecording.setDestination(jfrFile);
+                jfrRecording.setDumpOnExit(true);
+                jfrRecording.start();
+                System.out.println("JFR 레코딩 시작: " + jfrFile);
+            } catch (Exception e) {
+                System.err.println("JFR 시작 실패(무시하고 계속한다): " + e.getMessage());
+            }
+        }
+
+        try {
+            Session session = new Session(
+                    o.outDir(),
+                    jsonLines,
+                    env,
+                    limits,
+                    (params, dir) -> RandomRun.execute(
+                            params, dir, InvariantChecker::check, ChildSpawner.jvm(o.heapDump(), o.jfr())),
+                    System.out);
+            return session.run(seeds, budget);
+        } finally {
+            if (jfrRecording != null) {
+                jfrRecording.stop();
+                jfrRecording.close();
+                System.out.println("JFR 레코딩 종료");
+            }
+        }
     }
 }

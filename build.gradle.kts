@@ -4,10 +4,15 @@ import com.vanniktech.maven.publish.SourcesJar
 import java.util.zip.ZipFile
 import org.gradle.plugins.signing.SigningExtension
 import org.gradle.api.tasks.options.Option
+import net.ltgt.gradle.errorprone.errorprone
+import net.ltgt.gradle.nullaway.nullaway
 
 plugins {
     `java-library`
     id("com.vanniktech.maven.publish") version "0.37.0"
+    id("net.ltgt.errorprone") version "5.1.1"
+    id("net.ltgt.nullaway") version "3.3.0"
+    id("com.diffplug.spotless") version "8.10.4"
 }
 
 group = "io.github.ppzxc"
@@ -41,6 +46,10 @@ repositories {
 
 dependencies {
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
+    compileOnlyApi("org.jspecify:jspecify:1.0.1")
+
+    errorprone("com.google.errorprone:error_prone_core:2.51.0")
+    errorprone("com.uber.nullaway:nullaway:0.14.3")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -48,8 +57,34 @@ dependencies {
 }
 
 tasks.withType<JavaCompile> {
+    val isMainCompilation = name == "compileJava"
     options.encoding = "UTF-8"
     options.release = 25
+    options.errorprone {
+        nullaway {
+            onlyNullMarked.set(true)
+            if (isMainCompilation) {
+                error()
+            } else {
+                disable()
+            }
+        }
+        if (!isMainCompilation) {
+            // 테스트 시나리오의 한국어 식별자는 명세 역할을 하므로 경고로만 보고한다.
+            warn("UnicodeInCode")
+        }
+    }
+    if (isMainCompilation) {
+        options.compilerArgs.add("-Werror")
+    }
+}
+
+spotless {
+    isEnforceCheck = false
+    java {
+        target("src/*/java/**/*.java", "deploy-test/**/src/**/*.java")
+        palantirJavaFormat("2.103.0")
+    }
 }
 
 val benchmarkBaseline = layout.projectDirectory.file("benchmark/baseline.json")

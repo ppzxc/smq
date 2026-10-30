@@ -156,7 +156,20 @@ abstract class SmqConformanceTest {
         long start = System.nanoTime();
         Chunk c = q.pull(1, Duration.ofMillis(50));
         assertTrue(c.messages().isEmpty());
+        assertNull(c.leaseDeadline());
         assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 2000);
+    }
+
+    @Test
+    void 빈_청크의_리스_기한과_빈_청크_연장의_기한은_null이다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        Chunk empty = q.pull(1, Duration.ZERO);
+        assertTrue(empty.isEmpty());
+        assertNull(empty.leaseDeadline());
+
+        Extension ext = q.extend(empty, Duration.ofSeconds(10));
+        assertNull(ext.leaseDeadline());
+        assertTrue(ext.outcomes().byMessage().isEmpty());
     }
 
     @Test

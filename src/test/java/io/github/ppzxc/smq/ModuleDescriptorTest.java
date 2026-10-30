@@ -45,16 +45,29 @@ class ModuleDescriptorTest {
     }
 
     @Test
-    void 필요한_module은_sql과_sqlite_jdbc뿐이고_전이하지_않는다() throws IOException, URISyntaxException {
+    void 필요한_module은_sql과_sqlite_jdbc와_정적_전이_jspecify다() throws IOException, URISyntaxException {
         Set<ModuleDescriptor.Requires> declared = descriptor().requires().stream()
                 .filter(r -> !r.modifiers().contains(ModuleDescriptor.Requires.Modifier.MANDATED))
                 .collect(Collectors.toSet());
 
         assertEquals(
-                Set.of("java.sql", "org.xerial.sqlitejdbc"),
+                Set.of("java.sql", "org.xerial.sqlitejdbc", "org.jspecify"),
                 declared.stream().map(ModuleDescriptor.Requires::name).collect(Collectors.toSet()));
+
+        ModuleDescriptor.Requires jspecify = declared.stream()
+                .filter(r -> r.name().equals("org.jspecify"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(
+                Set.of(ModuleDescriptor.Requires.Modifier.STATIC, ModuleDescriptor.Requires.Modifier.TRANSITIVE),
+                jspecify.modifiers());
+
+        Set<ModuleDescriptor.Requires> runtimeRequires = declared.stream()
+                .filter(r -> !r.name().equals("org.jspecify"))
+                .collect(Collectors.toSet());
         assertTrue(
-                declared.stream().noneMatch(r -> r.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE)),
-                "requires는 transitive가 아니어야 한다");
+                runtimeRequires.stream()
+                        .noneMatch(r -> r.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE)),
+                "런타임 requires는 transitive가 아니어야 한다");
     }
 }

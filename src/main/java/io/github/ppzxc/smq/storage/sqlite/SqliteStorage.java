@@ -1,7 +1,6 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
 import io.github.ppzxc.smq.Durability;
-import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
 import io.github.ppzxc.smq.NoDeadLetterQueueException;
@@ -41,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import org.jspecify.annotations.Nullable;
 import org.sqlite.SQLiteConfig;
 import org.sqlite.SQLiteErrorCode;
 import org.sqlite.SQLiteException;
@@ -58,6 +58,7 @@ public final class SqliteStorage implements Storage {
 
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
     public static final int APPLICATION_ID = SqliteSchema.APPLICATION_ID;
+
     public static final int SCHEMA_VERSION = 1;
 
     /** 꺼낼 수 있는 메시지의 시각 조건. 지연이 끝났고 리스가 없거나 만료됐다. 자리표시자 둘은 모두 현재 시각이다. */
@@ -65,17 +66,15 @@ public final class SqliteStorage implements Storage {
             "(available_at IS NULL OR available_at <= ?) AND (lease_token IS NULL OR lease_deadline <= ?)";
 
     /** 준비 조건: 큐, 지연 끝남, 리스 없음 또는 만료. 바인딩은 (queue_id, now, now) 순서다. */
-    private static final String READY_FROM_WHERE =
-            " FROM message WHERE queue_id = ? AND " + READY_TIME_CONDITION;
+    private static final String READY_FROM_WHERE = " FROM message WHERE queue_id = ? AND " + READY_TIME_CONDITION;
 
     /** 최대 전달 횟수에 도달하지 않은 준비 메시지. 꺼내기가 실제로 고르는 대상이다. 바인딩: 준비 조건, 횟수 상한, LIMIT. */
     static final String SELECT_PULLABLE =
             "SELECT id" + READY_FROM_WHERE + " AND delivery_count < ? ORDER BY id LIMIT ?";
 
     /** 최대 전달 횟수에 도달한 준비 메시지. dead letter 큐로 옮길 대상이다. 바인딩은 SELECT_PULLABLE과 같다. */
-    static final String SELECT_EXHAUSTED =
-            "SELECT id, payload, headers, delivery_count" + READY_FROM_WHERE
-                    + " AND delivery_count >= ? ORDER BY id LIMIT ?";
+    static final String SELECT_EXHAUSTED = "SELECT id, payload, headers, delivery_count" + READY_FROM_WHERE
+            + " AND delivery_count >= ? ORDER BY id LIMIT ?";
 
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
     private static final int MAX_ATTEMPTS = 5;
@@ -96,6 +95,8 @@ public final class SqliteStorage implements Storage {
     }
 
     /**
+     * 연산 lock 대기 하한을 정해 저장소 경합 중 빈 청크를 피한다.
+     *
      * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0009).
      *     0 이상이다. 쓰기 트랜잭션 하나가 기본값(100ms)보다 오래 걸리는 저장소에서 늘린다.
      */
@@ -116,14 +117,16 @@ public final class SqliteStorage implements Storage {
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(busyTimeoutMillis);
         // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
-        config.setSynchronous(durability == Durability.POWER_LOSS
-                ? SQLiteConfig.SynchronousMode.FULL
-                : SQLiteConfig.SynchronousMode.NORMAL);
-        Connection connection = null;
+        config.setSynchronous(
+                durability == Durability.POWER_LOSS
+                        ? SQLiteConfig.SynchronousMode.FULL
+                        : SQLiteConfig.SynchronousMode.NORMAL);
+        @Nullable Connection connection = null;
         try {
             connection = StatementCachingConnection.wrap(
                     DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties()));
-            TransactionExecutor executor = new TransactionExecutor(connection,
+            TransactionExecutor executor = new TransactionExecutor(
+                    connection,
                     new TransactionExecutor.RetryPolicy(maxAttempts, attempt -> Thread.sleep(10L * attempt)));
             // 열기는 아직 기준 버전이 없으므로 확인 없이 판정하고, 그 결과가 기준 버전이 된다.
             executor.executeUnverified(SCHEMA::establish);
@@ -150,8 +153,7 @@ public final class SqliteStorage implements Storage {
 
     private static boolean isNotADatabase(Throwable t) {
         for (; t != null; t = t.getCause()) {
-            if (t instanceof SQLiteException se
-                    && se.getResultCode() == SQLiteErrorCode.SQLITE_NOTADB) {
+            if (t instanceof SQLiteException se && se.getResultCode() == SQLiteErrorCode.SQLITE_NOTADB) {
                 return true;
             }
         }
@@ -178,7 +180,7 @@ public final class SqliteStorage implements Storage {
                 if (!existing.equals(options)) {
                     throw new QueueDeclarationConflictException(queue, existing, options);
                 }
-                return null;
+                return true;
             }
             Long dlqId = null;
             if (options.deadLetterQueue().isPresent()) {
@@ -201,7 +203,7 @@ public final class SqliteStorage implements Storage {
                 ps.setInt(4, options.singleActiveConsumer() ? 1 : 0);
                 ps.executeUpdate();
             }
-            return null;
+            return true;
         });
     }
 
@@ -212,8 +214,8 @@ public final class SqliteStorage implements Storage {
             if (queueId == null) {
                 return false;
             }
-            try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT name FROM queue WHERE dead_letter_queue_id = ? ORDER BY id LIMIT 1")) {
+            try (PreparedStatement ps =
+                    c.prepareStatement("SELECT name FROM queue WHERE dead_letter_queue_id = ? ORDER BY id LIMIT 1")) {
                 ps.setLong(1, queueId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
@@ -240,8 +242,8 @@ public final class SqliteStorage implements Storage {
 
     @Override
     public Optional<QueueOptions> options(String queue) {
-        return inTransaction(c -> findQueue(c, queue) == null ? Optional.<QueueOptions>empty()
-                : Optional.of(readOptions(c, queue)));
+        return inTransaction(
+                c -> findQueue(c, queue) == null ? Optional.<QueueOptions>empty() : Optional.of(readOptions(c, queue)));
     }
 
     private static QueueOptions readOptions(Connection c, String queue) throws SQLException {
@@ -272,7 +274,7 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static Long findQueue(Connection c, String queue) throws SQLException {
+    private static @Nullable Long findQueue(Connection c, String queue) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("SELECT id FROM queue WHERE name = ?")) {
             ps.setString(1, queue);
             try (ResultSet rs = ps.executeQuery()) {
@@ -341,21 +343,23 @@ public final class SqliteStorage implements Storage {
      * BUSY가 아닌 오류는 true가 아니라 예외다.
      */
     private boolean anyReady(String queue, Instant now, Deadline waitDeadline) {
-        return executor.anyOrUncertain(connection -> {
-            try (PreparedStatement ps = connection.prepareStatement(
-                    "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
-                            + " AND " + READY_TIME_CONDITION + "), "
-                            + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
-                ps.setString(1, queue);
-                ps.setLong(2, toNanos(now));
-                ps.setLong(3, toNanos(now));
-                ps.setString(4, queue);
-                try (ResultSet rs = ps.executeQuery()) {
-                    // 행이 없는 일은 없지만, 모르면 쓰기 경로가 확인하게 한다.
-                    return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
-                }
-            }
-        }, waitDeadline);
+        return executor.anyOrUncertain(
+                connection -> {
+                    try (PreparedStatement ps = connection.prepareStatement(
+                            "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
+                                    + " AND " + READY_TIME_CONDITION + "), "
+                                    + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
+                        ps.setString(1, queue);
+                        ps.setLong(2, toNanos(now));
+                        ps.setLong(3, toNanos(now));
+                        ps.setString(4, queue);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            // 행이 없는 일은 없지만, 모르면 쓰기 경로가 확인하게 한다.
+                            return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
+                        }
+                    }
+                },
+                waitDeadline);
     }
 
     @Override
@@ -377,57 +381,64 @@ public final class SqliteStorage implements Storage {
         if (!anyReady(queue, now, waitDeadline)) {
             return PullResult.empty();
         }
-        return inTransaction(c -> {
-            long queueId = requireQueue(c, queue);
-            QueueOptions options = readOptions(c, queue);
-            // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
-            if (options.singleActiveConsumer() && hasActiveLease(c, queueId, now)) {
-                return PullResult.empty();
-            }
-            int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
-            boolean deadLettersRemain = options.maxDeliveries().isPresent() && moveExhausted(c, queue, queueId, options, limit, now);
-            try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE)) {
-                peek.setLong(1, queueId);
-                peek.setLong(2, toNanos(now));
-                peek.setLong(3, toNanos(now));
-                peek.setInt(4, limit);
-                peek.setInt(5, 1);
-                try (ResultSet rs = peek.executeQuery()) {
-                    if (!rs.next()) {
-                        return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
+        return inTransaction(
+                c -> {
+                    long queueId = requireQueue(c, queue);
+                    QueueOptions options = readOptions(c, queue);
+                    // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
+                    if (options.singleActiveConsumer() && hasActiveLease(c, queueId, now)) {
+                        return PullResult.empty();
                     }
-                }
-            }
-            long token;
-            try (Statement s = c.createStatement();
-                    ResultSet rs = s.executeQuery(
-                            "UPDATE meta SET value = value + 1 WHERE key = 'lease_seq' RETURNING value")) {
-                token = rs.getLong(1);
-            }
-            Instant deadline = now.plus(lease);
-            List<Message> messages = new ArrayList<>();
-            try (PreparedStatement ps = c.prepareStatement("""
+                    int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
+                    boolean deadLettersRemain = options.maxDeliveries().isPresent()
+                            && moveExhausted(c, queue, queueId, options, limit, now);
+                    try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE)) {
+                        peek.setLong(1, queueId);
+                        peek.setLong(2, toNanos(now));
+                        peek.setLong(3, toNanos(now));
+                        peek.setInt(4, limit);
+                        peek.setInt(5, 1);
+                        try (ResultSet rs = peek.executeQuery()) {
+                            if (!rs.next()) {
+                                return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
+                            }
+                        }
+                    }
+                    long token;
+                    try (Statement s = c.createStatement();
+                            ResultSet rs = s.executeQuery(
+                                    "UPDATE meta SET value = value + 1 WHERE key = 'lease_seq' RETURNING value")) {
+                        token = rs.getLong(1);
+                    }
+                    Instant deadline = now.plus(lease);
+                    List<Message> messages = new ArrayList<>();
+                    try (PreparedStatement ps = c.prepareStatement("""
                     UPDATE message SET lease_token = ?, lease_deadline = ?, delivery_count = delivery_count + 1
                     WHERE id IN (""" + SELECT_PULLABLE + """
                     )
                     RETURNING id, payload, headers, delivery_count, published_at""")) {
-                ps.setLong(1, token);
-                ps.setLong(2, toNanos(deadline));
-                ps.setLong(3, queueId);
-                ps.setLong(4, toNanos(now));
-                ps.setLong(5, toNanos(now));
-                ps.setInt(6, limit);
-                ps.setInt(7, max);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        messages.add(new Message(new MessageId(rs.getLong(1)), rs.getBytes(2),
-                                decodeHeaders(rs.getBytes(3)), rs.getInt(4), fromNanos(rs.getLong(5))));
+                        ps.setLong(1, token);
+                        ps.setLong(2, toNanos(deadline));
+                        ps.setLong(3, queueId);
+                        ps.setLong(4, toNanos(now));
+                        ps.setLong(5, toNanos(now));
+                        ps.setInt(6, limit);
+                        ps.setInt(7, max);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                messages.add(new Message(
+                                        new MessageId(rs.getLong(1)),
+                                        rs.getBytes(2),
+                                        decodeHeaders(rs.getBytes(3)),
+                                        rs.getInt(4),
+                                        fromNanos(rs.getLong(5))));
+                            }
+                        }
                     }
-                }
-            }
-            messages.sort((a, b) -> a.id().compareTo(b.id()));
-            return PullResult.of(new LeaseToken(token), deadline, messages);
-        }, waitDeadline);
+                    messages.sort((a, b) -> a.id().compareTo(b.id()));
+                    return PullResult.of(new LeaseToken(token), deadline, messages);
+                },
+                waitDeadline);
     }
 
     /**
@@ -436,8 +447,9 @@ public final class SqliteStorage implements Storage {
      *
      * @return 상한에 걸려 남은 도달 메시지가 더 있으면 true
      */
-    private static boolean moveExhausted(Connection c, String queue, long queueId, QueueOptions options, int limit,
-            Instant now) throws SQLException {
+    private static boolean moveExhausted(
+            Connection c, String queue, long queueId, QueueOptions options, int limit, Instant now)
+            throws SQLException {
         long dlqId = requireQueue(c, options.deadLetterQueue().orElseThrow());
         List<Exhausted> found = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(SELECT_EXHAUSTED)) {
@@ -448,8 +460,8 @@ public final class SqliteStorage implements Storage {
             ps.setInt(5, DeadLetters.MAX_MOVES_PER_PULL + 1);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    found.add(new Exhausted(rs.getLong(1), rs.getBytes(2), decodeHeaders(rs.getBytes(3)),
-                            rs.getInt(4)));
+                    found.add(
+                            new Exhausted(rs.getLong(1), rs.getBytes(2), decodeHeaders(rs.getBytes(3)), rs.getInt(4)));
                 }
             }
         }
@@ -463,9 +475,12 @@ public final class SqliteStorage implements Storage {
             for (Exhausted e : moving) {
                 insert.setLong(1, dlqId);
                 insert.setBytes(2, e.payload());
-                insert.setBytes(3, encodeHeaders(DeadLetters.headers(
-                        new DeadLetters.Origin(queue, new MessageId(e.id()), e.headers(), e.deliveryCount()),
-                        DeadLetters.Reason.MAX_DELIVERIES, now)));
+                insert.setBytes(
+                        3,
+                        encodeHeaders(DeadLetters.headers(
+                                new DeadLetters.Origin(queue, new MessageId(e.id()), e.headers(), e.deliveryCount()),
+                                DeadLetters.Reason.MAX_DELIVERIES,
+                                now)));
                 insert.setLong(4, toNanos(now));
                 insert.executeUpdate();
                 delete.setLong(1, e.id());
@@ -476,8 +491,9 @@ public final class SqliteStorage implements Storage {
     }
 
     /** dead letter 큐로 옮길 도달 메시지 한 건. */
-    private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount) {
-    }
+    // payload 배열은 JDBC에서 읽어 즉시 SQL 바인딩에만 사용한다.
+    @SuppressWarnings("ArrayRecordComponent")
+    private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount) {}
 
     @Override
     public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {
@@ -519,8 +535,14 @@ public final class SqliteStorage implements Storage {
     }
 
     /** 이동은 dead letter 큐에 새 메시지를 넣고 원래 메시지를 지우는 일이다. 예외는 트랜잭션 전체를 되돌린다. */
-    private static int reject(PreparedStatement find, PreparedStatement insert, PreparedStatement delete,
-            LeaseToken token, Disposition d, Instant now) throws SQLException {
+    private static int reject(
+            PreparedStatement find,
+            PreparedStatement insert,
+            PreparedStatement delete,
+            LeaseToken token,
+            Disposition d,
+            Instant now)
+            throws SQLException {
         find.setLong(1, d.id().value());
         find.setLong(2, token.value());
         String queueName;
@@ -543,8 +565,12 @@ public final class SqliteStorage implements Storage {
         }
         insert.setLong(1, dlqId);
         insert.setBytes(2, payload);
-        insert.setBytes(3, encodeHeaders(DeadLetters.headers(
-                new DeadLetters.Origin(queueName, d.id(), headers, deliveryCount), DeadLetters.Reason.REJECTED, now)));
+        insert.setBytes(
+                3,
+                encodeHeaders(DeadLetters.headers(
+                        new DeadLetters.Origin(queueName, d.id(), headers, deliveryCount),
+                        DeadLetters.Reason.REJECTED,
+                        now)));
         insert.setLong(4, toNanos(now));
         insert.executeUpdate();
         delete.setLong(1, d.id().value());
@@ -557,8 +583,8 @@ public final class SqliteStorage implements Storage {
         return inTransaction(c -> {
             Instant deadline = now.plus(d);
             List<Result> results = new ArrayList<>(ids.size());
-            try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE message SET lease_deadline = ? WHERE id = ? AND lease_token = ?")) {
+            try (PreparedStatement ps =
+                    c.prepareStatement("UPDATE message SET lease_deadline = ? WHERE id = ? AND lease_token = ?")) {
                 for (MessageId id : ids) {
                     ps.setLong(1, toNanos(deadline));
                     ps.setLong(2, id.value());
@@ -575,7 +601,7 @@ public final class SqliteStorage implements Storage {
         executor.close();
     }
 
-    private static void closeQuietly(Connection c) {
+    private static void closeQuietly(@Nullable Connection c) {
         if (c != null) {
             try {
                 c.close();
@@ -585,7 +611,7 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static void setInstantOrNull(PreparedStatement ps, int index, Instant t) throws SQLException {
+    private static void setInstantOrNull(PreparedStatement ps, int index, @Nullable Instant t) throws SQLException {
         if (t == null) {
             ps.setNull(index, java.sql.Types.INTEGER);
         } else {

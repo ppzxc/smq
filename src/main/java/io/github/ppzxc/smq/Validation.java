@@ -7,8 +7,7 @@ final class Validation {
 
     private static final Pattern QUEUE_NAME = Pattern.compile("[A-Za-z0-9._-]{1,200}");
 
-    private Validation() {
-    }
+    private Validation() {}
 
     static String queueName(String name) {
         if (name == null || !QUEUE_NAME.matcher(name).matches()) {

@@ -38,11 +38,9 @@ public final class DeadLetters {
     }
 
     /** 옮겨지기 전 원래 메시지의 위치와 상태. */
-    public record Origin(String queue, MessageId id, Map<String, String> headers, int deliveryCount) {
-    }
+    public record Origin(String queue, MessageId id, Map<String, String> headers, int deliveryCount) {}
 
-    private DeadLetters() {
-    }
+    private DeadLetters() {}
 
     public static Map<String, String> headers(Origin origin, Reason reason, Instant movedAt) {
         Map<String, String> headers = new LinkedHashMap<>(origin.headers());

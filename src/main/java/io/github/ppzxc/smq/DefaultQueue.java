@@ -21,7 +21,13 @@ final class DefaultQueue implements Queue {
     private final String name;
     private final QueueOptions options;
 
-    DefaultQueue(Storage storage, InstantSource clock, Duration defaultLease, PullWaiter waiter, String name, QueueOptions options) {
+    DefaultQueue(
+            Storage storage,
+            InstantSource clock,
+            Duration defaultLease,
+            PullWaiter waiter,
+            String name,
+            QueueOptions options) {
         this.storage = storage;
         this.clock = clock;
         this.defaultLease = defaultLease;
@@ -82,16 +88,23 @@ final class DefaultQueue implements Queue {
         }
         Validation.positive(leaseDuration, "leaseDuration");
         long deadline = System.nanoTime() + wait.toNanos();
-        return waiter.await(wait, () -> {
-            // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
-            Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
-            PullResult r = storage.pull(name, max, leaseDuration, clock.instant(), remaining);
-            if (!r.messages().isEmpty()) {
-                return PullWaiter.Attempt.found(new Chunk(name, r.messages(), r.leaseDeadline(), r.token()));
-            }
-            // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다(닫힘과 interrupt는 대기 루프가 확인한다).
-            return r.deadLettersRemain() ? PullWaiter.Attempt.retryNow() : PullWaiter.Attempt.empty();
-        }, () -> new Chunk(name, List.of(), null, null));
+        return waiter.await(
+                wait,
+                () -> {
+                    // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
+                    Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
+                    PullResult r = storage.pull(name, max, leaseDuration, clock.instant(), remaining);
+                    if (!r.messages().isEmpty()) {
+                        return PullWaiter.Attempt.found(new Chunk(
+                                name,
+                                r.messages(),
+                                Objects.requireNonNull(r.leaseDeadline(), "non-empty pull must have a lease deadline"),
+                                Objects.requireNonNull(r.token(), "non-empty pull must have a lease token")));
+                    }
+                    // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다(닫힘과 interrupt는 대기 루프가 확인한다).
+                    return r.deadLettersRemain() ? PullWaiter.Attempt.retryNow() : PullWaiter.Attempt.empty();
+                },
+                () -> new Chunk(name, List.of(), null, null));
     }
 
     @Override
@@ -102,7 +115,10 @@ final class DefaultQueue implements Queue {
             return new Outcomes(Map.of());
         }
         Map<MessageId, Outcome> byMessage = new LinkedHashMap<>();
-        for (Result r : storage.settle(settlement.token(), settlement.items(), clock.instant())) {
+        for (Result r : storage.settle(
+                Objects.requireNonNull(settlement.token(), "non-empty settlement must have a lease token"),
+                settlement.items(),
+                clock.instant())) {
             byMessage.put(r.id(), r.outcome());
         }
         // NACK은 메시지를 다시 준비로 돌릴 수 있다. 깨우기는 저장소가 아니라 코어가 맡는다.
@@ -118,7 +134,11 @@ final class DefaultQueue implements Queue {
         if (chunk.isEmpty()) {
             return new Extension(null, new Outcomes(Map.of()));
         }
-        Extended extended = storage.extend(chunk.token(), chunk.messageIds(), leaseDuration, clock.instant());
+        Extended extended = storage.extend(
+                Objects.requireNonNull(chunk.token(), "non-empty chunk must have a lease token"),
+                chunk.messageIds(),
+                leaseDuration,
+                clock.instant());
         Map<MessageId, Outcome> byMessage = new LinkedHashMap<>();
         for (Result r : extended.results()) {
             byMessage.put(r.id(), r.outcome());

@@ -1,6 +1,7 @@
 package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.ppzxc.smq.storage.Disposition;
@@ -110,6 +111,7 @@ class DefaultQueueTest {
         Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
 
         assertTrue(chunk.isEmpty());
+        assertNull(chunk.leaseDeadline());
         assertEquals(1, storage.pulls);
     }
 

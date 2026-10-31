@@ -13,6 +13,7 @@ import io.github.ppzxc.smq.storage.Result;
 import io.github.ppzxc.smq.storage.Storage;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
@@ -85,7 +86,7 @@ class DefaultQueueTest {
         }
 
         @Override
-        public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now) {
+        public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock) {
             throw new UnsupportedOperationException();
         }
 

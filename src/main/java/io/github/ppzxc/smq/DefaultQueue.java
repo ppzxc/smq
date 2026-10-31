@@ -138,7 +138,7 @@ final class DefaultQueue implements Queue {
                 Objects.requireNonNull(chunk.token(), "non-empty chunk must have a lease token"),
                 chunk.messageIds(),
                 leaseDuration,
-                clock.instant());
+                clock);
         Map<MessageId, Outcome> byMessage = new LinkedHashMap<>();
         for (Result r : extended.results()) {
             byMessage.put(r.id(), r.outcome());

@@ -37,7 +37,9 @@ public interface Queue {
 
     /**
      * 청크의 리스를 "지금부터 {@code leaseDuration} 뒤"로 바꾼다. 같은 연장을 다시 해도 안전하다. 기한이 지났어도 아무도 다시 꺼내지
-     * 않았다면 {@code OK}이고, 다른 리스가 가져갔거나 이미 정산된 메시지는 효력 없이 {@code STALE}이다.
+     * 않았다면 {@code OK}이고, 다른 리스가 가져갔거나 이미 정산된 메시지는 효력 없이 {@code STALE}이다. 단, 단일 활성
+     * 컨슈머 큐에서는 기한이 지난 리스를 연장할 수 없다. 그 사이 다른 청크가 꺼냈을 수 있어, 되살리면 리스가 둘이 되기
+     * 때문이며 아무도 다시 꺼내지 않았어도 {@code STALE}이다. 기한 판정 시각은 저장소가 연장을 처리하는 시점이다.
      * 다른 큐의 청크는 {@code IllegalArgumentException}이다.
      */
     Extension extend(Chunk chunk, Duration leaseDuration);

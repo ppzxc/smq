@@ -27,6 +27,9 @@ final class Session {
     }
 
     static final int EXIT_OK = 0;
+    /** 고정 속도 모드에서 이만큼 연속으로 예외가 나면 멈춘다. */
+    static final int MAX_CONSECUTIVE_ERRORS = 3;
+
     static final int EXIT_FAILED = 1;
     private static final int MAX_VIOLATIONS_PRINTED = 20;
     private static final int SUMMARY_ROWS = 10;
@@ -59,13 +62,14 @@ final class Session {
 
     /**
      * @param budgetMillis 새 실행을 시작할 수 있는 시간. 지나면 더 시작하지 않는다(이미 도는 실행은 끝낸다)
-     * @return 모두 통과하면 {@link #EXIT_OK}, 실패가 있으면 {@link #EXIT_FAILED}. 백로그 증가({@link Verdict#BACKLOG_GROWING})는 기록만 하고 계속 돌고, 다른 실패는 거기서 멈춘다
+     * @return 모두 통과하면 {@link #EXIT_OK}, 실패가 있으면 {@link #EXIT_FAILED}. 고정 속도 모드에서는 백로그 증가({@link Verdict#BACKLOG_GROWING})와 예외(연속 {@link #MAX_CONSECUTIVE_ERRORS}번 미만)를 기록만 하고 계속 돌고, 다른 실패는 거기서 멈춘다
      */
     int run(Iterator<Long> seeds, long budgetMillis) {
         long start = System.nanoTime();
         List<RunResult> results = new ArrayList<>();
         int exit = EXIT_OK;
         int n = 0;
+        int consecutiveErrors = 0;
         while (seeds.hasNext()) {
             if (n > 0 && (System.nanoTime() - start) / 1_000_000L >= budgetMillis) {
                 break;
@@ -78,12 +82,18 @@ final class Session {
             if (!result.passed()) {
                 reportFailure(result);
                 exit = EXIT_FAILED;
-                // 백로그 증가는 그 매개변수 구성의 용량 문제일 수 있어 다음 시드를 막지 않는다. 나머지 실패는 바로 멈춘다.
-                if (result.verdict() == Verdict.BACKLOG_GROWING) {
+                // 고정 속도 모드는 긴 실행이라 한 번의 실패로 끊지 않는다. 백로그 증가(용량)와 예외(예: SQLITE_BUSY)는 기록하고
+                // 다음 시드로 가되, 예외가 연속 MAX_CONSECUTIVE_ERRORS번이면 하네스 문제로 보고 멈춘다. 불변식 위반과 소진 실패는
+                // 데이터가 틀렸다는 뜻이라 바로 멈춘다.
+                consecutiveErrors = result.verdict() == Verdict.ERROR ? consecutiveErrors + 1 : 0;
+                if (result.params().isSoak()
+                        && (result.verdict() == Verdict.BACKLOG_GROWING
+                                || (result.verdict() == Verdict.ERROR && consecutiveErrors < MAX_CONSECUTIVE_ERRORS))) {
                     continue;
                 }
                 break;
             }
+            consecutiveErrors = 0;
             out.printf(
                     "    PASS  %.0f msg/s, %.2f MB/s, p50 %s, p99 %s%n",
                     result.msgPerSec(), result.mbPerSec(), ms(result.p50Ms()), ms(result.p99Ms()));

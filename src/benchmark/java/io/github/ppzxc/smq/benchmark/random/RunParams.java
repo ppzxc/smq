@@ -63,6 +63,11 @@ record RunParams(
     private static final long PREFILL_BYTES_CAP = 256L * 1024 * 1024;
     /** 고정 속도 모드의 메시지 크기 상한. 운영의 작은 메시지에 가깝게 맞춘다. */
     private static final int SOAK_MAX_MESSAGE_BYTES = 1024;
+    /**
+     * 고정 속도 모드의 청크 크기 하한. 컨슈머 스레드 하나가 꺼내기와 정산(커밋 둘)을 초당 십수 번 하므로, 청크가 작으면 한 스레드가 500/s를
+     * 받지 못한다. 단일 활성 큐도 쓰지 않는다: 정산하지 않은 메시지 하나가 큐 전체를 리스 만료까지 막아 초당 수십 건이 한계다.
+     */
+    private static final int SOAK_MIN_CHUNK_SIZE = 100;
     /** 고정 속도 모드의 발행 배치는 스레드 몫의 (1 / 이 값)초 분량을 넘지 않게 한다. 배치가 너무 크면 발행이 덩어리로 몰린다. */
     private static final long SOAK_BATCH_WINDOW_DIVISOR = 10;
 
@@ -108,6 +113,8 @@ record RunParams(
             maxBytes = Math.min(maxBytes, SOAK_MAX_MESSAGE_BYTES);
             depth = (int) Math.min(limits.maxDepth(), PREFILL_BYTES_CAP / (maxBytes / 4 + 64));
             slow = 0;
+            single = false;
+            chunkSize = Math.max(chunkSize, SOAK_MIN_CHUNK_SIZE);
             publishDelay = 0;
             nackDelay = 0;
             long perThread = perThreadRate(

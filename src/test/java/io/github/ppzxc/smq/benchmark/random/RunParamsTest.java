@@ -67,6 +67,8 @@ class RunParamsTest {
             assertEquals(0, p.publishDelayRatio(), 0, "지연 발행 없음");
             assertEquals(0, p.slowChunkRatio(), 0, "느린 청크 없음");
             assertEquals(0, p.nackDelayRatio(), 0, "NACK 지연 없음");
+            assertFalse(p.singleActiveConsumer(), "단일 활성 큐는 청크 하나가 리스 만료까지 큐를 막아 초당 수십 건이 한계다");
+            assertTrue(p.chunkSize() >= 100, "컨슈머 스레드 하나가 500/s를 받을 만큼의 청크: " + p.chunkSize());
             assertEquals(100_000, p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
             assertTrue(p.maxMessageBytes() <= 1024, "메시지 크기 상한 1KB");
             int perThread = Math.max(1, 500 / p.totalProducers());

@@ -356,4 +356,24 @@ class SessionTest {
         assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L, 3L).iterator(), Long.MAX_VALUE));
         assertEquals(List.of(1L, 2L), executed);
     }
+
+    @Test
+    void 고정_속도에서는_예외도_기록하고_계속_돌되_연속_3번이면_멈춘다() {
+        // 1번 통과, 2번 ERROR, 3번 통과, 4~6번 ERROR(연속 3번)에서 멈춘다.
+        Session s = soakSession(fake(p -> p.seed() == 2 || p.seed() >= 4
+                ? soakResult(p, Verdict.ERROR, null)
+                : soakResult(p, Verdict.PASS, report(false))));
+        assertEquals(
+                Session.EXIT_FAILED,
+                s.run(List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L, 3L, 4L, 5L, 6L), executed);
+    }
+
+    @Test
+    void 고정_속도에서도_소진_실패는_바로_멈춘다() {
+        Session s = soakSession(
+                fake(p -> soakResult(p, p.seed() == 2 ? Verdict.DRAIN_TIMEOUT : Verdict.PASS, report(false))));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L, 3L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L), executed);
+    }
 }

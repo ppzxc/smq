@@ -203,6 +203,11 @@ abstract class RandomBench : JavaExec() {
     @get:Optional
     @get:Option(option = "jfr", description = "부모와 자식 JVM에 Java Flight Recorder 연속 레코딩을 켠다 (기본 끔)")
     abstract val jfr: Property<Boolean>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "rate", description = "고정 속도 모드. 프로듀서 전체가 초당 이만큼 보내고 달성률과 백로그 추세를 판정한다. JFR이 기본으로 켜진다 (예: 500)")
+    abstract val rate: Property<String>
 }
 
 val randomBenchMain = "io.github.ppzxc.smq.benchmark.random.RandomBenchMain"
@@ -217,6 +222,7 @@ tasks.register<RandomBench>("randomBench") {
         load.orNull?.let { args("--load", it) }
         masterSeed.orNull?.let { args("--master-seed", it) }
         if (heapDump.orNull == true) args("--heap-dump")
+        rate.orNull?.let { args("--rate", it) }
         if (jfr.orNull == true) args("--jfr")
     }
 }

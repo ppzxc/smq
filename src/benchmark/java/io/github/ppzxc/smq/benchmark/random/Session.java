@@ -27,6 +27,9 @@ final class Session {
     }
 
     static final int EXIT_OK = 0;
+    /** 고정 속도 모드에서 이만큼 연속으로 예외가 나면 멈춘다. */
+    static final int MAX_CONSECUTIVE_ERRORS = 3;
+
     static final int EXIT_FAILED = 1;
     private static final int MAX_VIOLATIONS_PRINTED = 20;
     private static final int SUMMARY_ROWS = 10;
@@ -59,13 +62,14 @@ final class Session {
 
     /**
      * @param budgetMillis 새 실행을 시작할 수 있는 시간. 지나면 더 시작하지 않는다(이미 도는 실행은 끝낸다)
-     * @return 모두 통과하면 {@link #EXIT_OK}, 첫 실패에서 멈추면 {@link #EXIT_FAILED}
+     * @return 모두 통과하면 {@link #EXIT_OK}, 실패가 있으면 {@link #EXIT_FAILED}. 고정 속도 모드에서는 백로그 증가({@link Verdict#BACKLOG_GROWING})와 예외(연속 {@link #MAX_CONSECUTIVE_ERRORS}번 미만)를 기록만 하고 계속 돌고, 다른 실패는 거기서 멈춘다
      */
     int run(Iterator<Long> seeds, long budgetMillis) {
         long start = System.nanoTime();
         List<RunResult> results = new ArrayList<>();
         int exit = EXIT_OK;
         int n = 0;
+        int consecutiveErrors = 0;
         while (seeds.hasNext()) {
             if (n > 0 && (System.nanoTime() - start) / 1_000_000L >= budgetMillis) {
                 break;
@@ -78,11 +82,24 @@ final class Session {
             if (!result.passed()) {
                 reportFailure(result);
                 exit = EXIT_FAILED;
+                // 고정 속도 모드는 긴 실행이라 한 번의 실패로 끊지 않는다. 백로그 증가(용량)와 예외(예: SQLITE_BUSY)는 기록하고
+                // 다음 시드로 가되, 예외가 연속 MAX_CONSECUTIVE_ERRORS번이면 하네스 문제로 보고 멈춘다. 불변식 위반과 소진 실패는
+                // 데이터가 틀렸다는 뜻이라 바로 멈춘다.
+                consecutiveErrors = result.verdict() == Verdict.ERROR ? consecutiveErrors + 1 : 0;
+                if (result.params().isSoak()
+                        && (result.verdict() == Verdict.BACKLOG_GROWING
+                                || (result.verdict() == Verdict.ERROR && consecutiveErrors < MAX_CONSECUTIVE_ERRORS))) {
+                    continue;
+                }
                 break;
             }
+            consecutiveErrors = 0;
             out.printf(
                     "    PASS  %.0f msg/s, %.2f MB/s, p50 %s, p99 %s%n",
                     result.msgPerSec(), result.mbPerSec(), ms(result.p50Ms()), ms(result.p99Ms()));
+            if (result.soak() != null) {
+                out.println("    " + soakLine(result.soak()));
+            }
         }
         out.print(Summary.render(results, SUMMARY_ROWS));
         out.printf("합계: %d회 실행, %s%n", results.size(), exit == EXIT_OK ? "위반 없음" : "실패");
@@ -104,7 +121,12 @@ final class Session {
         try {
             append(result);
             if (result.passed()) {
-                deleteTree(dir);
+                if (params.isSoak()) {
+                    // 고정 속도 실행은 JFR과 메트릭 파일이 결과물이다. 큰 DB와 자식의 발행·전달 기록만 지운다.
+                    deleteBulkyFiles(dir);
+                } else {
+                    deleteTree(dir);
+                }
                 // 세션은 요약표를 위해 모든 결과를 쌓는다. 통과한 실행의 기록은 여기서 버려야 긴 세션이 힙을 채우지 않는다.
                 return result.withoutRecords();
             }
@@ -130,6 +152,10 @@ final class Session {
         m.put("errorDetail", r.errorDetail() == null ? null : r.errorDetail().toMap());
         m.put("walMaxBytes", r.walMaxBytes());
         m.put("jvmMetrics", r.jvmMetrics() == null ? null : r.jvmMetrics().toMap());
+        m.put("soak", r.soak() == null ? null : r.soak().toMap());
+        m.put(
+                "childMetrics",
+                r.childMetrics().stream().map(JvmMetricsSampler.Summary::toMap).toList());
         m.put("workDirFs", environment.get("workDirFs"));
         m.put("caveat", environment.get("caveat"));
         Files.createDirectories(jsonLines.getParent());
@@ -199,6 +225,12 @@ final class Session {
         if (r.jvmMetrics() != null) {
             out.println("JVM 메트릭: " + r.jvmMetrics().toMap());
         }
+        if (r.soak() != null) {
+            out.println(soakLine(r.soak()));
+        }
+        for (int i = 0; i < r.childMetrics().size(); i++) {
+            out.println("자식 " + i + " 메트릭: " + r.childMetrics().get(i).toMap());
+        }
         List<Violation> vs = r.violations();
         out.println("어긴 불변식 " + vs.size() + "개:");
         for (int i = 0; i < Math.min(vs.size(), MAX_VIOLATIONS_PRINTED); i++) {
@@ -210,8 +242,32 @@ final class Session {
         out.println("보존한 파일: " + failureDir(r.params().seed()));
     }
 
+    private static String soakLine(SoakJudge.Report r) {
+        return String.format(
+                "목표 %d msg/s, 달성률 %.0f%%, ACK %.0f msg/s, 백로그 기울기 %.1f개/초, 최대 깊이 %d%s",
+                r.targetRate(),
+                r.achievedRatio() * 100,
+                r.ackRate(),
+                r.backlogSlopePerSec(),
+                r.maxDepth(),
+                r.backlogGrowing() ? " (백로그 증가)" : "");
+    }
+
     private static String ms(Double d) {
         return d == null ? "-" : String.format("%.0fms", d);
+    }
+
+    /** SQLite 파일(본체, WAL, 공유 메모리)과 자식 JVM이 남긴 발행·전달 기록만 지운다. 긴 실행에서는 둘 다 크다. */
+    private static void deleteBulkyFiles(Path dir) throws IOException {
+        for (String name : List.of("smq.db", "smq.db-wal", "smq.db-shm")) {
+            Files.deleteIfExists(dir.resolve(name));
+        }
+        try (Stream<Path> s = Files.list(dir)) {
+            for (Path p : (Iterable<Path>) s.filter(
+                    f -> f.getFileName().toString().matches("p\\d+-(published|deliveries)\\.jsonl"))::iterator) {
+                Files.delete(p);
+            }
+        }
     }
 
     private static void deleteTree(Path dir) throws IOException {

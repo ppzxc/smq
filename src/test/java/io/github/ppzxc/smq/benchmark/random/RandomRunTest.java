@@ -321,4 +321,58 @@ class RandomRunTest {
         assertEquals(Verdict.ERROR, r.verdict());
         assertNotNull(r.walMaxBytes());
     }
+
+    // ---- 고정 속도 모드
+
+    /** 프로세스 수가 {@code processes}인 첫 시드. 시드마다 프로세스 수가 달라서 찾아 쓴다. */
+    private static RunParams paramsWithProcesses(int processes, Limits limits) {
+        for (long seed = 1; seed < 500; seed++) {
+            RunParams p = RunParams.fromSeed(seed, limits);
+            if (p.processes() == processes) {
+                return p;
+            }
+        }
+        throw new AssertionError("프로세스 수 " + processes + "인 시드가 없다");
+    }
+
+    @Test
+    void 고정_속도로_돌면_달성률과_백로그_보고가_붙는다() {
+        Limits soak = Limits.smoke(2_000).withRate(200);
+        RunParams p = paramsWithProcesses(1, soak);
+        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check);
+        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error() + " " + r.soak());
+        assertNotNull(r.soak());
+        assertEquals(200, r.soak().targetRate());
+        // 속도 조절이 없으면 2초에 수천 건이라 비율이 크게 넘는다. 실제 시계라 아래쪽은 느린 환경을 봐서 넉넉히, 위쪽만 조인다.
+        assertTrue(r.soak().achievedRatio() > 0.2 && r.soak().achievedRatio() < 1.5, "달성률: " + r.soak());
+        assertTrue(r.childMetrics().isEmpty(), "단일 프로세스에는 자식이 없다");
+
+        RunResult plain = RandomRun.execute(
+                RunParams.fromSeed(5, Limits.smoke(300)), dir.resolve("plain"), InvariantChecker::check);
+        assertNull(plain.soak());
+    }
+
+    @Test
+    void 자식_프로세스마다_메트릭_요약이_결과에_붙는다() {
+        Limits soak = Limits.smoke(1_000).withRate(200);
+        RunParams p = paramsWithProcesses(2, soak);
+        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, inProcess());
+        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
+        assertEquals(2, r.childMetrics().size());
+        assertTrue(
+                r.childMetrics().stream().allMatch(m -> m.sampleCount() > 0),
+                r.childMetrics().toString());
+    }
+
+    @Test
+    void 백로그_증가는_불변식이_멀쩡해도_실패이고_위반과_소진_실패가_우선한다() {
+        SoakJudge.Report growing = new SoakJudge.Report(500, 1.0, 100, 200, 5_000, true);
+        SoakJudge.Report fine = new SoakJudge.Report(500, 0.3, 100, 0, 10, false);
+        Violation v = new Violation(Invariant.GHOST, java.util.List.of(), java.util.List.of(), "합성");
+        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, java.util.List.of(), growing));
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), fine), "달성률이 낮아도 보고만 한다");
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), null));
+        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), growing));
+        assertEquals(Verdict.DRAIN_TIMEOUT, RandomRun.verdict(false, java.util.List.of(v), growing));
+    }
 }

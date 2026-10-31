@@ -96,6 +96,7 @@ final class RandomRun {
     private volatile Path walFile;
     private volatile long walMax = -1;
     private volatile JvmMetricsSampler.Summary jvmSummary;
+    private final List<JvmMetricsSampler.Summary> childSummaries = new ArrayList<>();
 
     RandomRun(RunParams params, Checker checker, long drainLimitMillis, int process, ChildSpawner spawner) {
         this.params = params;
@@ -214,6 +215,7 @@ final class RandomRun {
             deliveries.addAll(o.deliveries());
             loadAckedMessages.addAndGet(o.loadAckedMessages());
             loadAckedBytes.addAndGet(o.loadAckedBytes());
+            childSummaries.add(JvmMetricsSampler.summarize(dir.resolve("p" + i + "-jvm-metrics.jsonl")));
         }
     }
 
@@ -355,22 +357,38 @@ final class RandomRun {
         }
     }
 
-    private void producerLoop(Queue target) {
+    private void producerLoop(Queue target) throws InterruptedException {
+        PacedSchedule schedule = null;
+        if (params.isSoak()) {
+            // 목표 속도는 프로듀서 스레드 전체가 나눠 맡는다. 시각표는 스레드마다 따로 쥐고 시작 시각을 기준으로 한다.
+            schedule = new PacedSchedule(params.perThreadRate(), params.publishBatch(), System.nanoTime());
+        }
         while (!stop.get()) {
+            if (schedule != null) {
+                long wait = schedule.waitNanos(System.nanoTime());
+                if (wait > 0 && !sleepUnlessStopped(Math.max(1, wait / 1_000_000L))) {
+                    return;
+                }
+            }
             if (backlogFull(target)) {
                 sleepMillis(5);
                 continue;
             }
             publishBatch(target, params.publishBatch());
+            if (schedule != null) {
+                schedule.sent();
+            }
         }
     }
 
     /**
-     * 쌓인 양이 선을 넘었는지. 단일 프로세스는 자기가 센 발행과 ACK의 차이로 보고, 다중 프로세스는 ACK가 다른 프로세스에서 일어나
-     * 이 프로세스의 수로는 알 수 없으므로 큐의 {@code counts()}를 잠깐씩 캐시해 보며 메시지 수로만 제한한다.
+     * 쌓인 양이 선을 넘었는지. 무작위 모드의 단일 프로세스는 자기가 센 발행과 ACK의 차이로 보고, 다중 프로세스는 ACK가 다른
+     * 프로세스에서 일어나 이 프로세스의 수로는 알 수 없으므로 큐의 {@code counts()}를 잠깐씩 캐시해 보며 메시지 수로만 제한한다.
+     * 고정 속도 모드는 단일 프로세스도 {@code counts()}로 본다. REJECT나 dead letter로 빠진 메시지는 ACK로 세지 않아 발행과 ACK의
+     * 차이가 실제 깊이보다 계속 커지므로, 오래 도는 실행에서 프로듀서가 헛되이 멈추고 판정의 포화 기준(큐 깊이)과도 어긋난다.
      */
     private boolean backlogFull(Queue target) {
-        if (params.processes() == 1) {
+        if (params.processes() == 1 && !params.isSoak()) {
             return publishedMessages.get() - ackedMessages.get() >= prefillMessages + BACKLOG_MESSAGES
                     || publishedBytes.get() - ackedBytes.get() >= prefillBytes + BACKLOG_BYTES;
         }
@@ -380,8 +398,7 @@ final class RandomRun {
             depth = c.ready() + c.leased() + c.delayed();
             depthAtNanos = now;
         }
-        long avgBytes = params.maxMessageBytes() / 4 + 64;
-        return depth >= params.prefillDepth() + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / avgBytes);
+        return depth >= backlogCapMessages();
     }
 
     private void consumerLoop(Queue target, Queue dlq) throws InterruptedException {
@@ -620,7 +637,8 @@ final class RandomRun {
         InvariantChecker.Config config =
                 new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
         List<Violation> violations = checker.check(config, pub, del, smp);
-        Verdict verdict = !drained ? Verdict.DRAIN_TIMEOUT : violations.isEmpty() ? Verdict.PASS : Verdict.VIOLATION;
+        SoakJudge.Report soak = params.isSoak() ? soakReport(pub, smp) : null;
+        Verdict verdict = verdict(drained, violations, soak);
         double seconds = params.loadMillis() / 1000.0;
         long[] latencies = latenciesMillis(pub, del);
         Double p50 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 50);
@@ -637,7 +655,44 @@ final class RandomRun {
                 new RunResult.Records(pub, del, smp),
                 null,
                 walMax < 0 ? null : walMax,
-                jvmSummary);
+                jvmSummary,
+                soak,
+                List.copyOf(childSummaries));
+    }
+
+    /** 소진 실패와 불변식 위반이 먼저고, 그 다음이 백로그 증가다. 달성률은 판정에 쓰지 않는다. */
+    static Verdict verdict(boolean drained, List<Violation> violations, SoakJudge.Report soak) {
+        if (!drained) {
+            return Verdict.DRAIN_TIMEOUT;
+        }
+        if (!violations.isEmpty()) {
+            return Verdict.VIOLATION;
+        }
+        return soak != null && soak.backlogGrowing() ? Verdict.BACKLOG_GROWING : Verdict.PASS;
+    }
+
+    private SoakJudge.Report soakReport(List<Published> pub, List<CountsSample> smp) {
+        long publishedInLoad = pub.stream()
+                .filter(p -> p.atMillis() >= loadStartMillis && p.atMillis() < loadEndMillis)
+                .count();
+        List<Long> depths = smp.stream()
+                .filter(c -> c.queue() == QueueKind.TARGET && !c.afterDrain())
+                .map(c -> c.ready() + c.leased() + c.delayed())
+                .toList();
+        return SoakJudge.judge(
+                params.targetRate(),
+                params.loadMillis() / 1000.0,
+                publishedInLoad,
+                loadAckedMessages.get(),
+                depths,
+                SAMPLE_INTERVAL_MS,
+                backlogCapMessages());
+    }
+
+    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 다중 프로세스 기준과 같다. */
+    private long backlogCapMessages() {
+        long avgBytes = params.maxMessageBytes() / 4 + 64;
+        return params.prefillDepth() + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / avgBytes);
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

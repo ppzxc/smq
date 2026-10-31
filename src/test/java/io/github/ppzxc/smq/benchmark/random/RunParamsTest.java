@@ -59,6 +59,37 @@ class RunParamsTest {
     }
 
     @Test
+    void 고정_속도_모드는_목표_속도를_싣고_운영에_가까운_매개변수로_바꾼다() {
+        Limits soak = FULL.withRate(500);
+        for (long seed = 0; seed < 300; seed++) {
+            RunParams p = RunParams.fromSeed(seed, soak);
+            assertEquals(500, p.targetRate(), "seed " + seed);
+            assertEquals(0, p.publishDelayRatio(), 0, "지연 발행 없음");
+            assertEquals(0, p.slowChunkRatio(), 0, "느린 청크 없음");
+            assertEquals(0, p.nackDelayRatio(), 0, "NACK 지연 없음");
+            assertFalse(p.singleActiveConsumer(), "단일 활성 큐는 청크 하나가 리스 만료까지 큐를 막아 초당 수십 건이 한계다");
+            assertTrue(p.chunkSize() >= 100, "컨슈머 스레드 하나가 500/s를 받을 만큼의 청크: " + p.chunkSize());
+            assertEquals(100_000, p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
+            assertTrue(p.maxMessageBytes() <= 1024, "메시지 크기 상한 1KB");
+            int perThread = Math.max(1, 500 / p.totalProducers());
+            assertTrue(p.publishBatch() <= Math.max(1, perThread / 10), "배치는 스레드 몫의 0.1초 분량 이하: " + p.publishBatch());
+            assertEquals(p, RunParams.fromArg(p.toArg()), "seed " + seed);
+        }
+    }
+
+    @Test
+    void 속도가_없으면_기존_매개변수와_같고_목표_속도는_0이다() {
+        for (long seed = 0; seed < 50; seed++) {
+            assertEquals(0, RunParams.fromSeed(seed, FULL).targetRate());
+        }
+    }
+
+    @Test
+    void 같은_시드와_속도는_같은_매개변수다() {
+        assertEquals(RunParams.fromSeed(7, FULL.withRate(500)), RunParams.fromSeed(7, FULL.withRate(500)));
+    }
+
+    @Test
     void argRoundTripKeepsEveryFieldExactly() {
         for (long seed = 0; seed < 300; seed++) {
             RunParams p = RunParams.fromSeed(seed, FULL);

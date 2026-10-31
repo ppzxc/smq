@@ -53,7 +53,9 @@ class SessionTest {
                 records,
                 null,
                 null,
-                null);
+                null,
+                null,
+                java.util.List.of());
     }
 
     /** 실행기가 SQLite 파일을 흉내 내 디렉터리에 남긴다. */
@@ -233,11 +235,145 @@ class SessionTest {
     @Test
     void passingRunsRecordTheWalSizeAndNoErrorDetail() throws IOException {
         Session s = session(fake(p -> new RunResult(
-                p, Verdict.PASS, 100, 0.1, 1.0, 2.0, List.of(), null, RunResult.Records.EMPTY, null, 4096L, null)));
+                p,
+                Verdict.PASS,
+                100,
+                0.1,
+                1.0,
+                2.0,
+                List.of(),
+                null,
+                RunResult.Records.EMPTY,
+                null,
+                4096L,
+                null,
+                null,
+                List.of())));
         assertEquals(Session.EXIT_OK, s.run(List.of(1L).iterator(), Long.MAX_VALUE));
         Map<?, ?> line = (Map<?, ?>) io.github.ppzxc.smq.benchmark.Json.parse(
                 Files.readAllLines(dir.resolve("runs.jsonl")).getFirst());
         assertEquals(4096.0, line.get("walMaxBytes"));
         assertNull(line.get("errorDetail"));
+    }
+
+    private Session soakSession(Session.Executor executor) {
+        return new Session(
+                dir,
+                dir.resolve("runs.jsonl"),
+                Map.of("workDirFs", "ext4", "caveat", "테스트"),
+                LIMITS.withRate(500),
+                executor,
+                new PrintStream(bytes, true, StandardCharsets.UTF_8));
+    }
+
+    private static SoakJudge.Report report(boolean growing) {
+        return new SoakJudge.Report(500, 0.93, 460, 12.5, 800, growing);
+    }
+
+    private static RunResult soakResult(RunParams p, Verdict v, SoakJudge.Report soak) {
+        return new RunResult(
+                p,
+                v,
+                460,
+                0.5,
+                5.0,
+                9.0,
+                List.of(),
+                null,
+                RunResult.Records.EMPTY,
+                null,
+                null,
+                null,
+                soak,
+                List.of(new JvmMetricsSampler.Summary(1, 2, 3, 4, 5, 6, 7, 8, 0.7, 0.35)));
+    }
+
+    @Test
+    void 고정_속도_결과는_jsonl에_달성률과_자식_메트릭이_붙는다() throws IOException {
+        Session s = soakSession(fake(p -> soakResult(p, Verdict.PASS, report(false))));
+        assertEquals(Session.EXIT_OK, s.run(List.of(1L).iterator(), Long.MAX_VALUE));
+
+        String line = Files.readString(dir.resolve("runs.jsonl"));
+        assertTrue(line.contains("\"soak\":{\"targetRate\":500"), line);
+        assertTrue(line.contains("\"achievedRatio\":0.93"), line);
+        assertTrue(line.contains("\"childMetrics\":[{"), line);
+        assertTrue(line.contains("\"meanCpuLoad\":0.35"), line);
+        assertTrue(output().contains("달성률 93%"), output());
+    }
+
+    @Test
+    void 고정_속도가_아니면_soak_필드가_null이고_자식_메트릭은_빈_목록이다() throws IOException {
+        Session s = session(fake(p -> result(p, Verdict.PASS, 1000, 5.0, List.of(), RunResult.Records.EMPTY)));
+        s.run(List.of(1L).iterator(), Long.MAX_VALUE);
+        String line = Files.readString(dir.resolve("runs.jsonl"));
+        assertTrue(line.contains("\"soak\":null"), line);
+        assertTrue(line.contains("\"childMetrics\":[]"), line);
+    }
+
+    @Test
+    void 고정_속도_실행은_통과해도_JFR과_메트릭_파일을_남기고_DB와_큰_기록만_지운다() throws IOException {
+        Session.Executor exec = (params, runDir) -> {
+            try {
+                Files.writeString(runDir.resolve("smq.db"), "db");
+                Files.writeString(runDir.resolve("smq.db-wal"), "wal");
+                Files.writeString(runDir.resolve("p0.jfr"), "jfr");
+                Files.writeString(runDir.resolve("p0-jvm-metrics.jsonl"), "{}");
+                Files.writeString(runDir.resolve("p0-published.jsonl"), "{}");
+                Files.writeString(runDir.resolve("p0-deliveries.jsonl"), "{}");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            return soakResult(params, Verdict.PASS, report(false));
+        };
+        soakSession(exec).run(List.of(1L).iterator(), Long.MAX_VALUE);
+
+        assertFalse(Files.exists(dir.resolve("work/1/smq.db")));
+        assertFalse(Files.exists(dir.resolve("work/1/smq.db-wal")));
+        assertEquals("jfr", Files.readString(dir.resolve("work/1/p0.jfr")));
+        assertTrue(Files.exists(dir.resolve("work/1/p0-jvm-metrics.jsonl")));
+        assertFalse(Files.exists(dir.resolve("work/1/p0-published.jsonl")), "큰 기록 파일도 지운다");
+        assertFalse(Files.exists(dir.resolve("work/1/p0-deliveries.jsonl")));
+    }
+
+    @Test
+    void 백로그_증가는_기록하고_계속_돌며_끝에서_실패로_종료한다() throws IOException {
+        Session s = soakSession(fake(
+                p -> soakResult(p, p.seed() == 2 ? Verdict.BACKLOG_GROWING : Verdict.PASS, report(p.seed() == 2))));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L, 3L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L, 3L), executed, "용량 문제는 다음 시드를 막지 않는다");
+        String out = output();
+        assertTrue(out.contains("BACKLOG_GROWING"), out);
+        assertTrue(out.contains("백로그"), out);
+        assertTrue(out.contains("합계: 3회 실행, 실패"), out);
+        assertTrue(Files.exists(s.failureDir(2).resolve("smq.db")), "실패한 실행은 DB까지 보존한다");
+        assertEquals(3, Files.readAllLines(dir.resolve("runs.jsonl")).size());
+    }
+
+    @Test
+    void 고정_속도에서도_불변식_위반은_바로_멈춘다() {
+        Session s =
+                soakSession(fake(p -> soakResult(p, p.seed() == 2 ? Verdict.VIOLATION : Verdict.PASS, report(false))));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L, 3L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L), executed);
+    }
+
+    @Test
+    void 고정_속도에서는_예외도_기록하고_계속_돌되_연속_3번이면_멈춘다() {
+        // 1번 통과, 2번 ERROR, 3번 통과, 4~6번 ERROR(연속 3번)에서 멈춘다.
+        Session s = soakSession(fake(p -> p.seed() == 2 || p.seed() >= 4
+                ? soakResult(p, Verdict.ERROR, null)
+                : soakResult(p, Verdict.PASS, report(false))));
+        assertEquals(
+                Session.EXIT_FAILED,
+                s.run(List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L, 3L, 4L, 5L, 6L), executed);
+    }
+
+    @Test
+    void 고정_속도에서도_소진_실패는_바로_멈춘다() {
+        Session s = soakSession(
+                fake(p -> soakResult(p, p.seed() == 2 ? Verdict.DRAIN_TIMEOUT : Verdict.PASS, report(false))));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L, 3L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L), executed);
     }
 }

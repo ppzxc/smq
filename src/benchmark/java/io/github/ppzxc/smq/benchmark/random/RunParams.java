@@ -24,6 +24,7 @@ import java.util.stream.Collectors;
  * @param slowChunkRatio 처리 시간이 0이 아닌 청크의 비율. 길이는 0부터 리스 기한의 1.5배까지 균등
  * @param extendRatio 처리 시간이 리스 기한의 절반을 넘는 청크가 리스를 연장할 확률
  * @param maxDeliveries 최대 전달 횟수. 없으면 0
+ * @param targetRate 프로듀서 전체의 목표 초당 메시지 수. 0이면 목표 없이 최대한 보낸다(무작위 모드)
  */
 record RunParams(
         long seed,
@@ -49,7 +50,8 @@ record RunParams(
         int maxDeliveries,
         boolean singleActiveConsumer,
         long pullWaitMillis,
-        long loadMillis) {
+        long loadMillis,
+        long targetRate) {
 
     RunParams {
         producers = List.copyOf(producers);
@@ -59,6 +61,15 @@ record RunParams(
     static final int MAX_MESSAGE_BYTES = 64 * 1024;
     /** 미리 채우기가 만드는 데이터의 상한(바이트 추정). 큰 메시지로 수 GB를 만들지 않으려는 것이다. */
     private static final long PREFILL_BYTES_CAP = 256L * 1024 * 1024;
+    /** 고정 속도 모드의 메시지 크기 상한. 운영의 작은 메시지에 가깝게 맞춘다. */
+    private static final int SOAK_MAX_MESSAGE_BYTES = 1024;
+    /**
+     * 고정 속도 모드의 청크 크기 하한. 컨슈머 스레드 하나가 꺼내기와 정산(커밋 둘)을 초당 십수 번 하므로, 청크가 작으면 한 스레드가 500/s를
+     * 받지 못한다. 단일 활성 큐도 쓰지 않는다: 정산하지 않은 메시지 하나가 큐 전체를 리스 만료까지 막아 초당 수십 건이 한계다.
+     */
+    private static final int SOAK_MIN_CHUNK_SIZE = 100;
+    /** 고정 속도 모드의 발행 배치는 스레드 몫의 (1 / 이 값)초 분량을 넘지 않게 한다. 배치가 너무 크면 발행이 덩어리로 몰린다. */
+    private static final long SOAK_BATCH_WINDOW_DIVISOR = 10;
 
     static RunParams fromSeed(long seed, Limits limits) {
         SplittableRandom r = new SplittableRandom(seed);
@@ -95,6 +106,21 @@ record RunParams(
             producerList = perProcessThreads(r, processes);
             consumerList = perProcessThreads(r, processes);
         }
+        long rate = limits.ratePerSecond();
+        if (rate > 0) {
+            // 고정 속도 모드: 목표 속도를 못 맞추는 원인이 매개변수의 우연이 되지 않게, 지연과 느린 처리를 빼고 작은 메시지로 맞춘다. 미리 채운 깊이는 상한까지 둬서, 비어 있지 않은 큐에서
+            // 시작한다.
+            maxBytes = Math.min(maxBytes, SOAK_MAX_MESSAGE_BYTES);
+            depth = (int) Math.min(limits.maxDepth(), PREFILL_BYTES_CAP / (maxBytes / 4 + 64));
+            slow = 0;
+            single = false;
+            chunkSize = Math.max(chunkSize, SOAK_MIN_CHUNK_SIZE);
+            publishDelay = 0;
+            nackDelay = 0;
+            long perThread = perThreadRate(
+                    rate, producerList.stream().mapToInt(Integer::intValue).sum());
+            publishBatch = (int) Math.max(1, Math.min(publishBatch, perThread / SOAK_BATCH_WINDOW_DIVISOR));
+        }
         return new RunParams(
                 seed,
                 processes,
@@ -119,7 +145,8 @@ record RunParams(
                 maxDeliveries,
                 single,
                 pullWait,
-                limits.loadMillis());
+                limits.loadMillis(),
+                rate);
     }
 
     /** 프로세스마다 0~4. 전체가 0이면 첫 프로세스에 1을 준다(전체에서 1 이상). */
@@ -132,6 +159,23 @@ record RunParams(
             out.set(0, 1);
         }
         return out;
+    }
+
+    /** 고정 속도 모드인가. */
+    boolean isSoak() {
+        return targetRate > 0;
+    }
+
+    /**
+     * 프로듀서 스레드 하나가 맡는 초당 메시지 수. 스레드 수로 올림해 나눠서, 스레드가 보내는 합이 목표보다 모자라지 않게 한다(넘는 양은
+     * 스레드 수 미만이다).
+     */
+    long perThreadRate() {
+        return perThreadRate(targetRate, totalProducers());
+    }
+
+    private static long perThreadRate(long rate, int producers) {
+        return Math.max(1, (rate + producers - 1) / producers);
     }
 
     int totalProducers() {
@@ -196,7 +240,8 @@ record RunParams(
                 i(m, "maxDeliveries"),
                 (Boolean) m.get("singleActiveConsumer"),
                 l(m, "pullWaitMillis"),
-                l(m, "loadMillis"));
+                l(m, "loadMillis"),
+                l(m, "targetRate"));
     }
 
     private static double d(Map<?, ?> m, String k) {
@@ -241,6 +286,7 @@ record RunParams(
         m.put("singleActiveConsumer", singleActiveConsumer);
         m.put("pullWaitMillis", pullWaitMillis);
         m.put("loadMillis", loadMillis);
+        m.put("targetRate", targetRate);
         return m;
     }
 

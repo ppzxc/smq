@@ -7,16 +7,21 @@ package io.github.ppzxc.smq.benchmark.random;
  * @param loadMillis 부하 구간 길이
  * @param maxDepth 미리 채운 깊이의 상한
  * @param maxLeaseMillis 리스 기한의 상한
+ * @param ratePerSecond 프로듀서 전체의 목표 초당 메시지 수. 0이면 목표 없이 최대한 보내는 무작위 모드이고, 양수면 고정 속도 모드다
  */
-record Limits(long loadMillis, int maxDepth, long maxLeaseMillis) {
+record Limits(long loadMillis, int maxDepth, long maxLeaseMillis, long ratePerSecond) {
 
     static final long DEFAULT_LOAD_MILLIS = 10_000;
 
     static Limits full(long loadMillis) {
-        return new Limits(loadMillis, 100_000, 10_000);
+        return new Limits(loadMillis, 100_000, 10_000, 0);
     }
 
     static Limits smoke(long loadMillis) {
-        return new Limits(loadMillis, 2_000, 1_000);
+        return new Limits(loadMillis, 2_000, 1_000, 0);
+    }
+
+    Limits withRate(long ratePerSecond) {
+        return new Limits(loadMillis, maxDepth, maxLeaseMillis, ratePerSecond);
     }
 }

@@ -329,9 +329,9 @@ public final class MemoryStorage implements Storage {
                     Entry e = queue.getValue().get(id.value());
                     if (e != null) {
                         // 단일 활성 컨슈머 큐에서는 만료된 리스를 되살리지 않는다. 그 사이 다른 청크가 꺼냈을 수 있다.
-                        boolean revivesExpired =
-                                requireOptions(queue.getKey()).singleActiveConsumer() && !isLeased(e, now);
-                        if (holds(e, token) && !revivesExpired) {
+                        boolean expiredInSingleActiveQueue = !isLeased(e, now)
+                                && requireOptions(queue.getKey()).singleActiveConsumer();
+                        if (holds(e, token) && !expiredInSingleActiveQueue) {
                             e.leaseDeadline = deadline;
                             outcome = Outcome.OK;
                         }

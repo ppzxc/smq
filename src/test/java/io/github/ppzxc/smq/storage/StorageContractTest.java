@@ -201,6 +201,58 @@ abstract class StorageContractTest {
     }
 
     @Test
+    void 단일_활성_큐에서_상한에_막혀_옮겨지지_못한_소진_메시지도_늦은_연장이_되살리지_못한다() {
+        int cap = DeadLetters.MAX_MOVES_PER_PULL;
+        storage.declare("dead", QueueOptions.defaults());
+        storage.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead").singleActiveConsumer(true));
+        List<NewMessage> batch = new ArrayList<>();
+        for (int i = 0; i < cap + 1; i++) {
+            batch.add(message(i));
+        }
+        storage.publish("q", batch, T0);
+        PullResult first = storage.pull("q", cap + 1, LEASE, T0);
+        List<MessageId> ids = first.messages().stream().map(Message::id).toList();
+
+        // 둘째 꺼내기가 한 번에 옮기는 상한만큼만 옮긴다. 하나는 만료된 채 원래 큐에 남는다.
+        assertTrue(storage.pull("q", 1, LEASE, T0.plus(LEASE)).deadLettersRemain());
+
+        Extended late = storage.extend(first.token(), ids, LEASE, InstantSource.fixed(T0.plusSeconds(12)));
+
+        assertTrue(late.results().stream().allMatch(r -> r.outcome() == Outcome.STALE));
+        assertEquals(0, storage.counts("q", T0.plusSeconds(12)).leased());
+    }
+
+    @Test
+    void 일반_큐는_기한이_지났어도_아무도_다시_꺼내지_않았다면_연장이_OK이고_리스를_되살린다() {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1)), T0);
+        PullResult pulled = storage.pull("q", 1, LEASE, T0);
+        MessageId id = pulled.messages().getFirst().id();
+
+        Instant now = T0.plus(LEASE).plusSeconds(5);
+        Extended extended = storage.extend(pulled.token(), List.of(id), LEASE, InstantSource.fixed(now));
+
+        assertEquals(List.of(new Result(id, Outcome.OK)), extended.results());
+        assertEquals(1, storage.counts("q", now).leased());
+    }
+
+    @Test
+    void 단일_활성_큐의_연장은_기한_정확히에는_STALE이고_1ns_앞에는_OK다() {
+        storage.declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        storage.publish("q", List.of(message(1)), T0);
+        PullResult pulled = storage.pull("q", 1, LEASE, T0);
+        MessageId id = pulled.messages().getFirst().id();
+
+        Instant justBefore = T0.plus(LEASE).minusNanos(1);
+        Extended before = storage.extend(pulled.token(), List.of(id), LEASE, InstantSource.fixed(justBefore));
+        assertEquals(List.of(new Result(id, Outcome.OK)), before.results());
+
+        Extended exactly =
+                storage.extend(pulled.token(), List.of(id), LEASE, InstantSource.fixed(before.leaseDeadline()));
+        assertEquals(List.of(new Result(id, Outcome.STALE)), exactly.results());
+    }
+
+    @Test
     void 낡은_리스_토큰으로_정산하면_STALE이고_저장소_상태가_바뀌지_않는다() {
         storage.declare("q", QueueOptions.defaults());
         storage.publish("q", List.of(message(1)), T0);

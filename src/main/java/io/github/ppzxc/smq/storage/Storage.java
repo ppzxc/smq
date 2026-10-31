@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 큐 연산 단위의 저장소 SPI(내부 계약). 각 연산의 원자성은 저장소가 책임지고, 시각은 코어가 {@code now}로 넘긴다.
- * 인스턴스 하나는 스레드 안전하다.
+ * 큐 연산 단위의 저장소 SPI(내부 계약). 각 연산의 원자성은 저장소가 책임지고, 시각은 코어가 {@code now}로 넘긴다. 예외는
+ * {@link #extend}로, 저장소가 lock 안에서 시각을 읽는다. 인스턴스 하나는 스레드 안전하다.
  */
 public interface Storage extends AutoCloseable {
 
@@ -51,7 +51,8 @@ public interface Storage extends AutoCloseable {
      * <p>{@code now}는 호출자가 미리 재 두지 않고 저장소가 연산의 lock(트랜잭션)을 잡은 뒤 {@code clock}에서 한 번 읽는다.
      * 호출자가 lock 대기 앞에서 잰 시각을 쓰면, 그 사이 다른 청크가 이 리스의 만료 뒤에 꺼내 간 일을 놓치고 만료된 리스를
      * 되살리기 때문이다. 단일 활성 컨슈머 큐에서는 그 시각에 이미 만료된 리스의 연장을 {@code STALE}로 처리한다. 그 밖의
-     * 큐는 만료 뒤라도 아무도 다시 꺼내지 않았다면 연장할 수 있다.
+     * 큐는 만료 뒤라도 아무도 다시 꺼내지 않았다면 연장할 수 있다. 반환하는 {@code leaseDeadline}은 계산한 새 기한이며, 모든
+     * 결과가 {@code STALE}이어도 같은 값이다(반영된 것은 {@code OK}인 메시지뿐이다).
      */
     Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock);
 

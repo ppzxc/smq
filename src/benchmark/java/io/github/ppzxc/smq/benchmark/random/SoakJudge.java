@@ -10,10 +10,13 @@ import java.util.Map;
  */
 final class SoakJudge {
 
-    /** 이 기울기(목표 속도 대비)를 넘고 */
+    /** 큐 깊이의 기울기가 목표 속도의 이 비율을 넘고(그리고 아래 양도 넘어야) 백로그 증가로 본다. */
     static final double GROWTH_SLOPE_FRACTION = 0.05;
-    /** 이 시간 분량(목표 속도 기준)보다 많이 늘어야 백로그 증가로 본다. */
+    /** 표본 구간 동안 늘어난 양이 목표 속도 기준 이 시간 분량보다 많아야 한다. */
     static final double GROWTH_SECONDS_OF_BACKLOG = 2.0;
+
+    /** 깊이가 프로듀서가 쉬는 상한의 이 비율에 닿으면 백로그 증가로 본다. 상한에서 깊이가 멈추면 추세가 평평해 보이기 때문이다. */
+    static final double SATURATION_FRACTION = 0.9;
 
     private static final int MIN_SAMPLES = 3;
 
@@ -52,6 +55,7 @@ final class SoakJudge {
      * @param ackedInLoad 부하 구간에 ACK된 메시지 수
      * @param depths 부하 중 같은 간격으로 잰 대상 큐 깊이
      * @param sampleIntervalMillis 표본 간격
+     * @param saturationDepth 프로듀서가 쉬기 시작하는 큐 깊이. 소비가 못 따라가면 깊이가 여기서 멈춘다
      */
     static Report judge(
             long targetRate,
@@ -59,15 +63,18 @@ final class SoakJudge {
             long publishedInLoad,
             long ackedInLoad,
             List<Long> depths,
-            long sampleIntervalMillis) {
+            long sampleIntervalMillis,
+            long saturationDepth) {
         double achieved = publishedInLoad / (targetRate * loadSeconds);
         double ackRate = ackedInLoad / loadSeconds;
         long max = depths.stream().mapToLong(Long::longValue).max().orElse(0);
         double slope = depths.size() < MIN_SAMPLES ? 0 : slope(depths, sampleIntervalMillis / 1000.0);
         double span = (depths.size() - 1) * (sampleIntervalMillis / 1000.0);
-        boolean growing = depths.size() >= MIN_SAMPLES
+        boolean trending = depths.size() >= MIN_SAMPLES
                 && slope > GROWTH_SLOPE_FRACTION * targetRate
                 && slope * span > GROWTH_SECONDS_OF_BACKLOG * targetRate;
+        boolean saturated = max >= SATURATION_FRACTION * saturationDepth;
+        boolean growing = trending || saturated;
         return new Report(targetRate, achieved, ackRate, slope, max, growing);
     }
 

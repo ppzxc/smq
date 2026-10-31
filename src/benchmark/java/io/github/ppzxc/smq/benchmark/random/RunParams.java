@@ -63,7 +63,7 @@ record RunParams(
     private static final long PREFILL_BYTES_CAP = 256L * 1024 * 1024;
     /** 고정 속도 모드의 메시지 크기 상한. 운영의 작은 메시지에 가깝게 맞춘다. */
     private static final int SOAK_MAX_MESSAGE_BYTES = 1024;
-    /** 고정 속도 모드에서 프로듀서 스레드는 이 시간 분량씩 묶어 보낸다(배치가 너무 크면 발행이 덩어리로 몰린다). */
+    /** 고정 속도 모드의 발행 배치는 스레드 몫의 (1 / 이 값)초 분량을 넘지 않게 한다. 배치가 너무 크면 발행이 덩어리로 몰린다. */
     private static final long SOAK_BATCH_WINDOW_DIVISOR = 10;
 
     static RunParams fromSeed(long seed, Limits limits) {
@@ -109,9 +109,8 @@ record RunParams(
             slow = 0;
             publishDelay = 0;
             nackDelay = 0;
-            int totalProducers =
-                    producerList.stream().mapToInt(Integer::intValue).sum();
-            long perThread = Math.max(1, rate / totalProducers);
+            long perThread = perThreadRate(
+                    rate, producerList.stream().mapToInt(Integer::intValue).sum());
             publishBatch = (int) Math.max(1, Math.min(publishBatch, perThread / SOAK_BATCH_WINDOW_DIVISOR));
         }
         return new RunParams(
@@ -152,6 +151,23 @@ record RunParams(
             out.set(0, 1);
         }
         return out;
+    }
+
+    /** 고정 속도 모드인가. */
+    boolean isSoak() {
+        return targetRate > 0;
+    }
+
+    /**
+     * 프로듀서 스레드 하나가 맡는 초당 메시지 수. 스레드 수로 올림해 나눠서, 스레드가 보내는 합이 목표보다 모자라지 않게 한다(넘는 양은
+     * 스레드 수 미만이다).
+     */
+    long perThreadRate() {
+        return perThreadRate(targetRate, totalProducers());
+    }
+
+    private static long perThreadRate(long rate, int producers) {
+        return Math.max(1, (rate + producers - 1) / producers);
     }
 
     int totalProducers() {

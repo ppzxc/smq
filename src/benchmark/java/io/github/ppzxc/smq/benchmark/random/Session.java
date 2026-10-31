@@ -107,9 +107,9 @@ final class Session {
         try {
             append(result);
             if (result.passed()) {
-                if (params.targetRate() > 0) {
-                    // 고정 속도 실행은 JFR과 메트릭 파일이 결과물이다. 큰 DB만 지운다.
-                    deleteDatabase(dir);
+                if (params.isSoak()) {
+                    // 고정 속도 실행은 JFR과 메트릭 파일이 결과물이다. 큰 DB와 자식의 발행·전달 기록만 지운다.
+                    deleteBulkyFiles(dir);
                 } else {
                     deleteTree(dir);
                 }
@@ -243,10 +243,16 @@ final class Session {
         return d == null ? "-" : String.format("%.0fms", d);
     }
 
-    /** SQLite 파일(본체, WAL, 공유 메모리)만 지운다. */
-    private static void deleteDatabase(Path dir) throws IOException {
+    /** SQLite 파일(본체, WAL, 공유 메모리)과 자식 JVM이 남긴 발행·전달 기록만 지운다. 긴 실행에서는 둘 다 크다. */
+    private static void deleteBulkyFiles(Path dir) throws IOException {
         for (String name : List.of("smq.db", "smq.db-wal", "smq.db-shm")) {
             Files.deleteIfExists(dir.resolve(name));
+        }
+        try (Stream<Path> s = Files.list(dir)) {
+            for (Path p : (Iterable<Path>) s.filter(
+                    f -> f.getFileName().toString().matches("p\\d+-(published|deliveries)\\.jsonl"))::iterator) {
+                Files.delete(p);
+            }
         }
     }
 

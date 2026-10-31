@@ -35,14 +35,13 @@ class PacedScheduleTest {
         s.sent();
         // 10초 늦게 와도 다음 시각은 원래 격자 위(0.6초)이므로 밀린 만큼 연달아 나간다.
         assertEquals(3 * SEC / 5, s.nextDueNanos());
-        assertEquals(10 * SEC - 3 * SEC / 5, s.lagNanos(10 * SEC));
+        assertEquals(0, s.waitNanos(10 * SEC), "늦었으면 기다리지 않는다");
     }
 
     @Test
-    void 늦지_않았으면_지연은_0이다() {
+    void 기다릴_시간은_다음_시각까지이고_지났으면_0이다() {
         PacedSchedule s = new PacedSchedule(500, 100, 0);
         s.sent();
-        assertEquals(0, s.lagNanos(SEC / 10));
         assertEquals(SEC / 10, s.waitNanos(SEC / 10));
         assertEquals(0, s.waitNanos(SEC));
     }

@@ -311,13 +311,15 @@ class SessionTest {
     }
 
     @Test
-    void 고정_속도_실행은_통과해도_JFR과_메트릭_파일을_남기고_DB만_지운다() throws IOException {
+    void 고정_속도_실행은_통과해도_JFR과_메트릭_파일을_남기고_DB와_큰_기록만_지운다() throws IOException {
         Session.Executor exec = (params, runDir) -> {
             try {
                 Files.writeString(runDir.resolve("smq.db"), "db");
                 Files.writeString(runDir.resolve("smq.db-wal"), "wal");
                 Files.writeString(runDir.resolve("p0.jfr"), "jfr");
                 Files.writeString(runDir.resolve("p0-jvm-metrics.jsonl"), "{}");
+                Files.writeString(runDir.resolve("p0-published.jsonl"), "{}");
+                Files.writeString(runDir.resolve("p0-deliveries.jsonl"), "{}");
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -329,6 +331,8 @@ class SessionTest {
         assertFalse(Files.exists(dir.resolve("work/1/smq.db-wal")));
         assertEquals("jfr", Files.readString(dir.resolve("work/1/p0.jfr")));
         assertTrue(Files.exists(dir.resolve("work/1/p0-jvm-metrics.jsonl")));
+        assertFalse(Files.exists(dir.resolve("work/1/p0-published.jsonl")), "큰 기록 파일도 지운다");
+        assertFalse(Files.exists(dir.resolve("work/1/p0-deliveries.jsonl")));
     }
 
     @Test

@@ -359,10 +359,9 @@ final class RandomRun {
 
     private void producerLoop(Queue target) throws InterruptedException {
         PacedSchedule schedule = null;
-        if (params.targetRate() > 0) {
+        if (params.isSoak()) {
             // 목표 속도는 프로듀서 스레드 전체가 나눠 맡는다. 시각표는 스레드마다 따로 쥐고 시작 시각을 기준으로 한다.
-            long perThread = Math.max(1, params.targetRate() / totalProducers());
-            schedule = new PacedSchedule(perThread, params.publishBatch(), System.nanoTime());
+            schedule = new PacedSchedule(params.perThreadRate(), params.publishBatch(), System.nanoTime());
         }
         while (!stop.get()) {
             if (schedule != null) {
@@ -382,10 +381,6 @@ final class RandomRun {
         }
     }
 
-    private int totalProducers() {
-        return params.totalProducers();
-    }
-
     /**
      * 쌓인 양이 선을 넘었는지. 단일 프로세스는 자기가 센 발행과 ACK의 차이로 보고, 다중 프로세스는 ACK가 다른 프로세스에서 일어나
      * 이 프로세스의 수로는 알 수 없으므로 큐의 {@code counts()}를 잠깐씩 캐시해 보며 메시지 수로만 제한한다.
@@ -401,8 +396,7 @@ final class RandomRun {
             depth = c.ready() + c.leased() + c.delayed();
             depthAtNanos = now;
         }
-        long avgBytes = params.maxMessageBytes() / 4 + 64;
-        return depth >= params.prefillDepth() + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / avgBytes);
+        return depth >= backlogCapMessages();
     }
 
     private void consumerLoop(Queue target, Queue dlq) throws InterruptedException {
@@ -641,7 +635,7 @@ final class RandomRun {
         InvariantChecker.Config config =
                 new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
         List<Violation> violations = checker.check(config, pub, del, smp);
-        SoakJudge.Report soak = params.targetRate() > 0 ? soakReport(pub, smp) : null;
+        SoakJudge.Report soak = params.isSoak() ? soakReport(pub, smp) : null;
         Verdict verdict = verdict(drained, violations, soak);
         double seconds = params.loadMillis() / 1000.0;
         long[] latencies = latenciesMillis(pub, del);
@@ -689,7 +683,14 @@ final class RandomRun {
                 publishedInLoad,
                 loadAckedMessages.get(),
                 depths,
-                SAMPLE_INTERVAL_MS);
+                SAMPLE_INTERVAL_MS,
+                backlogCapMessages());
+    }
+
+    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 다중 프로세스 기준과 같다. */
+    private long backlogCapMessages() {
+        long avgBytes = params.maxMessageBytes() / 4 + 64;
+        return params.prefillDepth() + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / avgBytes);
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

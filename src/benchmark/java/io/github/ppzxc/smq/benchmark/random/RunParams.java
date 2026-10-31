@@ -24,6 +24,7 @@ import java.util.stream.Collectors;
  * @param slowChunkRatio 처리 시간이 0이 아닌 청크의 비율. 길이는 0부터 리스 기한의 1.5배까지 균등
  * @param extendRatio 처리 시간이 리스 기한의 절반을 넘는 청크가 리스를 연장할 확률
  * @param maxDeliveries 최대 전달 횟수. 없으면 0
+ * @param targetRate 프로듀서 전체의 목표 초당 메시지 수. 0이면 목표 없이 최대한 보낸다(무작위 모드)
  */
 record RunParams(
         long seed,
@@ -49,7 +50,8 @@ record RunParams(
         int maxDeliveries,
         boolean singleActiveConsumer,
         long pullWaitMillis,
-        long loadMillis) {
+        long loadMillis,
+        long targetRate) {
 
     RunParams {
         producers = List.copyOf(producers);
@@ -59,6 +61,10 @@ record RunParams(
     static final int MAX_MESSAGE_BYTES = 64 * 1024;
     /** 미리 채우기가 만드는 데이터의 상한(바이트 추정). 큰 메시지로 수 GB를 만들지 않으려는 것이다. */
     private static final long PREFILL_BYTES_CAP = 256L * 1024 * 1024;
+    /** 고정 속도 모드의 메시지 크기 상한. 운영의 작은 메시지에 가깝게 맞춘다. */
+    private static final int SOAK_MAX_MESSAGE_BYTES = 1024;
+    /** 고정 속도 모드에서 프로듀서 스레드는 이 시간 분량씩 묶어 보낸다(배치가 너무 크면 발행이 덩어리로 몰린다). */
+    private static final long SOAK_BATCH_WINDOW_DIVISOR = 10;
 
     static RunParams fromSeed(long seed, Limits limits) {
         SplittableRandom r = new SplittableRandom(seed);
@@ -95,6 +101,19 @@ record RunParams(
             producerList = perProcessThreads(r, processes);
             consumerList = perProcessThreads(r, processes);
         }
+        long rate = limits.ratePerSecond();
+        if (rate > 0) {
+            // 고정 속도 모드: 목표 속도를 못 맞추는 원인이 매개변수의 우연이 되지 않게, 지연과 느린 처리를 빼고 작은 메시지로 맞춘다.
+            maxBytes = Math.min(maxBytes, SOAK_MAX_MESSAGE_BYTES);
+            depth = 0;
+            slow = 0;
+            publishDelay = 0;
+            nackDelay = 0;
+            int totalProducers =
+                    producerList.stream().mapToInt(Integer::intValue).sum();
+            long perThread = Math.max(1, rate / totalProducers);
+            publishBatch = (int) Math.max(1, Math.min(publishBatch, perThread / SOAK_BATCH_WINDOW_DIVISOR));
+        }
         return new RunParams(
                 seed,
                 processes,
@@ -119,7 +138,8 @@ record RunParams(
                 maxDeliveries,
                 single,
                 pullWait,
-                limits.loadMillis());
+                limits.loadMillis(),
+                rate);
     }
 
     /** 프로세스마다 0~4. 전체가 0이면 첫 프로세스에 1을 준다(전체에서 1 이상). */
@@ -196,7 +216,8 @@ record RunParams(
                 i(m, "maxDeliveries"),
                 (Boolean) m.get("singleActiveConsumer"),
                 l(m, "pullWaitMillis"),
-                l(m, "loadMillis"));
+                l(m, "loadMillis"),
+                l(m, "targetRate"));
     }
 
     private static double d(Map<?, ?> m, String k) {
@@ -241,6 +262,7 @@ record RunParams(
         m.put("singleActiveConsumer", singleActiveConsumer);
         m.put("pullWaitMillis", pullWaitMillis);
         m.put("loadMillis", loadMillis);
+        m.put("targetRate", targetRate);
         return m;
     }
 

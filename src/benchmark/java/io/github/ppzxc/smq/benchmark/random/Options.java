@@ -15,6 +15,7 @@ import java.util.OptionalLong;
  *   <li>{@code --load <기간>}: 부하 구간 길이. 기본 10초.
  *   <li>{@code --smoke}: 고정 시드 {@link #SMOKE_SEEDS}를 실행당 2초씩 돈다(미리 채운 깊이와 리스 기한을 줄인 한도).
  *   <li>{@code --heap-dump}: 자식 JVM에 {@code -XX:+HeapDumpOnOutOfMemoryError}를 주고 덤프를 실행 디렉터리에 남긴다. 기본은 끈다(덤프가 크다).
+ *   <li>{@code --rate <n>}: 고정 속도 모드. 프로듀서 전체가 초당 n개를 보내고 달성률과 백로그 추세를 판정한다. JFR이 기본으로 켜진다.
  *   <li>{@code --jfr}: 부모와 자식 JVM에 Java Flight Recorder 연속 레코딩을 켠다. 실행 디렉터리에 {@code .jfr} 파일을 남긴다.
  *   <li>{@code --out-dir <디렉터리>}: 산출물 위치. 기본 {@code build/random-bench}.
  * </ul>
@@ -27,7 +28,8 @@ record Options(
         boolean smoke,
         Path outDir,
         boolean heapDump,
-        boolean jfr) {
+        boolean jfr,
+        long rate) {
 
     static final Duration DEFAULT_BUDGET = Duration.ofMinutes(30);
     static final Duration SMOKE_LOAD = Duration.ofSeconds(2);
@@ -41,6 +43,7 @@ record Options(
         boolean smoke = false;
         boolean heapDump = false;
         boolean jfr = false;
+        long rate = 0;
         Path out = Path.of("build/random-bench");
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -65,6 +68,7 @@ record Options(
                 case "--budget" -> budget = parseDuration(v);
                 case "--master-seed" -> master = parseLong(a, v);
                 case "--load" -> load = parseDuration(v);
+                case "--rate" -> rate = parseRate(v);
                 case "--out-dir" -> out = Path.of(v);
                 default -> throw new IllegalArgumentException("알 수 없는 옵션: " + a);
             }
@@ -75,7 +79,18 @@ record Options(
         if (smoke && seed.isPresent()) {
             throw new IllegalArgumentException("--smoke와 --seed는 함께 쓸 수 없다");
         }
-        return new Options(seed, budget, master, load, smoke, out.toAbsolutePath(), heapDump, jfr);
+        if (smoke && rate > 0) {
+            throw new IllegalArgumentException("--smoke와 --rate는 함께 쓸 수 없다");
+        }
+        return new Options(seed, budget, master, load, smoke, out.toAbsolutePath(), heapDump, jfr || rate > 0, rate);
+    }
+
+    private static long parseRate(String v) {
+        long n = parseLong("--rate", v);
+        if (n <= 0) {
+            throw new IllegalArgumentException("--rate는 양의 정수여야 한다: " + v);
+        }
+        return n;
     }
 
     private static long parseLong(String option, String v) {

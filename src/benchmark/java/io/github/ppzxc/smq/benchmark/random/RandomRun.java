@@ -96,6 +96,7 @@ final class RandomRun {
     private volatile Path walFile;
     private volatile long walMax = -1;
     private volatile JvmMetricsSampler.Summary jvmSummary;
+    private final List<JvmMetricsSampler.Summary> childSummaries = new ArrayList<>();
 
     RandomRun(RunParams params, Checker checker, long drainLimitMillis, int process, ChildSpawner spawner) {
         this.params = params;
@@ -214,6 +215,7 @@ final class RandomRun {
             deliveries.addAll(o.deliveries());
             loadAckedMessages.addAndGet(o.loadAckedMessages());
             loadAckedBytes.addAndGet(o.loadAckedBytes());
+            childSummaries.add(JvmMetricsSampler.summarize(dir.resolve("p" + i + "-jvm-metrics.jsonl")));
         }
     }
 
@@ -355,14 +357,33 @@ final class RandomRun {
         }
     }
 
-    private void producerLoop(Queue target) {
+    private void producerLoop(Queue target) throws InterruptedException {
+        PacedSchedule schedule = null;
+        if (params.targetRate() > 0) {
+            // 목표 속도는 프로듀서 스레드 전체가 나눠 맡는다. 시각표는 스레드마다 따로 쥐고 시작 시각을 기준으로 한다.
+            long perThread = Math.max(1, params.targetRate() / totalProducers());
+            schedule = new PacedSchedule(perThread, params.publishBatch(), System.nanoTime());
+        }
         while (!stop.get()) {
+            if (schedule != null) {
+                long wait = schedule.waitNanos(System.nanoTime());
+                if (wait > 0 && !sleepUnlessStopped(Math.max(1, wait / 1_000_000L))) {
+                    return;
+                }
+            }
             if (backlogFull(target)) {
                 sleepMillis(5);
                 continue;
             }
             publishBatch(target, params.publishBatch());
+            if (schedule != null) {
+                schedule.sent();
+            }
         }
+    }
+
+    private int totalProducers() {
+        return params.totalProducers();
     }
 
     /**
@@ -620,7 +641,8 @@ final class RandomRun {
         InvariantChecker.Config config =
                 new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
         List<Violation> violations = checker.check(config, pub, del, smp);
-        Verdict verdict = !drained ? Verdict.DRAIN_TIMEOUT : violations.isEmpty() ? Verdict.PASS : Verdict.VIOLATION;
+        SoakJudge.Report soak = params.targetRate() > 0 ? soakReport(pub, smp) : null;
+        Verdict verdict = verdict(drained, violations, soak);
         double seconds = params.loadMillis() / 1000.0;
         long[] latencies = latenciesMillis(pub, del);
         Double p50 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 50);
@@ -637,7 +659,37 @@ final class RandomRun {
                 new RunResult.Records(pub, del, smp),
                 null,
                 walMax < 0 ? null : walMax,
-                jvmSummary);
+                jvmSummary,
+                soak,
+                List.copyOf(childSummaries));
+    }
+
+    /** 소진 실패와 불변식 위반이 먼저고, 그 다음이 백로그 증가다. 달성률은 판정에 쓰지 않는다. */
+    static Verdict verdict(boolean drained, List<Violation> violations, SoakJudge.Report soak) {
+        if (!drained) {
+            return Verdict.DRAIN_TIMEOUT;
+        }
+        if (!violations.isEmpty()) {
+            return Verdict.VIOLATION;
+        }
+        return soak != null && soak.backlogGrowing() ? Verdict.BACKLOG_GROWING : Verdict.PASS;
+    }
+
+    private SoakJudge.Report soakReport(List<Published> pub, List<CountsSample> smp) {
+        long publishedInLoad = pub.stream()
+                .filter(p -> p.atMillis() >= loadStartMillis && p.atMillis() < loadEndMillis)
+                .count();
+        List<Long> depths = smp.stream()
+                .filter(c -> c.queue() == QueueKind.TARGET && !c.afterDrain())
+                .map(c -> c.ready() + c.leased() + c.delayed())
+                .toList();
+        return SoakJudge.judge(
+                params.targetRate(),
+                params.loadMillis() / 1000.0,
+                publishedInLoad,
+                loadAckedMessages.get(),
+                depths,
+                SAMPLE_INTERVAL_MS);
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

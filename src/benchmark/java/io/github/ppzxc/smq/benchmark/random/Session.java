@@ -83,6 +83,9 @@ final class Session {
             out.printf(
                     "    PASS  %.0f msg/s, %.2f MB/s, p50 %s, p99 %s%n",
                     result.msgPerSec(), result.mbPerSec(), ms(result.p50Ms()), ms(result.p99Ms()));
+            if (result.soak() != null) {
+                out.println("    " + soakLine(result.soak()));
+            }
         }
         out.print(Summary.render(results, SUMMARY_ROWS));
         out.printf("합계: %d회 실행, %s%n", results.size(), exit == EXIT_OK ? "위반 없음" : "실패");
@@ -104,7 +107,12 @@ final class Session {
         try {
             append(result);
             if (result.passed()) {
-                deleteTree(dir);
+                if (params.targetRate() > 0) {
+                    // 고정 속도 실행은 JFR과 메트릭 파일이 결과물이다. 큰 DB만 지운다.
+                    deleteDatabase(dir);
+                } else {
+                    deleteTree(dir);
+                }
                 // 세션은 요약표를 위해 모든 결과를 쌓는다. 통과한 실행의 기록은 여기서 버려야 긴 세션이 힙을 채우지 않는다.
                 return result.withoutRecords();
             }
@@ -130,6 +138,10 @@ final class Session {
         m.put("errorDetail", r.errorDetail() == null ? null : r.errorDetail().toMap());
         m.put("walMaxBytes", r.walMaxBytes());
         m.put("jvmMetrics", r.jvmMetrics() == null ? null : r.jvmMetrics().toMap());
+        m.put("soak", r.soak() == null ? null : r.soak().toMap());
+        m.put(
+                "childMetrics",
+                r.childMetrics().stream().map(JvmMetricsSampler.Summary::toMap).toList());
         m.put("workDirFs", environment.get("workDirFs"));
         m.put("caveat", environment.get("caveat"));
         Files.createDirectories(jsonLines.getParent());
@@ -199,6 +211,12 @@ final class Session {
         if (r.jvmMetrics() != null) {
             out.println("JVM 메트릭: " + r.jvmMetrics().toMap());
         }
+        if (r.soak() != null) {
+            out.println(soakLine(r.soak()));
+        }
+        for (int i = 0; i < r.childMetrics().size(); i++) {
+            out.println("자식 " + i + " 메트릭: " + r.childMetrics().get(i).toMap());
+        }
         List<Violation> vs = r.violations();
         out.println("어긴 불변식 " + vs.size() + "개:");
         for (int i = 0; i < Math.min(vs.size(), MAX_VIOLATIONS_PRINTED); i++) {
@@ -210,8 +228,26 @@ final class Session {
         out.println("보존한 파일: " + failureDir(r.params().seed()));
     }
 
+    private static String soakLine(SoakJudge.Report r) {
+        return String.format(
+                "목표 %d msg/s, 달성률 %.0f%%, ACK %.0f msg/s, 백로그 기울기 %.1f개/초, 최대 깊이 %d%s",
+                r.targetRate(),
+                r.achievedRatio() * 100,
+                r.ackRate(),
+                r.backlogSlopePerSec(),
+                r.maxDepth(),
+                r.backlogGrowing() ? " (백로그 증가)" : "");
+    }
+
     private static String ms(Double d) {
         return d == null ? "-" : String.format("%.0fms", d);
+    }
+
+    /** SQLite 파일(본체, WAL, 공유 메모리)만 지운다. */
+    private static void deleteDatabase(Path dir) throws IOException {
+        for (String name : List.of("smq.db", "smq.db-wal", "smq.db-shm")) {
+            Files.deleteIfExists(dir.resolve(name));
+        }
     }
 
     private static void deleteTree(Path dir) throws IOException {

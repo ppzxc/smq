@@ -21,6 +21,7 @@ import io.github.ppzxc.smq.storage.Result;
 import io.github.ppzxc.smq.storage.Storage;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -315,17 +316,22 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now) {
+    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock) {
         lock.lock();
         try {
+            // 시각은 lock을 잡은 뒤에 읽는다. 앞서 커밋된 다른 꺼내기와 시각 순서가 어긋나지 않게 한다.
+            Instant now = clock.instant();
             Instant deadline = now.plus(d);
             List<Result> results = new ArrayList<>(ids.size());
             for (MessageId id : ids) {
                 Outcome outcome = Outcome.STALE;
-                for (TreeMap<Long, Entry> messages : queues.values()) {
-                    Entry e = messages.get(id.value());
+                for (Map.Entry<String, TreeMap<Long, Entry>> queue : queues.entrySet()) {
+                    Entry e = queue.getValue().get(id.value());
                     if (e != null) {
-                        if (holds(e, token)) {
+                        // 단일 활성 컨슈머 큐에서는 만료된 리스를 되살리지 않는다. 그 사이 다른 청크가 꺼냈을 수 있다.
+                        boolean revivesExpired =
+                                requireOptions(queue.getKey()).singleActiveConsumer() && !isLeased(e, now);
+                        if (holds(e, token) && !revivesExpired) {
                             e.leaseDeadline = deadline;
                             outcome = Outcome.OK;
                         }

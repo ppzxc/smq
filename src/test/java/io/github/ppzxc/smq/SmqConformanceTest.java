@@ -538,6 +538,24 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 단일_활성_큐에서는_기한이_지난_리스의_연장이_STALE이고_리스를_되살리지_않는다() throws Exception {
+        Queue q = open(Duration.ofSeconds(10))
+                .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));
+        Chunk first = q.pull(10, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(10));
+        Chunk second = q.pull(1, Duration.ZERO);
+        assertEquals(ids.getFirst(), second.messages().getFirst().id());
+
+        Extension late = q.extend(first, Duration.ofSeconds(100));
+
+        assertEquals(ids, late.outcomes().stale());
+        // 되살아난 리스가 없으므로 둘째 청크의 리스만 남는다.
+        assertEquals(new QueueCounts(1, 1, 0), q.counts());
+        assertTrue(q.settle(second.ackAll()).allOk());
+    }
+
+    @Test
     void 다른_컨슈머가_다시_꺼간_메시지에_대한_늦은_정산과_연장은_STALE이고_효력이_없다() throws Exception {
         Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b")));

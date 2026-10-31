@@ -34,6 +34,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -579,16 +580,24 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now) {
+    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock) {
         return inTransaction(c -> {
+            // 시각은 쓰기 트랜잭션을 잡은 뒤에 읽는다. 앞서 커밋된 다른 꺼내기와 시각 순서가 어긋나지 않게 한다.
+            Instant now = clock.instant();
             Instant deadline = now.plus(d);
             List<Result> results = new ArrayList<>(ids.size());
-            try (PreparedStatement ps =
-                    c.prepareStatement("UPDATE message SET lease_deadline = ? WHERE id = ? AND lease_token = ?")) {
+            // 단일 활성 컨슈머 큐에서는 만료된 리스를 되살리지 않는다. 그 사이 다른 청크가 꺼냈을 수 있다.
+            try (PreparedStatement ps = c.prepareStatement("""
+                    UPDATE message SET lease_deadline = ?
+                    WHERE id = ? AND lease_token = ?
+                      AND (lease_deadline > ?
+                           OR NOT EXISTS (SELECT 1 FROM queue q
+                                          WHERE q.id = message.queue_id AND q.single_active_consumer = 1))""")) {
                 for (MessageId id : ids) {
                     ps.setLong(1, toNanos(deadline));
                     ps.setLong(2, id.value());
                     ps.setLong(3, token.value());
+                    ps.setLong(4, toNanos(now));
                     results.add(new Result(id, ps.executeUpdate() == 1 ? Outcome.OK : Outcome.STALE));
                 }
             }

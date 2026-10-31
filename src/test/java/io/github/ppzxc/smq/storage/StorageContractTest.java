@@ -10,6 +10,7 @@ import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * 저장소 인터페이스의 계약 스위트. 코어가 가리거나 흡수해 공개 API로는 보이지 않는 약속과 경계 사례만 다룬다.
- * 하위 클래스는 {@link #factory()}만 정한다. 시각은 각 연산의 {@code now}로 명시해 넘긴다.
+ * 하위 클래스는 {@link #factory()}만 정한다. 시각은 각 연산의 {@code now}로 명시해 넘기고, 연장만 저장소가 lock 안에서 읽는 {@code InstantSource}를 넘긴다.
  */
 abstract class StorageContractTest {
 
@@ -158,10 +159,45 @@ abstract class StorageContractTest {
 
         Instant now = T0.plusSeconds(1);
         Duration d = Duration.ofSeconds(30);
-        Extended extended = storage.extend(pulled.token(), List.of(id), d, now);
+        Extended extended = storage.extend(pulled.token(), List.of(id), d, InstantSource.fixed(now));
 
         assertEquals(now.plus(d), extended.leaseDeadline());
         assertEquals(List.of(new Result(id, Outcome.STALE)), extended.results());
+    }
+
+    @Test
+    void 단일_활성_큐에서_다른_청크가_꺼낸_뒤_늦게_도착한_연장은_만료된_리스를_되살리지_못한다() {
+        storage.declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        storage.publish("q", List.of(message(1), message(2)), T0);
+        PullResult first = storage.pull("q", 2, LEASE, T0);
+        MessageId a = first.messages().get(0).id();
+        MessageId b = first.messages().get(1).id();
+
+        // 리스가 끝난 뒤 둘째 청크가 a를 꺼낸다. b는 만료됐지만 아무도 꺼내지 않았다.
+        PullResult second = storage.pull("q", 1, LEASE, T0.plus(LEASE));
+        assertEquals(a, second.messages().getFirst().id());
+
+        // 첫 청크는 기한 안에 연장을 시작했지만, 저장소가 연장을 처리하는 시각은 둘째 꺼내기가 커밋된 뒤다.
+        Extended late = storage.extend(first.token(), List.of(a, b), LEASE, InstantSource.fixed(T0.plusSeconds(12)));
+
+        assertEquals(List.of(new Result(a, Outcome.STALE), new Result(b, Outcome.STALE)), late.results());
+        assertEquals(new QueueCounts(1, 1, 0), storage.counts("q", T0.plus(LEASE)));
+    }
+
+    @Test
+    void 단일_활성_큐에서_둘째_청크가_정산한_뒤에_도착한_연장도_만료된_리스를_되살리지_못한다() {
+        storage.declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        storage.publish("q", List.of(message(1), message(2)), T0);
+        PullResult first = storage.pull("q", 2, LEASE, T0);
+        MessageId a = first.messages().get(0).id();
+        MessageId b = first.messages().get(1).id();
+        PullResult second = storage.pull("q", 1, LEASE, T0.plus(LEASE));
+        storage.settle(second.token(), List.of(new Disposition(a, Disposition.Kind.ACK)), T0.plusSeconds(11));
+
+        Extended late = storage.extend(first.token(), List.of(b), LEASE, InstantSource.fixed(T0.plusSeconds(12)));
+
+        assertEquals(List.of(new Result(b, Outcome.STALE)), late.results());
+        assertEquals(new QueueCounts(1, 0, 0), storage.counts("q", T0.plusSeconds(12)));
     }
 
     @Test

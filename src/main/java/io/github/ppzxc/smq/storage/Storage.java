@@ -5,6 +5,7 @@ import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,8 +45,15 @@ public interface Storage extends AutoCloseable {
     /** 한 트랜잭션으로 반영하고 메시지별 결과를 돌려준다. */
     List<Result> settle(LeaseToken token, List<Disposition> items, Instant now);
 
-    /** 리스를 {@code now + d}로 바꾼다. 정산과 같은 토큰 일치 기준으로 메시지별 결과를 돌려준다. */
-    Extended extend(LeaseToken token, List<MessageId> ids, Duration d, Instant now);
+    /**
+     * 리스를 {@code now + d}로 바꾼다. 정산과 같은 토큰 일치 기준으로 메시지별 결과를 돌려준다.
+     *
+     * <p>{@code now}는 호출자가 미리 재 두지 않고 저장소가 연산의 lock(트랜잭션)을 잡은 뒤 {@code clock}에서 한 번 읽는다.
+     * 호출자가 lock 대기 앞에서 잰 시각을 쓰면, 그 사이 다른 청크가 이 리스의 만료 뒤에 꺼내 간 일을 놓치고 만료된 리스를
+     * 되살리기 때문이다. 단일 활성 컨슈머 큐에서는 그 시각에 이미 만료된 리스의 연장을 {@code STALE}로 처리한다. 그 밖의
+     * 큐는 만료 뒤라도 아무도 다시 꺼내지 않았다면 연장할 수 있다.
+     */
+    Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock);
 
     /** 변경이 있을 때 대기자를 깨우는 선택적 힌트. 없으면 코어가 폴링 간격을 늘려 가며 폴링한다. */
     default Optional<ChangeHint> changeHint() {

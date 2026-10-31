@@ -43,18 +43,26 @@ final class RecordsJson {
 
     static Published parsePublished(String line) {
         Map<?, ?> m = (Map<?, ?>) Json.parse(line);
-        return new Published(Tag.parse((String) m.get("tag")), content(m), num(m, "atMillis"),
-                num(m, "delayMillis"));
+        return new Published(Tag.parse((String) m.get("tag")), content(m), num(m, "atMillis"), num(m, "delayMillis"));
     }
 
     static Delivery parseDelivery(String line) {
         Map<?, ?> m = (Map<?, ?>) Json.parse(line);
-        Pull pull = new Pull(num(m, "chunk"), (int) num(m, "position"), num(m, "pulledAtMillis"),
-                num(m, "leaseDeadlineMillis"));
-        Settle settle = new Settle(Action.valueOf((String) m.get("settle")), (Boolean) m.get("applied"),
-                num(m, "settleAtMillis"), num(m, "nackDelayMillis"));
-        return new Delivery(QueueKind.valueOf((String) m.get("queue")), Tag.parse((String) m.get("tag")),
-                num(m, "messageId"), (int) num(m, "deliveryCount"), content(m), pull, settle);
+        Pull pull = new Pull(
+                num(m, "chunk"), (int) num(m, "position"), num(m, "pulledAtMillis"), num(m, "leaseDeadlineMillis"));
+        Settle settle = new Settle(
+                Action.valueOf((String) m.get("settle")),
+                (Boolean) m.get("applied"),
+                num(m, "settleAtMillis"),
+                num(m, "nackDelayMillis"));
+        return new Delivery(
+                QueueKind.valueOf((String) m.get("queue")),
+                Tag.parse((String) m.get("tag")),
+                num(m, "messageId"),
+                (int) num(m, "deliveryCount"),
+                content(m),
+                pull,
+                settle);
     }
 
     private static Content content(Map<?, ?> m) {

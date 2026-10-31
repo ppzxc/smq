@@ -36,7 +36,8 @@ class ScriptTest {
             assertEquals(p.message().headers(), p.content().headers());
             assertEquals(tag.toString(), p.content().headers().get(Script.TAG_HEADER));
             assertEquals(p.delayMillis(), p.message().delay().toMillis());
-            assertTrue(p.message().payload().length <= RunParams.fromSeed(5, FULL).maxMessageBytes());
+            assertTrue(
+                    p.message().payload().length <= RunParams.fromSeed(5, FULL).maxMessageBytes());
         }
     }
 

@@ -20,7 +20,8 @@ class ModuleDescriptorTest {
 
     private static ModuleDescriptor descriptor() throws IOException, URISyntaxException {
         // 루트의 /module-info.class는 JDK 모듈 것이 먼저 잡히므로 Smq의 코드 위치에서 읽는다.
-        Path root = Path.of(Smq.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path root = Path.of(
+                Smq.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         if (Files.isDirectory(root)) {
             try (InputStream in = Files.newInputStream(root.resolve("module-info.class"))) {
                 return ModuleDescriptor.read(in);
@@ -37,24 +38,35 @@ class ModuleDescriptorTest {
         ModuleDescriptor d = descriptor();
 
         assertEquals("io.github.ppzxc.smq", d.name());
-        Set<String> exported = d.exports().stream()
-                .map(ModuleDescriptor.Exports::source)
-                .collect(Collectors.toSet());
+        Set<String> exported =
+                d.exports().stream().map(ModuleDescriptor.Exports::source).collect(Collectors.toSet());
         assertEquals(Set.of("io.github.ppzxc.smq"), exported);
         assertTrue(d.exports().stream().noneMatch(ModuleDescriptor.Exports::isQualified), "한정 export는 두지 않는다");
     }
 
     @Test
-    void 필요한_module은_sql과_sqlite_jdbc뿐이고_전이하지_않는다() throws IOException, URISyntaxException {
+    void 필요한_module은_sql과_sqlite_jdbc와_정적_전이_jspecify다() throws IOException, URISyntaxException {
         Set<ModuleDescriptor.Requires> declared = descriptor().requires().stream()
                 .filter(r -> !r.modifiers().contains(ModuleDescriptor.Requires.Modifier.MANDATED))
                 .collect(Collectors.toSet());
 
         assertEquals(
-                Set.of("java.sql", "org.xerial.sqlitejdbc"),
+                Set.of("java.sql", "org.xerial.sqlitejdbc", "org.jspecify"),
                 declared.stream().map(ModuleDescriptor.Requires::name).collect(Collectors.toSet()));
+
+        ModuleDescriptor.Requires jspecify = declared.stream()
+                .filter(r -> r.name().equals("org.jspecify"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(
+                Set.of(ModuleDescriptor.Requires.Modifier.STATIC, ModuleDescriptor.Requires.Modifier.TRANSITIVE),
+                jspecify.modifiers());
+
+        Set<ModuleDescriptor.Requires> runtimeRequires =
+                declared.stream().filter(r -> !r.name().equals("org.jspecify")).collect(Collectors.toSet());
         assertTrue(
-                declared.stream().noneMatch(r -> r.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE)),
-                "requires는 transitive가 아니어야 한다");
+                runtimeRequires.stream()
+                        .noneMatch(r -> r.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE)),
+                "런타임 requires는 transitive가 아니어야 한다");
     }
 }

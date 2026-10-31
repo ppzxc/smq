@@ -13,3 +13,9 @@ Default five-role vocabulary (needs-triage, needs-info, ready-for-agent, ready-f
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Static analysis
+
+For Java changes, apply the configured formatter before handing off. Keep main code under the JSpecify nullness default; mark only supported nullable type uses in the public API and retain runtime null checks. Place any Error Prone suppression on the narrowest applicable element with an adjacent explanation of the intentional exception or tool limitation.
+
+Run `./gradlew spotlessApply` to format Java sources. `./gradlew check` runs Spotless, Error Prone, and NullAway; main treats all Error Prone diagnostics as errors, while test and benchmark retain their normal Error Prone error severity.

@@ -35,7 +35,8 @@ class SqliteSchemaTest {
     }
 
     private static void jdbc(Path db, String... statements) throws Exception {
-        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db); Statement s = c.createStatement()) {
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement s = c.createStatement()) {
             for (String sql : statements) {
                 s.execute(sql);
             }
@@ -68,8 +69,8 @@ class SqliteSchemaTest {
         int newer = supported + 5;
         jdbc(db(), "PRAGMA user_version = " + newer);
 
-        IncompatibleStorageException e = assertThrows(IncompatibleStorageException.class,
-                () -> Smq.sqlite(db()).open());
+        IncompatibleStorageException e = assertThrows(
+                IncompatibleStorageException.class, () -> Smq.sqlite(db()).open());
 
         assertTrue(e.getMessage().contains("found " + newer), e.getMessage());
         assertTrue(e.getMessage().contains("supported " + supported), e.getMessage());
@@ -116,8 +117,8 @@ class SqliteSchemaTest {
         int supported = supportedVersion();
         jdbc(db(), "PRAGMA application_id = 12345");
 
-        IncompatibleStorageException e = assertThrows(IncompatibleStorageException.class,
-                () -> Smq.sqlite(db()).open());
+        IncompatibleStorageException e = assertThrows(
+                IncompatibleStorageException.class, () -> Smq.sqlite(db()).open());
 
         assertTrue(e.getMessage().contains("application_id=12345"), e.getMessage());
         assertTrue(e.getMessage().contains("supported " + supported), e.getMessage());
@@ -128,8 +129,8 @@ class SqliteSchemaTest {
         int supported = supportedVersion();
         jdbc(db(), "PRAGMA application_id = 12345", "PRAGMA user_version = " + supported);
 
-        IncompatibleStorageException e = assertThrows(IncompatibleStorageException.class,
-                () -> Smq.sqlite(db()).open());
+        IncompatibleStorageException e = assertThrows(
+                IncompatibleStorageException.class, () -> Smq.sqlite(db()).open());
 
         assertTrue(e.getMessage().contains("application_id=12345"), e.getMessage());
     }
@@ -149,8 +150,8 @@ class SqliteSchemaTest {
         Smq.sqlite(db()).open().close();
         jdbc(db(), "PRAGMA user_version = " + (supported - 1));
 
-        IncompatibleStorageException e = assertThrows(IncompatibleStorageException.class,
-                () -> Smq.sqlite(db()).open());
+        IncompatibleStorageException e = assertThrows(
+                IncompatibleStorageException.class, () -> Smq.sqlite(db()).open());
 
         assertTrue(e.getMessage().contains("found " + (supported - 1)), e.getMessage());
         assertTrue(e.getMessage().contains("supported " + supported), e.getMessage());
@@ -210,8 +211,14 @@ class SqliteSchemaTest {
         List<Process> children = new ArrayList<>();
         try {
             for (int i = 0; i < processes; i++) {
-                children.add(new ProcessBuilder(java, "-cp", System.getProperty("java.class.path"),
-                        OpenerMain.class.getName(), db().toString(), go.toString(), "m" + i)
+                children.add(new ProcessBuilder(
+                                java,
+                                "-cp",
+                                System.getProperty("java.class.path"),
+                                OpenerMain.class.getName(),
+                                db().toString(),
+                                go.toString(),
+                                "m" + i)
                         .redirectErrorStream(true)
                         .redirectOutput(dir.resolve("child" + i + ".log").toFile())
                         .start());
@@ -221,8 +228,9 @@ class SqliteSchemaTest {
             for (int i = 0; i < processes; i++) {
                 Path ready = dir.resolve("go.ready.m" + i);
                 while (!Files.exists(ready)) {
-                    assertTrue(children.get(i).isAlive(), "child " + i + " exited early: "
-                            + Files.readString(dir.resolve("child" + i + ".log")));
+                    assertTrue(
+                            children.get(i).isAlive(),
+                            "child " + i + " exited early: " + Files.readString(dir.resolve("child" + i + ".log")));
                     assertTrue(System.nanoTime() < giveUp, "child " + i + " never got ready");
                     Thread.sleep(5);
                 }
@@ -256,8 +264,8 @@ class SqliteSchemaTest {
 
             // 버전이 되돌아와도 그 인스턴스는 영구히 실패한 상태다.
             jdbc(db(), "PRAGMA user_version = " + supported);
-            IncompatibleStorageException again = assertThrows(IncompatibleStorageException.class,
-                    () -> q.publish(msg("b")));
+            IncompatibleStorageException again =
+                    assertThrows(IncompatibleStorageException.class, () -> q.publish(msg("b")));
             assertTrue(again.getMessage().contains("found " + supported), again.getMessage());
             assertTrue(again.getMessage().contains("supported " + supported), again.getMessage());
             assertThrows(IncompatibleStorageException.class, () -> smq.declare("other", QueueOptions.defaults()));
@@ -314,7 +322,8 @@ class SqliteSchemaTest {
         long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
         while (System.nanoTime() < deadline) {
             for (StackTraceElement frame : t.getStackTrace()) {
-                if (frame.getClassName().endsWith("ChangeHint") && frame.getMethodName().equals("await")) {
+                if (frame.getClassName().endsWith("ChangeHint")
+                        && frame.getMethodName().equals("await")) {
                     return;
                 }
             }

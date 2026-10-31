@@ -24,6 +24,7 @@ class TransactionExecutorTest {
     private static final int SQLITE_BUSY = 5;
     /** 확장 결과 코드: SQLITE_BUSY_SNAPSHOT. 아래 8비트가 SQLITE_BUSY다. */
     private static final int SQLITE_BUSY_SNAPSHOT = 517;
+
     private static final int SQLITE_CONSTRAINT = 19;
 
     @TempDir
@@ -54,7 +55,8 @@ class TransactionExecutorTest {
     }
 
     private int count() throws SQLException {
-        try (Statement s = connection.createStatement(); ResultSet rs = s.executeQuery("SELECT count(*) FROM t")) {
+        try (Statement s = connection.createStatement();
+                ResultSet rs = s.executeQuery("SELECT count(*) FROM t")) {
             return rs.getInt(1);
         }
     }
@@ -78,10 +80,12 @@ class TransactionExecutorTest {
     void 마지막_시도까지_BUSY면_SmqStorageException이_난다() {
         TransactionExecutor ex = executor(3);
         int[] calls = {0};
-        SmqStorageException e = assertThrows(SmqStorageException.class, () -> ex.retryOnBusy(() -> {
-            calls[0]++;
-            throw busy(SQLITE_BUSY);
-        }));
+        SmqStorageException e = assertThrows(
+                SmqStorageException.class,
+                () -> ex.retryOnBusy(() -> {
+                    calls[0]++;
+                    throw busy(SQLITE_BUSY);
+                }));
         assertEquals(3, calls[0]);
         assertEquals(List.of(1, 2), waits);
         assertInstanceOf(SQLException.class, e.getCause());
@@ -91,10 +95,12 @@ class TransactionExecutorTest {
     void BUSY가_아닌_SQL_오류는_재시도_없이_바로_SmqStorageException이_된다() {
         TransactionExecutor ex = executor(5);
         int[] calls = {0};
-        assertThrows(SmqStorageException.class, () -> ex.retryOnBusy(() -> {
-            calls[0]++;
-            throw new SQLException("constraint", null, SQLITE_CONSTRAINT);
-        }));
+        assertThrows(
+                SmqStorageException.class,
+                () -> ex.retryOnBusy(() -> {
+                    calls[0]++;
+                    throw new SQLException("constraint", null, SQLITE_CONSTRAINT);
+                }));
         assertEquals(1, calls[0]);
         assertEquals(List.of(), waits);
     }
@@ -106,10 +112,12 @@ class TransactionExecutorTest {
         }));
         int[] calls = {0};
         try {
-            assertThrows(SmqStorageException.class, () -> ex.retryOnBusy(() -> {
-                calls[0]++;
-                throw busy(SQLITE_BUSY);
-            }));
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> ex.retryOnBusy(() -> {
+                        calls[0]++;
+                        throw busy(SQLITE_BUSY);
+                    }));
             assertTrue(Thread.currentThread().isInterrupted());
             assertEquals(1, calls[0]);
         } finally {
@@ -128,12 +136,14 @@ class TransactionExecutorTest {
     void 실패한_트랜잭션은_ROLLBACK되고_다음_트랜잭션이_정상적으로_시작된다() throws Exception {
         TransactionExecutor ex = executor(1);
         ex.executeUnverified(c -> userVersion(c));
-        assertThrows(SmqStorageException.class, () -> ex.execute(c -> {
-            try (Statement s = c.createStatement()) {
-                s.execute("INSERT INTO t VALUES (1)");
-            }
-            throw new SQLException("boom", null, SQLITE_CONSTRAINT);
-        }));
+        assertThrows(
+                SmqStorageException.class,
+                () -> ex.execute(c -> {
+                    try (Statement s = c.createStatement()) {
+                        s.execute("INSERT INTO t VALUES (1)");
+                    }
+                    throw new SQLException("boom", null, SQLITE_CONSTRAINT);
+                }));
         assertEquals(0, count());
         ex.execute(c -> {
             try (Statement s = c.createStatement()) {
@@ -157,7 +167,8 @@ class TransactionExecutorTest {
     }
 
     private static int userVersion(Connection c) throws SQLException {
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("PRAGMA user_version")) {
+        try (Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("PRAGMA user_version")) {
             return rs.getInt(1);
         }
     }

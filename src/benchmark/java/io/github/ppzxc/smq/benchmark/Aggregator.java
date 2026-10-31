@@ -15,14 +15,18 @@ public final class Aggregator {
     static Map<String, Double> aggregate(RunSpec spec, List<ChildResult> children) {
         Map<String, Double> out = new LinkedHashMap<>();
         if (spec.scenario() == Scenario.S3) {
-            long[] all = children.stream().flatMapToLong(c -> Arrays.stream(c.latenciesMicros())).sorted().toArray();
+            long[] all = children.stream()
+                    .flatMapToLong(c -> Arrays.stream(c.latenciesMicros()))
+                    .sorted()
+                    .toArray();
             if (all.length == 0) throw new IllegalStateException("지연 표본이 없다: " + spec.key());
             out.put(Keys.p50(spec.key()), percentile(all, 50) / 1000.0);
             out.put(Keys.p99(spec.key()), percentile(all, 99) / 1000.0);
             return out;
         }
         long messages = children.stream().mapToLong(ChildResult::messages).sum();
-        long slowest = children.stream().mapToLong(ChildResult::elapsedNanos).max().orElse(0);
+        long slowest =
+                children.stream().mapToLong(ChildResult::elapsedNanos).max().orElse(0);
         if (slowest <= 0) throw new IllegalStateException("측정 구간이 비었다: " + spec.key());
         out.put(Keys.throughput(spec.key()), messages / (slowest / 1e9));
         return out;
@@ -39,7 +43,8 @@ public final class Aggregator {
     static Map<String, List<Double>> samples(List<Map<String, Double>> rounds) {
         Map<String, List<Double>> out = new LinkedHashMap<>();
         for (Map<String, Double> round : rounds) {
-            round.forEach((k, v) -> out.computeIfAbsent(k, x -> new ArrayList<>()).add(v));
+            round.forEach(
+                    (k, v) -> out.computeIfAbsent(k, x -> new ArrayList<>()).add(v));
         }
         return out;
     }

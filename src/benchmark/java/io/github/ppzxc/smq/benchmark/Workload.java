@@ -26,6 +26,7 @@ final class Workload {
     static final long S3_INTERVAL_MS = 50;
     /** S3 컨슈머가 측정 구간이 끝난 뒤 남은 메시지를 비우도록 더 기다리는 시간. */
     static final long S3_DRAIN_MS = 1_000;
+
     private static final int PREFILL_BATCH = 1_000;
 
     private Workload() {}
@@ -92,11 +93,14 @@ final class Workload {
         AtomicReference<ChildResult> produced = new AtomicReference<>();
         AtomicReference<ChildResult> consumed = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread producer = role == Role.CONSUMER ? null
+        Thread producer = role == Role.CONSUMER
+                ? null
                 : new Thread(() -> guard(failure, () -> produced.set(produce(q, spec, measureEnd))), "s3-producer");
-        Thread consumer = role == Role.PRODUCER ? null
-                : new Thread(() -> guard(failure,
-                        () -> consumed.set(consume(q, spec, role, measureStart, consumeEnd))), "s3-consumer");
+        Thread consumer = role == Role.PRODUCER
+                ? null
+                : new Thread(
+                        () -> guard(failure, () -> consumed.set(consume(q, spec, role, measureStart, consumeEnd))),
+                        "s3-consumer");
         if (consumer != null) consumer.start();
         if (producer != null) producer.start();
         if (producer != null) producer.join();
@@ -104,7 +108,9 @@ final class Workload {
         if (failure.get() != null) throw new IllegalStateException("S3 스레드 실패", failure.get());
         ChildResult c = consumed.get();
         ChildResult p = produced.get();
-        return new ChildResult(role.name(), p != null ? p.messages() : c.messages(),
+        return new ChildResult(
+                role.name(),
+                p != null ? p.messages() : c.messages(),
                 Math.max(p != null ? p.elapsedNanos() : 0, c != null ? c.elapsedNanos() : 0),
                 c != null ? c.latenciesMicros() : new long[0]);
     }

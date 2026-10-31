@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage;
 import io.github.ppzxc.smq.Message;
 import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 꺼내기 결과. 메시지가 없으면 {@code token}과 {@code leaseDeadline}은 null이다.
@@ -10,7 +11,11 @@ import java.util.List;
  * 표시다. 옮기고 나면 그 뒤에 준비 메시지가 있을 수 있다.
  * 코어는 이때 기다리지 않고 바로 다시 꺼낸다.
  */
-public record PullResult(LeaseToken token, Instant leaseDeadline, List<Message> messages, boolean deadLettersRemain) {
+public record PullResult(
+        @Nullable LeaseToken token,
+        @Nullable Instant leaseDeadline,
+        List<Message> messages,
+        boolean deadLettersRemain) {
 
     public static PullResult of(LeaseToken token, Instant leaseDeadline, List<Message> messages) {
         return new PullResult(token, leaseDeadline, messages, false);

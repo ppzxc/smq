@@ -16,12 +16,15 @@ import java.util.Map;
  * @param loadAckedMessages 부하 구간에 이 프로세스가 ACK한 메시지 수
  * @param loadAckedBytes 그 payload 바이트 수
  */
-record ChildOutput(long loadAckedMessages, long loadAckedBytes, List<Published> published,
-        List<Delivery> deliveries) {
+record ChildOutput(long loadAckedMessages, long loadAckedBytes, List<Published> published, List<Delivery> deliveries) {
 
     static void write(Path dir, int process, ChildOutput o) throws IOException {
-        Files.write(file(dir, process, "published.jsonl"), o.published.stream().map(RecordsJson::line).toList());
-        Files.write(file(dir, process, "deliveries.jsonl"), o.deliveries.stream().map(RecordsJson::line).toList());
+        Files.write(
+                file(dir, process, "published.jsonl"),
+                o.published.stream().map(RecordsJson::line).toList());
+        Files.write(
+                file(dir, process, "deliveries.jsonl"),
+                o.deliveries.stream().map(RecordsJson::line).toList());
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("loadAckedMessages", o.loadAckedMessages);
         m.put("loadAckedBytes", o.loadAckedBytes);
@@ -32,11 +35,16 @@ record ChildOutput(long loadAckedMessages, long loadAckedBytes, List<Published> 
     static ChildOutput read(Path dir, int process) throws IOException {
         Map<?, ?> m = (Map<?, ?>) Json.parse(Files.readString(file(dir, process, "result.json")));
         List<Published> published = Files.readAllLines(file(dir, process, "published.jsonl")).stream()
-                .map(RecordsJson::parsePublished).toList();
+                .map(RecordsJson::parsePublished)
+                .toList();
         List<Delivery> deliveries = Files.readAllLines(file(dir, process, "deliveries.jsonl")).stream()
-                .map(RecordsJson::parseDelivery).toList();
-        return new ChildOutput(((Double) m.get("loadAckedMessages")).longValue(),
-                ((Double) m.get("loadAckedBytes")).longValue(), published, deliveries);
+                .map(RecordsJson::parseDelivery)
+                .toList();
+        return new ChildOutput(
+                ((Double) m.get("loadAckedMessages")).longValue(),
+                ((Double) m.get("loadAckedBytes")).longValue(),
+                published,
+                deliveries);
     }
 
     private static Path file(Path dir, int process, String name) {

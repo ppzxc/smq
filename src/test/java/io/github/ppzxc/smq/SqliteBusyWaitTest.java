@@ -226,7 +226,8 @@ class SqliteBusyWaitTest {
 
     @Test
     void lock_대기_하한은_음수일_수_없다() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> Smq.sqlite(dir.resolve("neg.db")).lockWaitFloor(Duration.ofMillis(-1)));
     }
 }

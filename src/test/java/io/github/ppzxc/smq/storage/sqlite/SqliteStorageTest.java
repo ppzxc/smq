@@ -38,7 +38,8 @@ class SqliteStorageTest {
     Path dir;
 
     private String pragma(Connection c, String name) throws SQLException {
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("PRAGMA " + name)) {
+        try (Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("PRAGMA " + name)) {
             return rs.getString(1);
         }
     }
@@ -68,7 +69,8 @@ class SqliteStorageTest {
     @Test
     void smq가_아닌_비어_있지_않은_파일은_열지_않는다() throws Exception {
         Path db = dir.resolve("other.db");
-        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db); Statement s = c.createStatement()) {
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement s = c.createStatement()) {
             s.execute("CREATE TABLE foreign_table(x)");
         }
         assertThrows(IncompatibleStorageException.class, () -> SqliteStorage.open(db, Durability.POWER_LOSS));
@@ -198,8 +200,10 @@ class SqliteStorageTest {
                 Statement st = other.createStatement()) {
             s.declare("q", QueueOptions.defaults());
             st.execute("BEGIN IMMEDIATE");
-            assertThrows(SmqStorageException.class,
-                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> s.publish("q", List.of(message()), Instant.EPOCH)));
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(
+                            RETRY_EXHAUST_LIMIT, () -> s.publish("q", List.of(message()), Instant.EPOCH)));
             st.execute("ROLLBACK");
             assertEquals(0, s.counts("q", Instant.EPOCH).ready());
         }
@@ -214,12 +218,13 @@ class SqliteStorageTest {
             s.declare("q", QueueOptions.defaults());
             st.execute("BEGIN IMMEDIATE");
             long start = System.nanoTime();
-            assertTrue(s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH).messages().isEmpty());
+            assertTrue(s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH)
+                    .messages()
+                    .isEmpty());
             assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 1000);
             st.execute("ROLLBACK");
         }
     }
-
 
     private static void releaseAfter(Statement st, long millis, List<Thread> threads) {
         Thread t = new Thread(() -> {
@@ -245,7 +250,11 @@ class SqliteStorageTest {
             st.execute("BEGIN IMMEDIATE");
             List<Thread> threads = new ArrayList<>();
             releaseAfter(st, 300, threads);
-            assertEquals(1, s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH).messages().size());
+            assertEquals(
+                    1,
+                    s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH)
+                            .messages()
+                            .size());
             threads.get(0).join();
             assertEquals(new QueueCounts(0, 1, 0), s.counts("q", Instant.EPOCH));
         }
@@ -260,8 +269,10 @@ class SqliteStorageTest {
             s.declare("q", QueueOptions.defaults());
             s.publish("q", List.of(message()), Instant.EPOCH);
             st.execute("BEGIN IMMEDIATE");
-            assertThrows(SmqStorageException.class,
-                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH)));
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(
+                            RETRY_EXHAUST_LIMIT, () -> s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH)));
             st.execute("ROLLBACK");
             assertEquals(new QueueCounts(1, 0, 0), s.counts("q", Instant.EPOCH));
         }
@@ -280,7 +291,8 @@ class SqliteStorageTest {
             st.execute("BEGIN IMMEDIATE");
             List<Thread> threads = new ArrayList<>();
             releaseAfter(st, 300, threads);
-            assertEquals(1, s.settle(pulled.token(), List.of(ack), Instant.EPOCH).size());
+            assertEquals(
+                    1, s.settle(pulled.token(), List.of(ack), Instant.EPOCH).size());
             threads.get(0).join();
             assertEquals(new QueueCounts(0, 0, 0), s.counts("q", Instant.EPOCH));
         }
@@ -297,15 +309,18 @@ class SqliteStorageTest {
             PullResult pulled = s.pull("q", 1, Duration.ofSeconds(60), Instant.EPOCH);
             Disposition ack = new Disposition(pulled.messages().get(0).id(), Disposition.Kind.ACK);
             st.execute("BEGIN IMMEDIATE");
-            assertThrows(SmqStorageException.class,
-                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> s.settle(pulled.token(), List.of(ack), Instant.EPOCH)));
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(
+                            RETRY_EXHAUST_LIMIT, () -> s.settle(pulled.token(), List.of(ack), Instant.EPOCH)));
             st.execute("ROLLBACK");
             assertEquals(new QueueCounts(0, 1, 0), s.counts("q", Instant.EPOCH));
         }
     }
 
     private static void assertCheckpointTruncates(Connection other) throws SQLException {
-        try (Statement st = other.createStatement(); ResultSet rs = st.executeQuery("PRAGMA wal_checkpoint(TRUNCATE)")) {
+        try (Statement st = other.createStatement();
+                ResultSet rs = st.executeQuery("PRAGMA wal_checkpoint(TRUNCATE)")) {
             assertEquals(0, rs.getInt(1), "열린 읽기 트랜잭션이 checkpoint를 막고 있다");
         }
     }
@@ -316,7 +331,9 @@ class SqliteStorageTest {
         try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS);
                 Connection other = DriverManager.getConnection("jdbc:sqlite:" + db)) {
             s.declare("q", QueueOptions.defaults());
-            assertTrue(s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH).messages().isEmpty());
+            assertTrue(s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH)
+                    .messages()
+                    .isEmpty());
             assertCheckpointTruncates(other);
         }
     }
@@ -328,7 +345,11 @@ class SqliteStorageTest {
                 Connection other = DriverManager.getConnection("jdbc:sqlite:" + db)) {
             s.declare("q", QueueOptions.defaults());
             s.publish("q", List.of(message()), Instant.EPOCH);
-            assertEquals(1, s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH).messages().size());
+            assertEquals(
+                    1,
+                    s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH)
+                            .messages()
+                            .size());
             assertCheckpointTruncates(other);
         }
     }
@@ -357,8 +378,10 @@ class SqliteStorageTest {
         try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
                 Statement st = other.createStatement()) {
             st.execute("BEGIN IMMEDIATE");
-            assertThrows(SmqStorageException.class,
-                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(
+                            RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
             st.execute("ROLLBACK");
         }
         try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
@@ -370,7 +393,8 @@ class SqliteStorageTest {
     private Path rollbackJournalFile() throws Exception {
         Path db = dir.resolve("smq.db");
         SqliteStorage.open(db, Durability.POWER_LOSS).close();
-        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db); Statement st = c.createStatement()) {
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = c.createStatement()) {
             st.execute("PRAGMA journal_mode = DELETE");
         }
         return db;
@@ -406,8 +430,10 @@ class SqliteStorageTest {
         try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
                 Statement st = other.createStatement()) {
             holdReadTransaction(st);
-            assertThrows(SmqStorageException.class,
-                    () -> assertTimeoutPreemptively(RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> assertTimeoutPreemptively(
+                            RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
             st.execute("ROLLBACK");
         }
     }
@@ -435,11 +461,15 @@ class SqliteStorageTest {
                     try {
                         byte[] payload = new byte[900];
                         while (!stop.get()) {
-                            s.publish("q", List.of(new NewMessage(payload, Map.of()), new NewMessage(payload, Map.of())),
+                            s.publish(
+                                    "q",
+                                    List.of(new NewMessage(payload, Map.of()), new NewMessage(payload, Map.of())),
                                     Instant.now());
-                            PullResult r = s.pull("q", 132, Duration.ofSeconds(5), Instant.now(), Duration.ofMillis(50));
+                            PullResult r =
+                                    s.pull("q", 132, Duration.ofSeconds(5), Instant.now(), Duration.ofMillis(50));
                             List<Disposition> acks = r.messages().stream()
-                                    .map(m -> new Disposition(m.id(), Disposition.Kind.ACK)).toList();
+                                    .map(m -> new Disposition(m.id(), Disposition.Kind.ACK))
+                                    .toList();
                             if (!acks.isEmpty()) {
                                 s.settle(r.token(), acks, Instant.now());
                             }
@@ -514,7 +544,11 @@ class SqliteStorageTest {
             for (int i = 0; i < 100_000 && afterGrown < 8_000; i++) {
                 s.publish("q", batch, Instant.now());
                 PullResult r = s.pull("q", 10, Duration.ofSeconds(5), Instant.now(), Duration.ZERO);
-                s.settle(r.token(), r.messages().stream().map(m -> new Disposition(m.id(), Disposition.Kind.ACK)).toList(),
+                s.settle(
+                        r.token(),
+                        r.messages().stream()
+                                .map(m -> new Disposition(m.id(), Disposition.Kind.ACK))
+                                .toList(),
                         Instant.now());
                 long size = Files.exists(wal) ? Files.size(wal) : 0;
                 max = Math.max(max, size);
@@ -538,7 +572,9 @@ class SqliteStorageTest {
      * WAL 헤더의 salt가 바뀌는 것으로 센다(파일 형식: 되감은 뒤 첫 쓰기가 salt를 바꾼다). 같은 양을 연결 하나와 넷이 번갈아 쓴다.
      */
     @Test
-    @DisabledOnOs(value = OS.WINDOWS, disabledReason = "7만 건 넘는 호출이 Windows CI의 테스트 시간 한도를 넘는다. 되감김 횟수는 OS와 무관한 성질이라 Linux에서 검증한다")
+    @DisabledOnOs(
+            value = OS.WINDOWS,
+            disabledReason = "7만 건 넘는 호출이 Windows CI의 테스트 시간 한도를 넘는다. 되감김 횟수는 OS와 무관한 성질이라 Linux에서 검증한다")
     void 연결이_여럿이어도_WAL을_되감는_횟수는_연결_하나일_때와_비슷하다() throws Exception {
         int one = walResets(dir.resolve("one"), 1);
         int four = walResets(dir.resolve("four"), 4);
@@ -565,7 +601,11 @@ class SqliteStorageTest {
                 SqliteStorage s = storages.get(i % connections);
                 s.publish("q", batch, Instant.now());
                 PullResult r = s.pull("q", 10, Duration.ofSeconds(5), Instant.now(), Duration.ZERO);
-                s.settle(r.token(), r.messages().stream().map(m -> new Disposition(m.id(), Disposition.Kind.ACK)).toList(),
+                s.settle(
+                        r.token(),
+                        r.messages().stream()
+                                .map(m -> new Disposition(m.id(), Disposition.Kind.ACK))
+                                .toList(),
                         Instant.now());
                 long now = walSalt(wal);
                 if (salt != -1 && now != salt) {

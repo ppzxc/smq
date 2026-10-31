@@ -8,15 +8,16 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /** 청크에서 만든 정산 값. 불변이며 같은 값을 다시 반영해도 안전하다. */
 public final class Settlement {
 
     private final String queue;
-    private final LeaseToken token;
+    private final @Nullable LeaseToken token;
     private final List<Disposition> items;
 
-    Settlement(String queue, LeaseToken token, List<Disposition> items) { // items는 호출자가 이미 불변 복사한 목록이다
+    Settlement(String queue, @Nullable LeaseToken token, List<Disposition> items) { // items는 호출자가 이미 불변 복사한 목록이다
         this.queue = queue;
         this.token = token;
         this.items = items;
@@ -26,6 +27,7 @@ public final class Settlement {
         return queue;
     }
 
+    @Nullable
     LeaseToken token() {
         return token;
     }

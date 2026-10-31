@@ -38,7 +38,12 @@ final class Session {
     private final Executor executor;
     private final PrintStream out;
 
-    Session(Path outDir, Path jsonLines, Map<String, String> environment, Limits limits, Executor executor,
+    Session(
+            Path outDir,
+            Path jsonLines,
+            Map<String, String> environment,
+            Limits limits,
+            Executor executor,
             PrintStream out) {
         this.outDir = outDir;
         this.jsonLines = jsonLines;
@@ -75,8 +80,9 @@ final class Session {
                 exit = EXIT_FAILED;
                 break;
             }
-            out.printf("    PASS  %.0f msg/s, %.2f MB/s, p50 %s, p99 %s%n", result.msgPerSec(), result.mbPerSec(),
-                    ms(result.p50Ms()), ms(result.p99Ms()));
+            out.printf(
+                    "    PASS  %.0f msg/s, %.2f MB/s, p50 %s, p99 %s%n",
+                    result.msgPerSec(), result.mbPerSec(), ms(result.p50Ms()), ms(result.p99Ms()));
         }
         out.print(Summary.render(results, SUMMARY_ROWS));
         out.printf("합계: %d회 실행, %s%n", results.size(), exit == EXIT_OK ? "위반 없음" : "실패");
@@ -122,10 +128,14 @@ final class Session {
         // 아래 둘은 뒤에 덧붙인 필드다. 위의 기존 필드 의미는 그대로다.
         m.put("errorDetail", r.errorDetail() == null ? null : r.errorDetail().toMap());
         m.put("walMaxBytes", r.walMaxBytes());
+        m.put("jvmMetrics", r.jvmMetrics() == null ? null : r.jvmMetrics().toMap());
         m.put("workDirFs", environment.get("workDirFs"));
         m.put("caveat", environment.get("caveat"));
         Files.createDirectories(jsonLines.getParent());
-        Files.writeString(jsonLines, Json.write(m) + "\n", java.nio.file.StandardOpenOption.CREATE,
+        Files.writeString(
+                jsonLines,
+                Json.write(m) + "\n",
+                java.nio.file.StandardOpenOption.CREATE,
                 java.nio.file.StandardOpenOption.APPEND);
     }
 
@@ -135,10 +145,15 @@ final class Session {
         writeLines(dir.resolve("published.jsonl"), rec.published().stream().map(RecordsJson::line));
         writeLines(dir.resolve("deliveries.jsonl"), rec.deliveries().stream().map(RecordsJson::line));
         writeLines(dir.resolve("counts.jsonl"), rec.samples().stream().map(RecordsJson::line));
-        writeLines(dir.resolve("violations.txt"), Stream.concat(
-                Stream.of("seed=" + r.params().seed(), "verdict=" + r.verdict(), "error=" + r.error(),
-                        r.params().describe()),
-                Stream.concat(r.violations().stream().map(RecordsJson::describe), diagnostics(r))));
+        writeLines(
+                dir.resolve("violations.txt"),
+                Stream.concat(
+                        Stream.of(
+                                "seed=" + r.params().seed(),
+                                "verdict=" + r.verdict(),
+                                "error=" + r.error(),
+                                r.params().describe()),
+                        Stream.concat(r.violations().stream().map(RecordsJson::describe), diagnostics(r))));
         Path target = failureDir(r.params().seed());
         deleteTree(target);
         Files.createDirectories(target.getParent());
@@ -151,9 +166,12 @@ final class Session {
 
     /** {@code violations.txt} 끝에 덧붙이는 진단 줄. */
     private static Stream<String> diagnostics(RunResult r) {
-        Stream<String> detail = r.errorDetail() == null ? Stream.empty() : r.errorDetail().describe().lines();
+        Stream<String> detail = r.errorDetail() == null
+                ? Stream.empty()
+                : r.errorDetail().describe().lines();
         Stream<String> wal = r.walMaxBytes() == null ? Stream.empty() : Stream.of("walMaxBytes=" + r.walMaxBytes());
-        return Stream.concat(detail, wal);
+        Stream<String> jvm = r.jvmMetrics() == null ? Stream.empty() : Stream.of("jvmMetrics=" + r.jvmMetrics());
+        return Stream.of(detail, wal, jvm).flatMap(s -> s);
     }
 
     private static void writeLines(Path file, Stream<String> lines) throws IOException {
@@ -176,6 +194,9 @@ final class Session {
         }
         if (r.walMaxBytes() != null) {
             out.println("smq.db-wal 최대 크기: " + r.walMaxBytes() + " 바이트");
+        }
+        if (r.jvmMetrics() != null) {
+            out.println("JVM 메트릭: " + r.jvmMetrics().toMap());
         }
         List<Violation> vs = r.violations();
         out.println("어긴 불변식 " + vs.size() + "개:");

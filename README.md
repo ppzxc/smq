@@ -121,7 +121,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
 | [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
 | [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |
-| [research/](research) | RabbitMQ 핵심 기능, SQLite 다중 프로세스 동시성 등 조사 자료 |
+| [docs/research/](docs/research) | RabbitMQ 핵심 기능, SQLite 다중 프로세스 동시성 등 조사 자료 |
 
 ## 라이선스
 

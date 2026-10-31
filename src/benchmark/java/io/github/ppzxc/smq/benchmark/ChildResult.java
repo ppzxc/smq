@@ -24,7 +24,10 @@ record ChildResult(String role, long messages, long elapsedNanos, long[] latenci
         List<?> l = (List<?>) m.get("latenciesMicros");
         long[] lat = new long[l.size()];
         for (int i = 0; i < lat.length; i++) lat[i] = ((Double) l.get(i)).longValue();
-        return new ChildResult((String) m.get("role"), ((Double) m.get("messages")).longValue(),
-                ((Double) m.get("elapsedNanos")).longValue(), lat);
+        return new ChildResult(
+                (String) m.get("role"),
+                ((Double) m.get("messages")).longValue(),
+                ((Double) m.get("elapsedNanos")).longValue(),
+                lat);
     }
 }

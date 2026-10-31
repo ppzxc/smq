@@ -32,13 +32,15 @@ public final class ChildJvm {
      * {@link #start(String, List, Path, String)}에 더해 표준 오류를 {@code err} 파일로 받고({@code null}이면 부모의 것에 잇는다)
      * 모듈 경로 인자 앞에 JVM 옵션 {@code jvmOptions}를 붙인다.
      */
-    public static ChildJvm start(String mainClass, List<String> args, Path out, Path err, List<String> jvmOptions,
-            String label) throws IOException {
+    public static ChildJvm start(
+            String mainClass, List<String> args, Path out, Path err, List<String> jvmOptions, String label)
+            throws IOException {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         List<String> cmd = new ArrayList<>();
         cmd.add(java);
         cmd.addAll(jvmOptions);
-        cmd.addAll(ModuleGuard.childJvmArgs(System.getProperty("jdk.module.path"), System.getProperty("java.class.path")));
+        cmd.addAll(
+                ModuleGuard.childJvmArgs(System.getProperty("jdk.module.path"), System.getProperty("java.class.path")));
         cmd.add(mainClass);
         cmd.addAll(args);
         Process p = new ProcessBuilder(cmd)
@@ -66,7 +68,9 @@ public final class ChildJvm {
 
     /** 표준 출력의 마지막 JSON 객체 줄. */
     public String lastJsonLine() throws IOException {
-        return Files.readAllLines(out).stream().filter(l -> l.startsWith("{")).reduce((a, b) -> b)
+        return Files.readAllLines(out).stream()
+                .filter(l -> l.startsWith("{"))
+                .reduce((a, b) -> b)
                 .orElseThrow(() -> new IllegalStateException("자식 JVM이 결과를 내지 않았다: " + label));
     }
 

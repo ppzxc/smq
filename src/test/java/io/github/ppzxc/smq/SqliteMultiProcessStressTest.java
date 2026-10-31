@@ -47,16 +47,24 @@ class SqliteMultiProcessStressTest {
 
         Worker(String name, int count, int leaseSeconds) throws IOException {
             this.name = name;
-            String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-            process = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
-                    "-cp", System.getProperty("java.class.path"), MultiProcessWorker.class.getName(),
-                    dir.resolve("smq.db").toString(), name, String.valueOf(count), "pull",
-                    String.valueOf(leaseSeconds))
+            String java =
+                    Path.of(System.getProperty("java.home"), "bin", "java").toString();
+            process = new ProcessBuilder(
+                            java,
+                            "--enable-native-access=ALL-UNNAMED",
+                            "-cp",
+                            System.getProperty("java.class.path"),
+                            MultiProcessWorker.class.getName(),
+                            dir.resolve("smq.db").toString(),
+                            name,
+                            String.valueOf(count),
+                            "pull",
+                            String.valueOf(leaseSeconds))
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .start();
             reader = new Thread(() -> {
-                try (BufferedReader in = new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                try (BufferedReader in =
+                        new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = in.readLine()) != null) {
                         lines.add(line);
@@ -95,7 +103,10 @@ class SqliteMultiProcessStressTest {
         List<String> got = new ArrayList<>();
         for (Worker w : from) {
             assertFalse(w.lines.contains("SETTLE_FAILED"), w.name + ": 정산 실패");
-            w.lines.stream().filter(l -> l.startsWith("GOT ")).map(l -> l.substring(4)).forEach(got::add);
+            w.lines.stream()
+                    .filter(l -> l.startsWith("GOT "))
+                    .map(l -> l.substring(4))
+                    .forEach(got::add);
         }
         return got;
     }

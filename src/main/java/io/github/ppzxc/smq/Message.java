@@ -4,8 +4,10 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 
-public record Message(MessageId id, byte[] payload, Map<String, String> headers, int deliveryCount,
-        Instant publishedAt) {
+// 배열은 생성자와 접근자에서 복사해 공개 API의 불변성 계약을 보장한다.
+@SuppressWarnings("ArrayRecordComponent")
+public record Message(
+        MessageId id, byte[] payload, Map<String, String> headers, int deliveryCount, Instant publishedAt) {
 
     public Message {
         Objects.requireNonNull(id, "id");

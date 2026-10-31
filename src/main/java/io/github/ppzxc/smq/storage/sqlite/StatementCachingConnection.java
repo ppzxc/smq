@@ -32,13 +32,14 @@ final class StatementCachingConnection {
             }
             default -> invoke(connection, method, args);
         };
-        return (Connection) Proxy.newProxyInstance(
-                Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, handler);
+        return (Connection)
+                Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, handler);
     }
 
     /** 캐시하는 것은 {@code prepareStatement(sql)}과 {@code prepareStatement(sql, keys)}뿐이다. 나머지 형태는 그대로 넘긴다. */
-    private static Object prepare(Connection connection, Map<String, PreparedStatement> cache, Method method,
-            Object[] args) throws Throwable {
+    private static Object prepare(
+            Connection connection, Map<String, PreparedStatement> cache, Method method, Object[] args)
+            throws Throwable {
         boolean plain = args.length == 1;
         boolean withKeys = args.length == 2 && args[1] instanceof Integer;
         if (!plain && !withKeys) {
@@ -58,10 +59,9 @@ final class StatementCachingConnection {
     /** {@code close()}를 바인딩 비우기로 바꾼 문장 뷰. */
     private static PreparedStatement retained(PreparedStatement statement) {
         return (PreparedStatement) Proxy.newProxyInstance(
-                PreparedStatement.class.getClassLoader(), new Class<?>[] {PreparedStatement.class},
-                (proxy, method, args) -> method.getName().equals("close")
-                        ? null
-                        : invoke(statement, method, args));
+                PreparedStatement.class.getClassLoader(),
+                new Class<?>[] {PreparedStatement.class},
+                (proxy, method, args) -> method.getName().equals("close") ? null : invoke(statement, method, args));
     }
 
     private static void closeAll(Map<String, PreparedStatement> cache) {

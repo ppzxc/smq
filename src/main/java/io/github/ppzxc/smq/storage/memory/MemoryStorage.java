@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
+import org.jspecify.annotations.Nullable;
 
 /** 같은 프로세스 안에서만 쓰는 인메모리 저장소. 다중 프로세스는 지원하지 않는다. */
 public final class MemoryStorage implements Storage {
@@ -39,8 +40,14 @@ public final class MemoryStorage implements Storage {
         final Map<String, String> headers;
         final Instant publishedAt;
         int deliveryCount;
+
+        @Nullable
         Long leaseToken;
+
+        @Nullable
         Instant leaseDeadline;
+
+        @Nullable
         Instant availableAt;
 
         Entry(MessageId id, NewMessage m, Instant publishedAt) {
@@ -178,7 +185,7 @@ public final class MemoryStorage implements Storage {
         lock.lock();
         try {
             TreeMap<Long, Entry> entries = require(queue);
-            QueueOptions options = optionsByQueue.get(queue);
+            QueueOptions options = requireOptions(queue);
             // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
             if (options.singleActiveConsumer() && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
                 return PullResult.empty();
@@ -206,11 +213,11 @@ public final class MemoryStorage implements Storage {
                 }
             }
             if (!exhausted.isEmpty()) {
-                TreeMap<Long, Entry> dlq = queues.get(options.deadLetterQueue().orElseThrow());
+                TreeMap<Long, Entry> dlq = require(options.deadLetterQueue().orElseThrow());
                 for (Entry e : exhausted) {
                     entries.remove(e.id.value());
-                    Entry moved = e.deadLettered(new MessageId(nextMessageId++), queue,
-                            DeadLetters.Reason.MAX_DELIVERIES, now);
+                    Entry moved = e.deadLettered(
+                            new MessageId(nextMessageId++), queue, DeadLetters.Reason.MAX_DELIVERIES, now);
                     dlq.put(moved.id.value(), moved);
                 }
             }
@@ -254,7 +261,9 @@ public final class MemoryStorage implements Storage {
                 continue;
             }
             Located found = locate(d.id());
-            if (found != null && holds(found.entry, token) && deadLetterQueueOf(found.queue).isEmpty()) {
+            if (found != null
+                    && holds(found.entry, token)
+                    && deadLetterQueueOf(found.queue).isEmpty()) {
                 throw new NoDeadLetterQueueException(found.queue);
             }
         }
@@ -270,9 +279,9 @@ public final class MemoryStorage implements Storage {
             case REJECT -> {
                 found.messages.remove(d.id().value());
                 String dlq = deadLetterQueueOf(found.queue).orElseThrow();
-                Entry moved = found.entry.deadLettered(new MessageId(nextMessageId++), found.queue,
-                        DeadLetters.Reason.REJECTED, now);
-                queues.get(dlq).put(moved.id.value(), moved);
+                Entry moved = found.entry.deadLettered(
+                        new MessageId(nextMessageId++), found.queue, DeadLetters.Reason.REJECTED, now);
+                require(dlq).put(moved.id.value(), moved);
             }
             case NACK -> {
                 found.entry.leaseToken = null;
@@ -283,11 +292,10 @@ public final class MemoryStorage implements Storage {
         return Outcome.OK;
     }
 
-    private record Located(String queue, TreeMap<Long, Entry> messages, Entry entry) {
-    }
+    private record Located(String queue, TreeMap<Long, Entry> messages, Entry entry) {}
 
     /** id로 메시지가 있는 큐를 찾는다. 없으면 null이다. */
-    private Located locate(MessageId id) {
+    private @Nullable Located locate(MessageId id) {
         for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
             Entry e = q.getValue().get(id.value());
             if (e != null) {
@@ -298,7 +306,7 @@ public final class MemoryStorage implements Storage {
     }
 
     private Optional<String> deadLetterQueueOf(String queue) {
-        return optionsByQueue.get(queue).deadLetterQueue();
+        return requireOptions(queue).deadLetterQueue();
     }
 
     /** 판정 기준은 리스 토큰 일치 하나뿐이다. 기한이 지났는지는 보지 않는다. */
@@ -334,23 +342,32 @@ public final class MemoryStorage implements Storage {
 
     /** 리스가 없거나 기한이 지났으면 준비 상태다. 기한이 지나도 다시 꺼내기 전까지는 리스 토큰이 남아 있다. */
     private static boolean isReady(Entry e, Instant now) {
-        return !isDelayed(e, now) && (e.leaseToken == null || !e.leaseDeadline.isAfter(now));
+        return !isDelayed(e, now) && (e.leaseToken == null || e.leaseDeadline == null || !e.leaseDeadline.isAfter(now));
     }
 
     private static boolean isLeased(Entry e, Instant now) {
-        return e.leaseToken != null && e.leaseDeadline.isAfter(now);
+        return e.leaseToken != null && e.leaseDeadline != null && e.leaseDeadline.isAfter(now);
     }
 
     private static boolean isDelayed(Entry e, Instant now) {
         return e.availableAt != null && e.availableAt.isAfter(now);
     }
 
+    @SuppressWarnings("NonApiType") // TreeMap preserves FIFO iteration order for message ids.
     private TreeMap<Long, Entry> require(String queue) {
         TreeMap<Long, Entry> messages = queues.get(queue);
         if (messages == null) {
             throw new QueueNotFoundException(queue);
         }
         return messages;
+    }
+
+    private QueueOptions requireOptions(String queue) {
+        QueueOptions options = optionsByQueue.get(queue);
+        if (options == null) {
+            throw new QueueNotFoundException(queue);
+        }
+        return options;
     }
 
     @Override

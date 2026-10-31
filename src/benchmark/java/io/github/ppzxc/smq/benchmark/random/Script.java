@@ -17,16 +17,13 @@ final class Script {
     static final String TAG_HEADER = "bench-tag";
 
     /** 발행할 메시지와 그 기록 내용. */
-    record Planned(OutgoingMessage message, Content content, long delayMillis) {
-    }
+    record Planned(OutgoingMessage message, Content content, long delayMillis) {}
 
     /** 전달 하나의 정산 결정. */
-    record Decision(Action action, long nackDelayMillis) {
-    }
+    record Decision(Action action, long nackDelayMillis) {}
 
     /** 청크 하나의 처리 방식. */
-    record Processing(long millis, boolean extend) {
-    }
+    record Processing(long millis, boolean extend) {}
 
     private final RunParams params;
 
@@ -55,8 +52,8 @@ final class Script {
         for (int i = 0; i < extra; i++) {
             headers.put("h" + i, Long.toHexString(r.nextLong()));
         }
-        OutgoingMessage message = new OutgoingMessage(payload, headers,
-                delay > 0 ? Duration.ofMillis(delay) : Duration.ZERO);
+        OutgoingMessage message =
+                new OutgoingMessage(payload, headers, delay > 0 ? Duration.ofMillis(delay) : Duration.ZERO);
         return new Planned(message, new Content(checksum(payload), headers), delay);
     }
 

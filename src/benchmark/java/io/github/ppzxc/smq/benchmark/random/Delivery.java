@@ -8,8 +8,8 @@ package io.github.ppzxc.smq.benchmark.random;
  * @param messageId 큐 안의 메시지 id
  * @param content 전달받은 payload 체크섬과 헤더 전체(dead letter 이동 시 붙는 {@code smq-} 헤더 포함)
  */
-record Delivery(QueueKind queue, Tag tag, long messageId, int deliveryCount, Content content, Pull pull,
-        Settle settle) {
+record Delivery(
+        QueueKind queue, Tag tag, long messageId, int deliveryCount, Content content, Pull pull, Settle settle) {
 
     /**
      * 꺼내기 한 번의 정보. 같은 청크의 전달은 같은 {@code chunk}를 가진다.
@@ -19,8 +19,7 @@ record Delivery(QueueKind queue, Tag tag, long messageId, int deliveryCount, Con
      * @param atMillis 꺼낸 시각(epoch ms)
      * @param leaseDeadlineMillis 연장을 모두 반영한 최종 리스 기한(epoch ms)
      */
-    record Pull(long chunk, int position, long atMillis, long leaseDeadlineMillis) {
-    }
+    record Pull(long chunk, int position, long atMillis, long leaseDeadlineMillis) {}
 
     enum Action {
         ACK,

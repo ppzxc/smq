@@ -69,7 +69,9 @@ class RunParamsTest {
     @Test
     void argRoundTripKeepsSeedsBeyondDoublePrecision() {
         for (long seed : new long[] {Long.MAX_VALUE, Long.MIN_VALUE + 1, 9_007_199_254_740_993L}) {
-            assertEquals(seed, RunParams.fromArg(RunParams.fromSeed(seed, FULL).toArg()).seed());
+            assertEquals(
+                    seed,
+                    RunParams.fromArg(RunParams.fromSeed(seed, FULL).toArg()).seed());
         }
     }
 

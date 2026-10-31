@@ -40,7 +40,8 @@ final class SqliteSchema {
         int applicationId = pragmaInt(c, "application_id");
         int version = pragmaInt(c, "user_version");
         boolean empty;
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
+        try (Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
             empty = rs.getInt(1) == 0;
         }
         if (empty && applicationId == 0) {
@@ -113,12 +114,12 @@ final class SqliteSchema {
     }
 
     IncompatibleStorageException notSmq(String reason) {
-        return new IncompatibleStorageException(
-                "not an smq database (" + reason + "), supported " + targetVersion);
+        return new IncompatibleStorageException("not an smq database (" + reason + "), supported " + targetVersion);
     }
 
     static int pragmaInt(Connection c, String name) throws SQLException {
-        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("PRAGMA " + name)) {
+        try (Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("PRAGMA " + name)) {
             return rs.getInt(1);
         }
     }

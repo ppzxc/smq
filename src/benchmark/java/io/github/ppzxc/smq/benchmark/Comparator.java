@@ -62,8 +62,10 @@ final class Comparator {
         for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3)) {
             String name = "floor S1 " + p + " proc1 POWER_LOSS >= " + floor.get(p) + " msg/s";
             Double v = r.get(Keys.throughput(key(p, "proc1", Durability.POWER_LOSS, 0)));
-            out.add(v == null ? notMeasured(name)
-                    : v >= floor.get(p) ? pass(name, fmt(v) + " msg/s") : fail(name, fmt(v) + " msg/s"));
+            out.add(
+                    v == null
+                            ? notMeasured(name)
+                            : v >= floor.get(p) ? pass(name, fmt(v) + " msg/s") : fail(name, fmt(v) + " msg/s"));
         }
     }
 
@@ -71,7 +73,10 @@ final class Comparator {
         for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4)) {
             for (Durability d : Durability.values()) {
                 String name = "scaling S1 " + p + " " + d + " proc4 >= 70% of proc1";
-                ratio(out, name, r.get(Keys.throughput(key(p, "proc4", d, 0))),
+                ratio(
+                        out,
+                        name,
+                        r.get(Keys.throughput(key(p, "proc4", d, 0))),
                         r.get(Keys.throughput(key(p, "proc1", d, 0))));
             }
         }
@@ -81,7 +86,10 @@ final class Comparator {
         for (String shape : List.of("proc1", "proc4")) {
             for (Durability d : Durability.values()) {
                 String name = "depth S1 P1 " + shape + " " + d + " 1m >= 70% of empty";
-                ratio(out, name, r.get(Keys.throughput(key(Profile.P1, shape, d, RunSpec.DEEP))),
+                ratio(
+                        out,
+                        name,
+                        r.get(Keys.throughput(key(Profile.P1, shape, d, RunSpec.DEEP))),
                         r.get(Keys.throughput(key(Profile.P1, shape, d, 0))));
             }
         }
@@ -109,14 +117,17 @@ final class Comparator {
         for (int i = 0; i < rounds; i++) {
             double ratio = values.get(i) / references.get(i);
             ratios.add(ratio);
-            parts.add(fmt(values.get(i)) + " / " + fmt(references.get(i)) + " = " + String.format("%.1f%%", 100 * ratio));
+            parts.add(
+                    fmt(values.get(i)) + " / " + fmt(references.get(i)) + " = " + String.format("%.1f%%", 100 * ratio));
         }
         String detail;
         if (rounds == 1) {
             detail = parts.get(0);
         } else {
-            StringBuilder sb = new StringBuilder("중앙값 " + String.format("%.1f%%", 100 * Aggregator.median(ratios)) + ", 바퀴별 ");
-            for (int i = 0; i < rounds; i++) sb.append(i > 0 ? "; " : "").append(i + 1).append("회 ").append(parts.get(i));
+            StringBuilder sb =
+                    new StringBuilder("중앙값 " + String.format("%.1f%%", 100 * Aggregator.median(ratios)) + ", 바퀴별 ");
+            for (int i = 0; i < rounds; i++)
+                sb.append(i > 0 ? "; " : "").append(i + 1).append("회 ").append(parts.get(i));
             detail = sb.toString();
         }
         out.add(Aggregator.median(ratios) >= RATIO - EPS ? pass(name, detail) : fail(name, detail));
@@ -127,10 +138,12 @@ final class Comparator {
             Topology t = (Topology) c[0];
             int ceiling = (Integer) c[1];
             String name = "latency S3 P1 " + t.id() + " p99 <= " + ceiling + " ms";
-            Double v = r.get(Keys.p99(Keys.of(Storage.SQLITE, Scenario.S3, Profile.P1, t.id(),
-                    Durability.POWER_LOSS.name(), 0)));
-            out.add(v == null ? notMeasured(name)
-                    : v <= ceiling + EPS ? pass(name, fmt(v) + " ms") : fail(name, fmt(v) + " ms"));
+            Double v = r.get(Keys.p99(
+                    Keys.of(Storage.SQLITE, Scenario.S3, Profile.P1, t.id(), Durability.POWER_LOSS.name(), 0)));
+            out.add(
+                    v == null
+                            ? notMeasured(name)
+                            : v <= ceiling + EPS ? pass(name, fmt(v) + " ms") : fail(name, fmt(v) + " ms"));
         }
     }
 

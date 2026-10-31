@@ -8,8 +8,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.DoubleUnaryOperator;
 import java.util.SplittableRandom;
+import java.util.function.DoubleUnaryOperator;
 import java.util.stream.Collectors;
 
 /**
@@ -25,11 +25,31 @@ import java.util.stream.Collectors;
  * @param extendRatio 처리 시간이 리스 기한의 절반을 넘는 청크가 리스를 연장할 확률
  * @param maxDeliveries 최대 전달 횟수. 없으면 0
  */
-record RunParams(long seed, int processes, int maxMessageBytes, int publishBatch, int chunkSize, List<Integer> producers,
-        List<Integer> consumers, Durability durability, int prefillDepth, double ackRatio, double nackRatio,
-        double rejectRatio, double noneRatio, double slowChunkRatio, double extendRatio, long leaseMillis,
-        double publishDelayRatio, long publishDelayMaxMillis, double nackDelayRatio, long nackDelayMaxMillis,
-        int maxDeliveries, boolean singleActiveConsumer, long pullWaitMillis, long loadMillis) {
+record RunParams(
+        long seed,
+        int processes,
+        int maxMessageBytes,
+        int publishBatch,
+        int chunkSize,
+        List<Integer> producers,
+        List<Integer> consumers,
+        Durability durability,
+        int prefillDepth,
+        double ackRatio,
+        double nackRatio,
+        double rejectRatio,
+        double noneRatio,
+        double slowChunkRatio,
+        double extendRatio,
+        long leaseMillis,
+        double publishDelayRatio,
+        long publishDelayMaxMillis,
+        double nackDelayRatio,
+        long nackDelayMaxMillis,
+        int maxDeliveries,
+        boolean singleActiveConsumer,
+        long pullWaitMillis,
+        long loadMillis) {
 
     RunParams {
         producers = List.copyOf(producers);
@@ -75,10 +95,31 @@ record RunParams(long seed, int processes, int maxMessageBytes, int publishBatch
             producerList = perProcessThreads(r, processes);
             consumerList = perProcessThreads(r, processes);
         }
-        return new RunParams(seed, processes, maxBytes, publishBatch, chunkSize, producerList, consumerList,
-                durability, depth,
-                ack, wn * rest, wr * rest, wz * rest, slow, extend, lease, publishDelay, publishDelayMax, nackDelay,
-                nackDelayMax, maxDeliveries, single, pullWait, limits.loadMillis());
+        return new RunParams(
+                seed,
+                processes,
+                maxBytes,
+                publishBatch,
+                chunkSize,
+                producerList,
+                consumerList,
+                durability,
+                depth,
+                ack,
+                wn * rest,
+                wr * rest,
+                wz * rest,
+                slow,
+                extend,
+                lease,
+                publishDelay,
+                publishDelayMax,
+                nackDelay,
+                nackDelayMax,
+                maxDeliveries,
+                single,
+                pullWait,
+                limits.loadMillis());
     }
 
     /** 프로세스마다 0~4. 전체가 0이면 첫 프로세스에 1을 준다(전체에서 1 이상). */
@@ -131,13 +172,31 @@ record RunParams(long seed, int processes, int maxMessageBytes, int publishBatch
 
     static RunParams fromArg(String arg) {
         Map<?, ?> m = (Map<?, ?>) Json.parse(new String(Base64.getUrlDecoder().decode(arg), StandardCharsets.UTF_8));
-        return new RunParams(Long.parseLong((String) m.get("seed")), i(m, "processes"), i(m, "maxMessageBytes"), i(m, "publishBatch"),
-                i(m, "chunkSize"), ints(m, "producers"), ints(m, "consumers"),
-                Durability.valueOf((String) m.get("durability")), i(m, "prefillDepth"), d(m, "ackRatio"),
-                d(m, "nackRatio"), d(m, "rejectRatio"), d(m, "noneRatio"), d(m, "slowChunkRatio"),
-                d(m, "extendRatio"), l(m, "leaseMillis"), d(m, "publishDelayRatio"), l(m, "publishDelayMaxMillis"),
-                d(m, "nackDelayRatio"), l(m, "nackDelayMaxMillis"), i(m, "maxDeliveries"),
-                (Boolean) m.get("singleActiveConsumer"), l(m, "pullWaitMillis"), l(m, "loadMillis"));
+        return new RunParams(
+                Long.parseLong((String) m.get("seed")),
+                i(m, "processes"),
+                i(m, "maxMessageBytes"),
+                i(m, "publishBatch"),
+                i(m, "chunkSize"),
+                ints(m, "producers"),
+                ints(m, "consumers"),
+                Durability.valueOf((String) m.get("durability")),
+                i(m, "prefillDepth"),
+                d(m, "ackRatio"),
+                d(m, "nackRatio"),
+                d(m, "rejectRatio"),
+                d(m, "noneRatio"),
+                d(m, "slowChunkRatio"),
+                d(m, "extendRatio"),
+                l(m, "leaseMillis"),
+                d(m, "publishDelayRatio"),
+                l(m, "publishDelayMaxMillis"),
+                d(m, "nackDelayRatio"),
+                l(m, "nackDelayMaxMillis"),
+                i(m, "maxDeliveries"),
+                (Boolean) m.get("singleActiveConsumer"),
+                l(m, "pullWaitMillis"),
+                l(m, "loadMillis"));
     }
 
     private static double d(Map<?, ?> m, String k) {
@@ -187,7 +246,8 @@ record RunParams(long seed, int processes, int maxMessageBytes, int publishBatch
 
     /** 실패 출력용으로 풀어 쓴 매개변수. 한 줄에 하나. */
     String describe() {
-        return toMap().entrySet().stream().map(e -> "  " + e.getKey() + " = " + e.getValue())
+        return toMap().entrySet().stream()
+                .map(e -> "  " + e.getKey() + " = " + e.getValue())
                 .collect(Collectors.joining("\n"));
     }
 }

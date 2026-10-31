@@ -84,9 +84,11 @@ class TransactionExecutorReadTest {
 
     @Test
     void BUSY가_아닌_오류는_SmqStorageException이다() {
-        assertThrows(SmqStorageException.class, () -> executor.anyOrUncertain(c -> {
-            throw new SQLException("boom", null, 19);
-        }));
+        assertThrows(
+                SmqStorageException.class,
+                () -> executor.anyOrUncertain(c -> {
+                    throw new SQLException("boom", null, 19);
+                }));
     }
 
     @Test

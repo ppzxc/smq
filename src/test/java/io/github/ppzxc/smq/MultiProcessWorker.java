@@ -37,7 +37,8 @@ public final class MultiProcessWorker {
         });
         stdin.setDaemon(true);
         stdin.start();
-        try (Smq smq = Smq.sqlite(db).leaseDuration(Duration.ofSeconds(leaseSeconds)).open()) {
+        try (Smq smq =
+                Smq.sqlite(db).leaseDuration(Duration.ofSeconds(leaseSeconds)).open()) {
             Queue q = smq.declare("q", QueueOptions.defaults());
             for (int i = 0; i < count; i++) {
                 q.publish(OutgoingMessage.of((name + "-" + i).getBytes(StandardCharsets.UTF_8)));

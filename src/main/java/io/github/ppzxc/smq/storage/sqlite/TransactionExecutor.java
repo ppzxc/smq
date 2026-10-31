@@ -58,6 +58,7 @@ final class TransactionExecutor {
     private static final int CHECKPOINT_BUSY_TIMEOUT_MILLIS = 50;
     /** 되감기에 실패(BUSY)한 뒤 이 커밋 수만큼은 다시 시도하지 않는다. 커밋마다 {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS}씩 쌓이지 않게 한다. */
     private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
+
     private static final Path NO_WAL = Path.of("");
 
     private final Connection connection;
@@ -69,11 +70,12 @@ final class TransactionExecutor {
     /** {@link #walOverLimit}일 때 다시 시도할 커밋 횟수. */
     private long checkpointRetryAtCommit;
     /** 처음 확인할 때 찾는다. */
-    private Path walFile;
+    private Path walFile = NO_WAL;
     /** 마지막으로 되감은 직후의 WAL 파일 크기(최대 {@link #WAL_FILE_KEEP_BYTES}). 파일이 이보다 커져야 다시 되감는다. */
     private long walSizeAtRestart;
     /** 마지막으로 본 WAL 헤더의 salt. 되감긴 뒤 첫 쓰기가 바꾸므로 다른 연결이 되감았는지 알 수 있다. */
     private long walSaltSeen;
+
     private final ReentrantLock lock = new ReentrantLock();
     /** 열 때 판정한 스키마 버전. {@link #execute}가 이 값과 파일의 버전을 비교한다. */
     private volatile int baselineVersion;
@@ -196,10 +198,10 @@ final class TransactionExecutor {
         }
         int busyTimeout = -1;
         try {
-            if (walFile == null) {
+            if (walFile.equals(NO_WAL)) {
                 walFile = locateWalFile();
             }
-            long size = walFile == NO_WAL ? 0 : walSize();
+            long size = walFile.equals(NO_WAL) ? 0 : walSize();
             walOverLimit = size >= CHECKPOINT_WAL_BYTES && size > walSizeAtRestart;
             if (!walOverLimit) {
                 return;
@@ -244,7 +246,8 @@ final class TransactionExecutor {
 
     /** 주 데이터베이스 파일의 WAL 경로. 파일이 없는 데이터베이스(메모리, 임시)면 {@link #NO_WAL}. */
     private Path locateWalFile() throws SQLException {
-        try (Statement s = connection.createStatement(); ResultSet rs = s.executeQuery("PRAGMA database_list")) {
+        try (Statement s = connection.createStatement();
+                ResultSet rs = s.executeQuery("PRAGMA database_list")) {
             while (rs.next()) {
                 if ("main".equals(rs.getString(2))) {
                     String file = rs.getString(3);
@@ -300,7 +303,7 @@ final class TransactionExecutor {
     <T> T retryOnBusy(SqlAction<T> action, Deadline deadline) {
         acquire(deadline);
         try {
-            for (int attempt = 1;; attempt++) {
+            for (int attempt = 1; ; attempt++) {
                 try {
                     return action.run();
                 } catch (SQLException e) {

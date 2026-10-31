@@ -44,8 +44,8 @@ class SqliteSmqTest extends SmqConformanceTest {
             second.declare("dead", QueueOptions.defaults());
             assertEquals(options, second.declare("orders", options).options());
             assertEquals(options, second.queue("orders").options());
-            assertThrows(QueueDeclarationConflictException.class,
-                    () -> second.declare("orders", QueueOptions.defaults()));
+            assertThrows(
+                    QueueDeclarationConflictException.class, () -> second.declare("orders", QueueOptions.defaults()));
             assertThrows(QueueInUseException.class, () -> second.delete("dead"));
         }
     }
@@ -88,10 +88,16 @@ class SqliteSmqTest extends SmqConformanceTest {
 
     @Test
     void 호출_순서와_상관없이_durability와_공용_설정을_체인할_수_있다() {
-        try (Smq a = Smq.sqlite(dir.resolve("a.db")).clock(clock).durability(Durability.PROCESS_CRASH)
-                .leaseDuration(Duration.ofSeconds(1)).open();
-                Smq b = Smq.sqlite(dir.resolve("b.db")).durability(Durability.PROCESS_CRASH).clock(clock)
-                        .leaseDuration(Duration.ofSeconds(1)).open()) {
+        try (Smq a = Smq.sqlite(dir.resolve("a.db"))
+                        .clock(clock)
+                        .durability(Durability.PROCESS_CRASH)
+                        .leaseDuration(Duration.ofSeconds(1))
+                        .open();
+                Smq b = Smq.sqlite(dir.resolve("b.db"))
+                        .durability(Durability.PROCESS_CRASH)
+                        .clock(clock)
+                        .leaseDuration(Duration.ofSeconds(1))
+                        .open()) {
             assertNotNull(a.declare("q", QueueOptions.defaults()));
             assertNotNull(b.declare("q", QueueOptions.defaults()));
         }
@@ -110,7 +116,11 @@ class SqliteSmqTest extends SmqConformanceTest {
 
     @Test
     void lock_대기_하한을_없애_빈_청크가_실제로_나오는_조건에서도_동시_꺼내기_계약을_지킨다() throws Exception {
-        Smq smq = builder().clock(clock).leaseDuration(Duration.ofMinutes(10)).lockWaitFloor(Duration.ZERO).open();
+        Smq smq = builder()
+                .clock(clock)
+                .leaseDuration(Duration.ofMinutes(10))
+                .lockWaitFloor(Duration.ZERO)
+                .open();
         direct.add(smq);
 
         // 빈 청크는 스레드 타이밍에 달려 한 판(300라운드)에 안 나올 수 있다. 계약 검사는 매 판 모두 하고, 빈 청크는 상한까지 판을 거듭해 본다.
@@ -120,8 +130,7 @@ class SqliteSmqTest extends SmqConformanceTest {
             roundsWithEmptyChunk = assertConcurrentPullContract(smq, "race" + attempt + "-");
         }
 
-        assertTrue(roundsWithEmptyChunk > 0,
-                "하한을 없앴는데도 " + attempts + "판 동안 빈 청크가 한 번도 나오지 않아 이 조건이 경합을 만들지 못했다");
+        assertTrue(roundsWithEmptyChunk > 0, "하한을 없앴는데도 " + attempts + "판 동안 빈 청크가 한 번도 나오지 않아 이 조건이 경합을 만들지 못했다");
     }
 
     @Test
@@ -155,9 +164,13 @@ class SqliteSmqTest extends SmqConformanceTest {
             a.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d")));
 
             List<Chunk> chunks = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-            runConcurrently(List.of(() -> chunks.add(a.pull(4, Duration.ZERO)), () -> chunks.add(b.pull(4, Duration.ZERO))));
+            runConcurrently(
+                    List.of(() -> chunks.add(a.pull(4, Duration.ZERO)), () -> chunks.add(b.pull(4, Duration.ZERO))));
 
-            List<MessageId> delivered = chunks.stream().flatMap(c -> c.messages().stream()).map(Message::id).toList();
+            List<MessageId> delivered = chunks.stream()
+                    .flatMap(c -> c.messages().stream())
+                    .map(Message::id)
+                    .toList();
             assertEquals(4, delivered.size(), "round " + round + " " + delivered);
             assertEquals(4, java.util.Set.copyOf(delivered).size(), "round " + round + " " + delivered);
         }

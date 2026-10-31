@@ -336,13 +336,24 @@ class SessionTest {
     }
 
     @Test
-    void 백로그_증가는_실패로_멈추고_보고에_추세가_나온다() throws IOException {
-        Session s = soakSession(fake(p -> soakResult(p, Verdict.BACKLOG_GROWING, report(true))));
-        assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L).iterator(), Long.MAX_VALUE));
-        assertEquals(List.of(1L), executed);
+    void 백로그_증가는_기록하고_계속_돌며_끝에서_실패로_종료한다() throws IOException {
+        Session s = soakSession(fake(
+                p -> soakResult(p, p.seed() == 2 ? Verdict.BACKLOG_GROWING : Verdict.PASS, report(p.seed() == 2))));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L, 3L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L, 3L), executed, "용량 문제는 다음 시드를 막지 않는다");
         String out = output();
         assertTrue(out.contains("BACKLOG_GROWING"), out);
         assertTrue(out.contains("백로그"), out);
-        assertTrue(Files.exists(s.failureDir(1).resolve("smq.db")), "실패는 DB까지 보존한다");
+        assertTrue(out.contains("합계: 3회 실행, 실패"), out);
+        assertTrue(Files.exists(s.failureDir(2).resolve("smq.db")), "실패한 실행은 DB까지 보존한다");
+        assertEquals(3, Files.readAllLines(dir.resolve("runs.jsonl")).size());
+    }
+
+    @Test
+    void 고정_속도에서도_불변식_위반은_바로_멈춘다() {
+        Session s =
+                soakSession(fake(p -> soakResult(p, p.seed() == 2 ? Verdict.VIOLATION : Verdict.PASS, report(false))));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(1L, 2L, 3L).iterator(), Long.MAX_VALUE));
+        assertEquals(List.of(1L, 2L), executed);
     }
 }

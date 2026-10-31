@@ -59,7 +59,7 @@ final class Session {
 
     /**
      * @param budgetMillis 새 실행을 시작할 수 있는 시간. 지나면 더 시작하지 않는다(이미 도는 실행은 끝낸다)
-     * @return 모두 통과하면 {@link #EXIT_OK}, 첫 실패에서 멈추면 {@link #EXIT_FAILED}
+     * @return 모두 통과하면 {@link #EXIT_OK}, 실패가 있으면 {@link #EXIT_FAILED}. 백로그 증가({@link Verdict#BACKLOG_GROWING})는 기록만 하고 계속 돌고, 다른 실패는 거기서 멈춘다
      */
     int run(Iterator<Long> seeds, long budgetMillis) {
         long start = System.nanoTime();
@@ -78,6 +78,10 @@ final class Session {
             if (!result.passed()) {
                 reportFailure(result);
                 exit = EXIT_FAILED;
+                // 백로그 증가는 그 매개변수 구성의 용량 문제일 수 있어 다음 시드를 막지 않는다. 나머지 실패는 바로 멈춘다.
+                if (result.verdict() == Verdict.BACKLOG_GROWING) {
+                    continue;
+                }
                 break;
             }
             out.printf(

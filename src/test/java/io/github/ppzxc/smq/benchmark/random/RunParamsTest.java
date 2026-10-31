@@ -67,7 +67,7 @@ class RunParamsTest {
             assertEquals(0, p.publishDelayRatio(), 0, "지연 발행 없음");
             assertEquals(0, p.slowChunkRatio(), 0, "느린 청크 없음");
             assertEquals(0, p.nackDelayRatio(), 0, "NACK 지연 없음");
-            assertEquals(0, p.prefillDepth(), "미리 채우기 없음");
+            assertEquals(100_000, p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
             assertTrue(p.maxMessageBytes() <= 1024, "메시지 크기 상한 1KB");
             int perThread = Math.max(1, 500 / p.totalProducers());
             assertTrue(p.publishBatch() <= Math.max(1, perThread / 10), "배치는 스레드 몫의 0.1초 분량 이하: " + p.publishBatch());

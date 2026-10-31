@@ -152,7 +152,7 @@ SKIP  regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec  [기준선에 �
 - 매개변수는 시드에서 뽑되 목표 속도를 못 맞추는 원인이 우연이 되지 않게 고친다: 지연 발행, NACK 지연, 느린 처리, 미리 채우기를 없애고 메시지 크기를 1KB까지로 줄이며 발행 배치는 스레드 몫의 0.1초 분량 이하로 줄인다.
 - 판정은 불변식 검사에 더해 **백로그 증가**를 본다. 부하 중 대상 큐 깊이(ready+leased+delayed, 0.5초 간격)의 최소제곱 기울기가 목표 속도의 5%를 넘고, 그 기울기로 늘어난 양이 목표 속도 2초 분량보다 많으면 `BACKLOG_GROWING`으로 실패한다. 깊이가 프로듀서가 쉬는 상한(기본 5만 건)의 90%에 닿으면 기울기와 무관하게 `BACKLOG_GROWING`이다(소비가 못 따라가면 프로듀서가 쉬어 깊이가 상한에서 멈추고 추세가 평평해지기 때문이다). 표본이 3개 미만이면 추세를 판정하지 않으므로 `--load`는 최소 2초 이상으로 준다. 소진 실패와 불변식 위반이 먼저다.
 - **달성률**(부하 구간에 실제 발행한 수 / 목표 × 구간 길이)은 기록만 하고 판정하지 않는다. fsync가 느린 환경(WSL2 등)에서 `POWER_LOSS`가 목표를 못 따라갈 수 있어서다. `runs-*.jsonl`의 `soak`에 `targetRate`, `achievedRatio`, `ackRate`, `backlogSlopePerSec`, `maxDepth`, `backlogGrowing`이 남는다.
-- JFR이 기본으로 켜진다(`parent.jfr`와 자식의 `p<n>.jfr`). 통과한 고정 속도 실행도 DB와 자식의 발행·전달 기록(`p<n>-published.jsonl`, `p<n>-deliveries.jsonl`)만 지우고 JFR과 메트릭 파일을 `work/<seed>/`에 남긴다.
+- JFR이 기본으로 켜진다(부모는 `build/random-bench/parent.jfr`, 자식은 실행 디렉터리의 `p<n>.jfr`). 통과한 고정 속도 실행도 DB와 자식의 발행·전달 기록(`p<n>-published.jsonl`, `p<n>-deliveries.jsonl`)만 지우고 JFR과 메트릭 파일을 `work/<seed>/`에 남긴다.
 - 자식 JVM마다 `p<n>-jvm-metrics.jsonl`(힙, 비힙, GC, 스레드, FD, `processCpuLoad`, `processCpuTimeMs`)을 남기고, 요약(`peakCpuLoad`, `meanCpuLoad` 포함)이 `childMetrics`에 붙는다. `processCpuTimeMs`는 파일에만 있고 요약에는 없다. `jvm-metrics.jsonl`과 `jvmMetrics`는 부모 JVM의 것이다. `rssMB`는 이름과 달리 `getCommittedVirtualMemorySize`이므로 상주 메모리로 읽으면 안 된다.
 
 시각 규약: 발행과 정산은 호출 직전의 벽시계를, 꺼내기는 호출이 돌아온 직후의 벽시계를 기록한다. 검사기는 지연과 단일 활성 컨슈머 판정에 50ms 허용 오차를 둔다.

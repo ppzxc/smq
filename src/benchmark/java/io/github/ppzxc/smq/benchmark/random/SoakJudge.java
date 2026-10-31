@@ -25,7 +25,7 @@ final class SoakJudge {
      * @param achievedRatio 부하 구간에 실제 발행한 수 / (목표 * 구간 길이)
      * @param ackRate 부하 구간에 ACK된 초당 메시지 수
      * @param backlogSlopePerSec 큐 깊이(ready+leased+delayed) 표본의 최소제곱 기울기(개/초). 표본이 3개 미만이면 0
-     * @param maxDepth 부하 중 표본한 큐 깊이의 최댓값
+     * @param maxDepth 부하 중 잰 큐 깊이 표본의 최댓값
      * @param backlogGrowing 백로그가 계속 늘었는가. 실행의 실패 기준이다
      */
     record Report(

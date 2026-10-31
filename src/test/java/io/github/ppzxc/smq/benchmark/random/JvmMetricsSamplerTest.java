@@ -17,6 +17,10 @@ class JvmMetricsSamplerTest {
 
     @Test
     void 표본_줄에_프로세스_CPU가_들어_있다() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                java.lang.management.ManagementFactory.getOperatingSystemMXBean()
+                        instanceof com.sun.management.OperatingSystemMXBean,
+                "이 플랫폼은 프로세스 CPU를 주지 않는다");
         try (JvmMetricsSampler s = JvmMetricsSampler.start(dir, 30)) {
             long end = System.nanoTime() + 400_000_000L;
             while (System.nanoTime() < end) {

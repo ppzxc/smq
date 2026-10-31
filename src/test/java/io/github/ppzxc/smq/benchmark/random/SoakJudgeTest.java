@@ -52,8 +52,11 @@ class SoakJudgeTest {
         // 기울기는 20/s로 5%(25/s) 아래다.
         assertFalse(SoakJudge.judge(500, 10.0, 5_000, 4_800, depths(0, 20, 20), INTERVAL_MS, CAP)
                 .backlogGrowing());
-        // 기울기는 크지만 총 증가가 2초 분량(1,000개)보다 작다: 4초 동안 +30/s는 아니고, 표본이 짧은 경우.
-        assertFalse(SoakJudge.judge(500, 1.0, 500, 400, depths(0, 400, 2), INTERVAL_MS, CAP)
+        // 기울기는 800/s로 크지만 표본 구간이 1초라 늘어난 양(800개)이 2초 분량(1,000개)보다 작다.
+        assertFalse(SoakJudge.judge(500, 1.0, 500, 400, depths(0, 800, 3), INTERVAL_MS, CAP)
+                .backlogGrowing());
+        // 같은 기울기라도 구간이 길어 늘어난 양이 2초 분량을 넘으면 증가다.
+        assertTrue(SoakJudge.judge(500, 1.0, 500, 400, depths(0, 800, 4), INTERVAL_MS, CAP)
                 .backlogGrowing());
     }
 

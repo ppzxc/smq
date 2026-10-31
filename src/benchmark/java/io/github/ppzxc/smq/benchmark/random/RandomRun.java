@@ -382,11 +382,13 @@ final class RandomRun {
     }
 
     /**
-     * 쌓인 양이 선을 넘었는지. 단일 프로세스는 자기가 센 발행과 ACK의 차이로 보고, 다중 프로세스는 ACK가 다른 프로세스에서 일어나
-     * 이 프로세스의 수로는 알 수 없으므로 큐의 {@code counts()}를 잠깐씩 캐시해 보며 메시지 수로만 제한한다.
+     * 쌓인 양이 선을 넘었는지. 무작위 모드의 단일 프로세스는 자기가 센 발행과 ACK의 차이로 보고, 다중 프로세스는 ACK가 다른
+     * 프로세스에서 일어나 이 프로세스의 수로는 알 수 없으므로 큐의 {@code counts()}를 잠깐씩 캐시해 보며 메시지 수로만 제한한다.
+     * 고정 속도 모드는 단일 프로세스도 {@code counts()}로 본다. REJECT나 dead letter로 빠진 메시지는 ACK로 세지 않아 발행과 ACK의
+     * 차이가 실제 깊이보다 계속 커지므로, 오래 도는 실행에서 프로듀서가 헛되이 멈추고 판정의 포화 기준(큐 깊이)과도 어긋난다.
      */
     private boolean backlogFull(Queue target) {
-        if (params.processes() == 1) {
+        if (params.processes() == 1 && !params.isSoak()) {
             return publishedMessages.get() - ackedMessages.get() >= prefillMessages + BACKLOG_MESSAGES
                     || publishedBytes.get() - ackedBytes.get() >= prefillBytes + BACKLOG_BYTES;
         }

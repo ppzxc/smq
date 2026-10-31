@@ -336,15 +336,15 @@ class RandomRunTest {
     }
 
     @Test
-    void 고정_속도로_돌면_달성률과_백로그_보고가_붙고_메트릭_없는_실행은_보고가_없다() {
+    void 고정_속도로_돌면_달성률과_백로그_보고가_붙는다() {
         Limits soak = Limits.smoke(2_000).withRate(200);
         RunParams p = paramsWithProcesses(1, soak);
         RunResult r = RandomRun.execute(p, dir, InvariantChecker::check);
         assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error() + " " + r.soak());
         assertNotNull(r.soak());
         assertEquals(200, r.soak().targetRate());
-        // 속도 조절이 없으면 2초에 수천 건이라 비율이 크게 넘는다. 실제 시계라 범위를 넉넉히 잡는다.
-        assertTrue(r.soak().achievedRatio() > 0.5 && r.soak().achievedRatio() < 1.5, "달성률: " + r.soak());
+        // 속도 조절이 없으면 2초에 수천 건이라 비율이 크게 넘는다. 실제 시계라 아래쪽은 느린 환경을 봐서 넉넉히, 위쪽만 조인다.
+        assertTrue(r.soak().achievedRatio() > 0.2 && r.soak().achievedRatio() < 1.5, "달성률: " + r.soak());
         assertTrue(r.childMetrics().isEmpty(), "단일 프로세스에는 자식이 없다");
 
         RunResult plain = RandomRun.execute(

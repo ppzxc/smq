@@ -105,9 +105,10 @@ final class Session {
             append(result);
             if (result.passed()) {
                 deleteTree(dir);
-            } else {
-                preserve(result, dir);
+                // 세션은 요약표를 위해 모든 결과를 쌓는다. 통과한 실행의 기록은 여기서 버려야 긴 세션이 힙을 채우지 않는다.
+                return result.withoutRecords();
             }
+            preserve(result, dir);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

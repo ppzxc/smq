@@ -92,6 +92,36 @@ class SessionTest {
     }
 
     @Test
+    void passedRunsDoNotKeepTheirRecordsAliveForTheRestOfTheSession() {
+        List<java.lang.ref.WeakReference<List<Published>>> firstRecords = new ArrayList<>();
+        boolean[] collectedWhileSecondRuns = {false};
+        Session s = session(fake(p -> {
+            if (p.seed() == 2) {
+                for (int i = 0; i < 10 && !firstRecords.get(0).refersTo(null); i++) {
+                    System.gc();
+                }
+                collectedWhileSecondRuns[0] = firstRecords.get(0).refersTo(null);
+            }
+            List<Published> published = new ArrayList<>(
+                    List.of(new Published(new Tag(1, 0, 1), new Content(5, Map.of("bench-tag", "1/0/1")), 100, 0)));
+            if (p.seed() == 1) {
+                firstRecords.add(new java.lang.ref.WeakReference<>(published));
+            }
+            return result(
+                    p,
+                    Verdict.PASS,
+                    1000,
+                    5.0,
+                    List.of(),
+                    new RunResult.Records(published, new ArrayList<>(), new ArrayList<>()));
+        }));
+
+        assertEquals(Session.EXIT_OK, s.run(List.of(1L, 2L).iterator(), Long.MAX_VALUE));
+
+        assertTrue(collectedWhileSecondRuns[0], "통과한 실행의 기록은 다음 실행이 도는 동안 메모리에서 내려가야 한다");
+    }
+
+    @Test
     void firstViolationStopsTheSessionAndPreservesFilesAndRecords() throws IOException {
         RunResult.Records records = new RunResult.Records(
                 List.of(new Published(new Tag(7, 0, 3), new Content(5, Map.of("bench-tag", "7/0/3")), 100, 0)),

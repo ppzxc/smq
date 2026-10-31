@@ -31,6 +31,23 @@ record RunResult(
         static final Records EMPTY = new Records(List.of(), List.of(), List.of());
     }
 
+    /** 기록만 비운 사본. 통과한 실행의 기록은 더 쓸 데가 없어서, 세션이 결과를 쌓아 둘 때 힙을 차지하지 않게 한다. */
+    RunResult withoutRecords() {
+        return new RunResult(
+                params,
+                verdict,
+                msgPerSec,
+                mbPerSec,
+                p50Ms,
+                p99Ms,
+                violations,
+                error,
+                Records.EMPTY,
+                errorDetail,
+                walMaxBytes,
+                jvmMetrics);
+    }
+
     boolean passed() {
         return verdict == Verdict.PASS;
     }

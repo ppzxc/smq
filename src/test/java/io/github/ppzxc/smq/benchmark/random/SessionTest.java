@@ -285,7 +285,7 @@ class SessionTest {
                 null,
                 null,
                 soak,
-                List.of(new JvmMetricsSampler.Summary(1, 2, 3, 4, 5, 6, 7, 8, 0.7, 0.35)));
+                List.of(new JvmMetricsSampler.Summary(1, 2, 3, 4, 5, 6, 7, 8, 0.7, 0.35, 9)));
     }
 
     @Test

@@ -71,8 +71,11 @@ class RunParamsTest {
             assertTrue(p.chunkSize() >= 100, "컨슈머 스레드 하나가 500/s를 받을 만큼의 청크: " + p.chunkSize());
             assertEquals(100_000, p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
             assertTrue(p.maxMessageBytes() <= 1024, "메시지 크기 상한 1KB");
-            int perThread = Math.max(1, 500 / p.totalProducers());
-            assertTrue(p.publishBatch() <= Math.max(1, perThread / 10), "배치는 스레드 몫의 0.1초 분량 이하: " + p.publishBatch());
+            long perThread = Math.max(1, (500 + p.totalProducers() - 1) / p.totalProducers());
+            long lowest = Math.min(20, perThread);
+            assertTrue(p.publishBatch() >= lowest, "배치는 건당에 가깝지 않게 20 이상(스레드 몫이 작으면 그 몫): " + p.publishBatch());
+            assertTrue(
+                    p.publishBatch() <= Math.max(lowest, perThread / 4), "배치는 스레드 몫의 0.25초 분량 이하: " + p.publishBatch());
             assertEquals(p, RunParams.fromArg(p.toArg()), "seed " + seed);
         }
     }

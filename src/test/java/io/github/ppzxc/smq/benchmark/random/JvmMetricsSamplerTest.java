@@ -71,4 +71,37 @@ class JvmMetricsSamplerTest {
         JvmMetricsSampler.Summary s = JvmMetricsSampler.summarize(dir.resolve("none.jsonl"));
         assertEquals(0, s.sampleCount());
     }
+
+    @Test
+    void proc_status의_VmRSS를_바이트로_읽는다() {
+        assertEquals(
+                123_456L * 1024,
+                JvmMetricsSampler.parseVmRssBytes(
+                        List.of("Name:\tjava", "VmPeak:\t  999999 kB", "VmRSS:\t  123456 kB", "Threads:\t12")));
+        assertEquals(-1, JvmMetricsSampler.parseVmRssBytes(List.of("Name:\tjava", "Threads:\t12")));
+        assertEquals(-1, JvmMetricsSampler.parseVmRssBytes(List.of("VmRSS:\t  많이 kB")));
+        assertEquals(-1, JvmMetricsSampler.parseVmRssBytes(List.of()));
+    }
+
+    @Test
+    void 요약에_상주_메모리_최댓값이_들어간다() throws IOException {
+        Path f = dir.resolve("rss.jsonl");
+        Files.writeString(f, """
+                {"heapUsedMB":1,"nonHeapUsedMB":1,"gcCount":0,"gcTimeMs":0,"liveThreads":1,"rssMB":100.5}
+                {"heapUsedMB":1,"nonHeapUsedMB":1,"gcCount":0,"gcTimeMs":0,"liveThreads":1,"rssMB":300}
+                {"heapUsedMB":1,"nonHeapUsedMB":1,"gcCount":0,"gcTimeMs":0,"liveThreads":1,"rssMB":200}
+                """);
+        assertEquals(300L * 1024 * 1024, JvmMetricsSampler.summarize(f).peakRssBytes());
+        assertEquals(-1, JvmMetricsSampler.summarize(dir.resolve("none.jsonl")).peakRssBytes(), "표본이 없으면 모른다");
+    }
+
+    @Test
+    void 이_플랫폼이_리눅스면_표본에_실제_RSS가_있다() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(Files.exists(Path.of("/proc/self/status")));
+        try (JvmMetricsSampler s = JvmMetricsSampler.start(dir, 30)) {
+            Thread.sleep(150);
+        }
+        String line = Files.readAllLines(dir.resolve("jvm-metrics.jsonl")).getFirst();
+        assertTrue(line.contains("\"rssMB\""), line);
+    }
 }

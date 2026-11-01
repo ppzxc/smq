@@ -34,7 +34,8 @@ final class JvmMetricsSampler implements AutoCloseable {
             long maxFds,
             int sampleCount,
             double peakCpuLoad,
-            double meanCpuLoad) {
+            double meanCpuLoad,
+            long peakRssBytes) {
 
         Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -48,6 +49,7 @@ final class JvmMetricsSampler implements AutoCloseable {
             m.put("sampleCount", sampleCount);
             m.put("peakCpuLoad", peakCpuLoad);
             m.put("meanCpuLoad", meanCpuLoad);
+            m.put("peakRssMB", peakRssBytes < 0 ? null : peakRssBytes / (1024.0 * 1024.0));
             return m;
         }
     }
@@ -69,6 +71,7 @@ final class JvmMetricsSampler implements AutoCloseable {
     private double peakCpuLoad = -1;
     private double cpuLoadSum;
     private int cpuSamples;
+    private long peakRssBytes = -1;
 
     // MXBeans (불변)
     private final MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
@@ -119,7 +122,8 @@ final class JvmMetricsSampler implements AutoCloseable {
                 maxFds,
                 sampleCount,
                 cpuSamples == 0 ? -1 : peakCpuLoad,
-                cpuSamples == 0 ? -1 : cpuLoadSum / cpuSamples);
+                cpuSamples == 0 ? -1 : cpuLoadSum / cpuSamples,
+                peakRssBytes);
     }
 
     /**
@@ -138,6 +142,7 @@ final class JvmMetricsSampler implements AutoCloseable {
         double peakCpu = -1;
         double cpuSum = 0;
         int cpuN = 0;
+        long peakRss = -1;
         List<String> lines;
         try {
             lines = Files.exists(file) ? Files.readAllLines(file) : List.of();
@@ -157,6 +162,9 @@ final class JvmMetricsSampler implements AutoCloseable {
             gcTime = longOf(m.get("gcTimeMs"));
             peakFds = Math.max(peakFds, longOf(m.get("openFds")));
             maxFds = Math.max(maxFds, longOf(m.get("maxFds")));
+            if (m.get("rssMB") instanceof Number rss) {
+                peakRss = Math.max(peakRss, megabytes(rss));
+            }
             if (m.get("processCpuLoad") instanceof Number cpu && cpu.doubleValue() >= 0) {
                 peakCpu = Math.max(peakCpu, cpu.doubleValue());
                 cpuSum += cpu.doubleValue();
@@ -173,7 +181,8 @@ final class JvmMetricsSampler implements AutoCloseable {
                 maxFds,
                 n,
                 peakCpu,
-                cpuN == 0 ? -1 : cpuSum / cpuN);
+                cpuN == 0 ? -1 : cpuSum / cpuN,
+                peakRss);
     }
 
     private static long megabytes(Object v) {
@@ -235,16 +244,8 @@ final class JvmMetricsSampler implements AutoCloseable {
             // Windows 등에서는 지원하지 않는다
         }
 
-        long rssBytes = -1;
-        try {
-            var os = ManagementFactory.getOperatingSystemMXBean();
-            if (os instanceof com.sun.management.OperatingSystemMXBean sunOs) {
-                // JDK 14+: getProcessCpuLoad 대신 committedVirtualMemorySize로 RSS 근사
-                rssBytes = sunOs.getCommittedVirtualMemorySize();
-            }
-        } catch (Exception ignored) {
-            // 지원하지 않는 플랫폼
-        }
+        long rssBytes = readRssBytes();
+        peakRssBytes = Math.max(peakRssBytes, rssBytes);
 
         double cpuLoad = -1;
         long cpuTimeMs = -1;
@@ -290,6 +291,31 @@ final class JvmMetricsSampler implements AutoCloseable {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** 이 프로세스의 상주 메모리(바이트). Linux의 {@code /proc/self/status}에서만 읽고, 못 읽으면 -1이다. */
+    static long readRssBytes() {
+        try {
+            return parseVmRssBytes(Files.readAllLines(Path.of("/proc/self/status")));
+        } catch (IOException | RuntimeException e) {
+            return -1;
+        }
+    }
+
+    static long parseVmRssBytes(List<String> statusLines) {
+        for (String line : statusLines) {
+            if (line.startsWith("VmRSS:")) {
+                try {
+                    return Long.parseLong(line.substring("VmRSS:".length())
+                                    .replace("kB", "")
+                                    .trim())
+                            * 1024;
+                } catch (NumberFormatException e) {
+                    return -1;
+                }
+            }
+        }
+        return -1;
     }
 
     private static double round2(double v) {

@@ -69,7 +69,12 @@ record RunParams(
      */
     private static final int SOAK_MIN_CHUNK_SIZE = 100;
     /** 고정 속도 모드의 발행 배치는 스레드 몫의 (1 / 이 값)초 분량을 넘지 않게 한다. 배치가 너무 크면 발행이 덩어리로 몰린다. */
-    private static final long SOAK_BATCH_WINDOW_DIVISOR = 10;
+    private static final long SOAK_BATCH_WINDOW_DIVISOR = 4;
+    /**
+     * 고정 속도 모드의 발행 배치 하한. 건당에 가까운 작은 배치는 커밋을 초당 수백 번 만들어 쓰기 락을 포화시키므로(12시간 실행에서
+     * 배치 2~7인 실행에서만 SQLITE_BUSY와 백로그 증가가 났다), 운영에서 쓰는 수준으로 묶는다.
+     */
+    private static final long SOAK_MIN_PUBLISH_BATCH = 20;
 
     static RunParams fromSeed(long seed, Limits limits) {
         SplittableRandom r = new SplittableRandom(seed);
@@ -119,7 +124,9 @@ record RunParams(
             nackDelay = 0;
             long perThread = perThreadRate(
                     rate, producerList.stream().mapToInt(Integer::intValue).sum());
-            publishBatch = (int) Math.max(1, Math.min(publishBatch, perThread / SOAK_BATCH_WINDOW_DIVISOR));
+            long lowest = Math.min(SOAK_MIN_PUBLISH_BATCH, perThread);
+            long highest = Math.max(lowest, perThread / SOAK_BATCH_WINDOW_DIVISOR);
+            publishBatch = (int) Math.max(lowest, Math.min(publishBatch, highest));
         }
         return new RunParams(
                 seed,

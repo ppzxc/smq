@@ -27,10 +27,11 @@ final class Session {
     }
 
     static final int EXIT_OK = 0;
+    static final int EXIT_FAILED = 1;
+
     /** 고정 속도 모드에서 이만큼 연속으로 예외가 나면 멈춘다. */
     static final int MAX_CONSECUTIVE_ERRORS = 3;
 
-    static final int EXIT_FAILED = 1;
     private static final int MAX_VIOLATIONS_PRINTED = 20;
     private static final int SUMMARY_ROWS = 10;
 
@@ -82,13 +83,8 @@ final class Session {
             if (!result.passed()) {
                 reportFailure(result);
                 exit = EXIT_FAILED;
-                // 고정 속도 모드는 긴 실행이라 한 번의 실패로 끊지 않는다. 백로그 증가(용량)와 예외(예: SQLITE_BUSY)는 기록하고
-                // 다음 시드로 가되, 예외가 연속 MAX_CONSECUTIVE_ERRORS번이면 하네스 문제로 보고 멈춘다. 불변식 위반과 소진 실패는
-                // 데이터가 틀렸다는 뜻이라 바로 멈춘다.
                 consecutiveErrors = result.verdict() == Verdict.ERROR ? consecutiveErrors + 1 : 0;
-                if (result.params().isSoak()
-                        && (result.verdict() == Verdict.BACKLOG_GROWING
-                                || (result.verdict() == Verdict.ERROR && consecutiveErrors < MAX_CONSECUTIVE_ERRORS))) {
+                if (continuesAfter(result, consecutiveErrors)) {
                     continue;
                 }
                 break;
@@ -104,6 +100,19 @@ final class Session {
         out.print(Summary.render(results, SUMMARY_ROWS));
         out.printf("합계: %d회 실행, %s%n", results.size(), exit == EXIT_OK ? "위반 없음" : "실패");
         return exit;
+    }
+
+    /**
+     * 실패한 뒤에도 다음 시드를 돌지. 고정 속도 모드는 긴 실행이라 한 번의 실패로 끊지 않는다. 백로그 증가(용량)와 예외(예:
+     * SQLITE_BUSY)는 기록하고 계속 가되, 예외가 연속 {@link #MAX_CONSECUTIVE_ERRORS}번이면 하네스 문제로 보고 멈춘다. 불변식
+     * 위반과 소진 실패는 데이터가 틀렸다는 뜻이라 바로 멈춘다. 무작위 모드는 첫 실패에서 멈춘다.
+     */
+    private static boolean continuesAfter(RunResult failed, int consecutiveErrors) {
+        if (!failed.params().isSoak()) {
+            return false;
+        }
+        return failed.verdict() == Verdict.BACKLOG_GROWING
+                || (failed.verdict() == Verdict.ERROR && consecutiveErrors < MAX_CONSECUTIVE_ERRORS);
     }
 
     private RunResult runOne(RunParams params) {

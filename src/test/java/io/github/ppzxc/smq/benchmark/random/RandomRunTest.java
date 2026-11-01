@@ -375,4 +375,34 @@ class RandomRunTest {
         assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), growing));
         assertEquals(Verdict.DRAIN_TIMEOUT, RandomRun.verdict(false, java.util.List.of(v), growing));
     }
+
+    @Test
+    void 자식을_정리할_때는_모두에게_종료를_먼저_알리고_그다음_기다린다() {
+        java.util.List<String> events = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        ChildSpawner recording = spec -> {
+            int n = spec.process();
+            ChildOutput.write(spec.outDir(), n, new ChildOutput(0, 0, java.util.List.of(), java.util.List.of()));
+            return new ChildSpawner.Running() {
+                @Override
+                public void await(long timeoutMs) {}
+
+                @Override
+                public void requestStop() {
+                    events.add("stop" + n);
+                }
+
+                @Override
+                public void destroy() {
+                    events.add("destroy" + n);
+                }
+            };
+        };
+        RunParams p = paramsWithProcesses(3, Limits.smoke(300));
+        RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), recording);
+
+        assertEquals(
+                java.util.List.of("stop0", "stop1", "stop2", "destroy0", "destroy1", "destroy2"),
+                events,
+                "순서대로 하나씩 신호를 보내고 기다리면 늦게 끝나는 자식 뒤의 자식은 그동안 부하를 돌린다");
+    }
 }

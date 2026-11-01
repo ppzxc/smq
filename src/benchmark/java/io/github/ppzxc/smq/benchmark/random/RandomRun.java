@@ -207,6 +207,8 @@ final class RandomRun {
                 awaitChild(running.get(i), i, timeout);
             }
         } finally {
+            // 모두에게 먼저 알리고 기다린다. 하나씩 알리고 기다리면 늦게 끝나는 자식 뒤의 자식은 그동안 부하를 계속 돈다.
+            running.forEach(ChildSpawner.Running::requestStop);
             running.forEach(ChildSpawner.Running::destroy);
         }
         for (int i = 0; i < params.processes(); i++) {
@@ -691,8 +693,8 @@ final class RandomRun {
 
     /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 다중 프로세스 기준과 같다. */
     private long backlogCapMessages() {
-        long avgBytes = params.maxMessageBytes() / 4 + 64;
-        return params.prefillDepth() + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / avgBytes);
+        return params.prefillDepth()
+                + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / RunParams.avgMessageBytes(params.maxMessageBytes()));
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

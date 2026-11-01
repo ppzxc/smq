@@ -98,10 +98,17 @@ class JvmMetricsSamplerTest {
     @Test
     void 이_플랫폼이_리눅스면_표본에_실제_RSS가_있다() throws Exception {
         org.junit.jupiter.api.Assumptions.assumeTrue(Files.exists(Path.of("/proc/self/status")));
+        Path file = dir.resolve("jvm-metrics.jsonl");
         try (JvmMetricsSampler s = JvmMetricsSampler.start(dir, 30)) {
-            Thread.sleep(150);
+            // 표본이 쓰일 때까지 기다린다. 느린 환경에서 고정 시간만 자면 표본이 0개일 수 있다.
+            for (int i = 0;
+                    i < 200 && (!Files.exists(file) || Files.readAllLines(file).isEmpty());
+                    i++) {
+                Thread.sleep(25);
+            }
         }
-        String line = Files.readAllLines(dir.resolve("jvm-metrics.jsonl")).getFirst();
+        String line = Files.readAllLines(file).getFirst();
         assertTrue(line.contains("\"rssMB\""), line);
+        assertTrue(JvmMetricsSampler.summarize(file).peakRssBytes() > 0, "상주 메모리는 0보다 크다");
     }
 }

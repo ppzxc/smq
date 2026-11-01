@@ -80,6 +80,11 @@ public final class ChildJvm {
                 .orElseThrow(() -> new IllegalStateException("자식 JVM이 결과를 내지 않았다: " + label));
     }
 
+    /** 정상 종료 신호만 보내고 기다리지 않는다. 자식이 여럿이면 모두에게 먼저 보내고 나서 {@link #destroy}로 기다린다. */
+    public void requestStop() {
+        process.destroy();
+    }
+
     /**
      * 자식을 정리한다. 먼저 정상 종료 신호를 보내 JVM의 종료 훅(예: JFR 덤프)이 돌게 하고, {@link #TERMINATE_GRACE_MILLIS} 안에
      * 끝나지 않으면 강제로 끝낸다. 강제 종료만 쓰면 실패한 실행의 JFR이 덤프되지 않아 실패 시점의 프로파일이 사라진다.

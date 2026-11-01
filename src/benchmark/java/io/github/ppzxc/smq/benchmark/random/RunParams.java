@@ -67,14 +67,14 @@ record RunParams(
      * 고정 속도 모드의 청크 크기 하한. 컨슈머 스레드 하나가 꺼내기와 정산(커밋 둘)을 초당 십수 번 하므로, 청크가 작으면 한 스레드가 500/s를
      * 받지 못한다. 단일 활성 큐도 쓰지 않는다: 정산하지 않은 메시지 하나가 큐 전체를 리스 만료까지 막아 초당 수십 건이 한계다.
      */
-    private static final int SOAK_MIN_CHUNK_SIZE = 100;
+    static final int SOAK_MIN_CHUNK_SIZE = 100;
     /** 고정 속도 모드의 발행 배치는 스레드 몫의 (1 / 이 값)초 분량을 넘지 않게 한다. 배치가 너무 크면 발행이 덩어리로 몰린다. */
-    private static final long SOAK_BATCH_WINDOW_DIVISOR = 4;
+    static final long SOAK_BATCH_WINDOW_DIVISOR = 4;
     /**
      * 고정 속도 모드의 발행 배치 하한. 건당에 가까운 작은 배치는 커밋을 초당 수백 번 만들어 쓰기 락을 포화시키므로(12시간 실행에서
      * 배치 2~7인 실행에서만 SQLITE_BUSY와 백로그 증가가 났다), 운영에서 쓰는 수준으로 묶는다.
      */
-    private static final long SOAK_MIN_PUBLISH_BATCH = 20;
+    static final long SOAK_MIN_PUBLISH_BATCH = 20;
 
     static RunParams fromSeed(long seed, Limits limits) {
         SplittableRandom r = new SplittableRandom(seed);
@@ -85,7 +85,7 @@ record RunParams(
         int consumers = 1 + r.nextInt(4);
         Durability durability = r.nextBoolean() ? Durability.POWER_LOSS : Durability.PROCESS_CRASH;
         int depth = r.nextBoolean() ? 0 : logUniform(r, 1_000, 100_000);
-        long avgBytes = maxBytes / 4 + 64;
+        long avgBytes = avgMessageBytes(maxBytes);
         depth = (int) Math.min(Math.min(depth, limits.maxDepth()), PREFILL_BYTES_CAP / avgBytes);
 
         double ack = 0.55 + 0.40 * r.nextDouble();
@@ -116,7 +116,7 @@ record RunParams(
             // 고정 속도 모드: 목표 속도를 못 맞추는 원인이 매개변수의 우연이 되지 않게, 지연과 느린 처리를 빼고 작은 메시지로 맞춘다. 미리 채운 깊이는 상한까지 둬서, 비어 있지 않은 큐에서
             // 시작한다.
             maxBytes = Math.min(maxBytes, SOAK_MAX_MESSAGE_BYTES);
-            depth = (int) Math.min(limits.maxDepth(), PREFILL_BYTES_CAP / (maxBytes / 4 + 64));
+            depth = (int) Math.min(limits.maxDepth(), PREFILL_BYTES_CAP / avgMessageBytes(maxBytes));
             slow = 0;
             single = false;
             chunkSize = Math.max(chunkSize, SOAK_MIN_CHUNK_SIZE);
@@ -166,6 +166,11 @@ record RunParams(
             out.set(0, 1);
         }
         return out;
+    }
+
+    /** 메시지 크기 상한에서 어림한 평균 크기(바이트). 미리 채우기와 쌓임 상한을 바이트로 환산할 때 쓴다. */
+    static long avgMessageBytes(int maxMessageBytes) {
+        return maxMessageBytes / 4 + 64;
     }
 
     /** 고정 속도 모드인가. */

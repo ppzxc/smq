@@ -283,7 +283,7 @@ final class JvmMetricsSampler implements AutoCloseable {
         if (openFds >= 0) m.put("openFds", openFds);
         if (mxFds >= 0) m.put("maxFds", mxFds);
         if (rssBytes >= 0) m.put("rssMB", round2(rssBytes / (1024.0 * 1024.0)));
-        if (cpuLoad >= 0) m.put("processCpuLoad", Math.round(cpuLoad * 10_000.0) / 10_000.0); // 코어가 많으면 0.01 단위는 너무 거칠다
+        if (cpuLoad >= 0) m.put("processCpuLoad", round4(cpuLoad)); // 코어가 많으면 0.01 단위는 너무 거칠다
         if (cpuTimeMs >= 0) m.put("processCpuTimeMs", cpuTimeMs);
 
         try {
@@ -316,6 +316,10 @@ final class JvmMetricsSampler implements AutoCloseable {
             }
         }
         return -1;
+    }
+
+    private static double round4(double v) {
+        return Math.round(v * 10_000.0) / 10_000.0;
     }
 
     private static double round2(double v) {

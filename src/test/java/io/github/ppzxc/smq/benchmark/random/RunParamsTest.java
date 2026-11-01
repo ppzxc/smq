@@ -68,14 +68,16 @@ class RunParamsTest {
             assertEquals(0, p.slowChunkRatio(), 0, "느린 청크 없음");
             assertEquals(0, p.nackDelayRatio(), 0, "NACK 지연 없음");
             assertFalse(p.singleActiveConsumer(), "단일 활성 큐는 청크 하나가 리스 만료까지 큐를 막아 초당 수십 건이 한계다");
-            assertTrue(p.chunkSize() >= 100, "컨슈머 스레드 하나가 500/s를 받을 만큼의 청크: " + p.chunkSize());
-            assertEquals(100_000, p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
+            assertTrue(
+                    p.chunkSize() >= RunParams.SOAK_MIN_CHUNK_SIZE, "컨슈머 스레드 하나가 500/s를 받을 만큼의 청크: " + p.chunkSize());
+            assertEquals(FULL.maxDepth(), p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
             assertTrue(p.maxMessageBytes() <= 1024, "메시지 크기 상한 1KB");
             long perThread = Math.max(1, (500 + p.totalProducers() - 1) / p.totalProducers());
-            long lowest = Math.min(20, perThread);
+            long lowest = Math.min(RunParams.SOAK_MIN_PUBLISH_BATCH, perThread);
             assertTrue(p.publishBatch() >= lowest, "배치는 건당에 가깝지 않게 20 이상(스레드 몫이 작으면 그 몫): " + p.publishBatch());
             assertTrue(
-                    p.publishBatch() <= Math.max(lowest, perThread / 4), "배치는 스레드 몫의 0.25초 분량 이하: " + p.publishBatch());
+                    p.publishBatch() <= Math.max(lowest, perThread / RunParams.SOAK_BATCH_WINDOW_DIVISOR),
+                    "배치는 스레드 몫의 0.25초 분량 이하: " + p.publishBatch());
             assertEquals(p, RunParams.fromArg(p.toArg()), "seed " + seed);
         }
     }

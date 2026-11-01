@@ -2,8 +2,12 @@ package io.github.ppzxc.smq.benchmark.random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -404,5 +408,77 @@ class RandomRunTest {
                 java.util.List.of("stop0", "stop1", "stop2", "destroy0", "destroy1", "destroy2"),
                 events,
                 "순서대로 하나씩 신호를 보내고 기다리면 늦게 끝나는 자식 뒤의 자식은 그동안 부하를 돌린다");
+    }
+
+    private Path subdir(String name) {
+        try {
+            return Files.createDirectories(dir.resolve(name));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** 부하 구간 후반 절반의 깊이 표본 중앙값. 마지막 한 표본은 청크 몇 개가 한꺼번에 빠진 순간일 수 있다. */
+    private static long lateLoadMedianDepth(RunResult r) {
+        List<Long> depths = new ArrayList<>();
+        for (CountsSample c : r.records().samples()) {
+            if (c.queue() == QueueKind.TARGET && !c.afterDrain()) {
+                depths.add(c.ready() + c.leased() + c.delayed());
+            }
+        }
+        List<Long> late = depths.subList(depths.size() / 2, depths.size());
+        List<Long> sorted = late.stream().sorted().toList();
+        return sorted.get(sorted.size() / 2);
+    }
+
+    @Test
+    void 깊은_큐_모드는_깊이가_목표_이하면_컨슈머가_쉬어서_미리_채운_깊이가_유지된다() {
+        // 청크 x 컨슈머 수(최대 2,000)보다 충분히 깊어야 한 번에 몇 청크가 빠져도 목표 근처에 머문다. 실제 설정은 10만 건이다.
+        Limits standingLimits =
+                Limits.smoke(2_500).withRate(200).withDepth(20_000).withStandingQueue(true);
+        RunParams standing = paramsWithProcesses(1, standingLimits);
+        RunResult kept = RandomRun.execute(standing, subdir("standing"), InvariantChecker::check);
+        assertEquals(Verdict.PASS, kept.verdict(), kept.violations() + " " + kept.error());
+        assertTrue(
+                lateLoadMedianDepth(kept) > standing.prefillDepth() * 0.5,
+                "깊이가 유지돼야 한다: " + lateLoadMedianDepth(kept) + " / " + standing.prefillDepth());
+
+        // 대조군: 조절 없이 기본 깊이(2,000)면 컨슈머가 비운다. 깊이가 달라 직접 비교는 아니고, 조절이 없으면 비워진다는 것만 확인한다.
+        // (깊이 20,000은 이 짧은 부하에서 비워지지 않아 대조군이 되지 못한다.)
+        Limits drainingLimits = Limits.smoke(2_500).withRate(200);
+        RunParams draining = paramsWithProcesses(1, drainingLimits);
+        RunResult drained = RandomRun.execute(draining, subdir("draining"), InvariantChecker::check);
+        assertTrue(
+                lateLoadMedianDepth(drained) < draining.prefillDepth() * 0.5,
+                "조절하지 않으면 컨슈머가 깊이를 비운다(대조군): " + lateLoadMedianDepth(drained));
+    }
+
+    @Test
+    void 깊은_큐_모드의_소진_한도는_부하_끝에_남아_있을_깊이만큼_늘어난다() {
+        Limits base = Limits.full(10_000).withRate(500);
+        RunParams plain = RunParams.fromSeed(7, base);
+        RunParams standing = RunParams.fromSeed(7, base.withStandingQueue(true));
+        assertEquals(plain.leaseMillis(), standing.leaseMillis(), "같은 시드라 리스 기한은 같다");
+        // 소진은 초당 2,000건 이상을 가정한다. 깊이가 유지되면 부하가 끝날 때 그만큼 남아 있다.
+        assertEquals(
+                standing.prefillDepth() / 2,
+                RandomRun.drainLimit(standing) - RandomRun.drainLimit(plain),
+                "미리 채운 깊이 / 2,000 초만큼 더 준다(ms)");
+        assertTrue(RandomRun.drainLimit(standing) > RandomRun.drainLimit(plain));
+    }
+
+    @Test
+    void 포화_판정_기준은_어떤_메시지_크기와_깊이_조합에서도_깊이_유지_수준보다_높다() {
+        // 미리 채운 깊이는 데이터 256MB 추정으로도 제한되므로, 큰 메시지 + 깊은 큐 조합에서도 정상 깊이가 포화로 판정되지 않아야 한다.
+        Limits full = Limits.full(10_000).withRate(500);
+        for (int bytes : new int[] {256, 1_024, 4_096, 16_384, 60_000}) {
+            for (int depth : new int[] {100_000, 300_000, 5_000_000}) {
+                RunParams p = RunParams.fromSeed(7, full.withMessageBytes(bytes).withDepth(depth));
+                long cap = RandomRun.backlogCapMessages(p);
+                assertTrue(
+                        SoakJudge.SATURATION_FRACTION * cap > p.prefillDepth(),
+                        "크기 " + bytes + ", 깊이 " + depth + ": 깊이 " + p.prefillDepth() + ", 상한 " + cap);
+            }
+        }
     }
 }

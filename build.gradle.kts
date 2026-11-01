@@ -208,6 +208,21 @@ abstract class RandomBench : JavaExec() {
     @get:Optional
     @get:Option(option = "rate", description = "고정 속도 모드. 프로듀서 전체가 초당 이만큼 보내고 달성률과 백로그 추세를 판정한다. JFR이 기본으로 켜진다 (예: 500)")
     abstract val rate: Property<String>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "message-bytes", description = "고정 속도 모드의 메시지 크기 상한(최소는 그 절반). 기본 1024. --rate가 있어야 한다")
+    abstract val messageBytes: Property<String>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "depth", description = "고정 속도 모드의 미리 채울 깊이. 기본 100000. --rate가 있어야 한다")
+    abstract val depth: Property<String>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "standing-queue", description = "고정 속도 모드에서 큐 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어 그 깊이를 유지한다. --rate가 있어야 한다")
+    abstract val standingQueue: Property<Boolean>
 }
 
 val randomBenchMain = "io.github.ppzxc.smq.benchmark.random.RandomBenchMain"
@@ -223,6 +238,9 @@ tasks.register<RandomBench>("randomBench") {
         masterSeed.orNull?.let { args("--master-seed", it) }
         if (heapDump.orNull == true) args("--heap-dump")
         rate.orNull?.let { args("--rate", it) }
+        messageBytes.orNull?.let { args("--message-bytes", it) }
+        depth.orNull?.let { args("--depth", it) }
+        if (standingQueue.orNull == true) args("--standing-queue")
         if (jfr.orNull == true) args("--jfr")
     }
 }

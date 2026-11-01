@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
  * @param extendRatio 처리 시간이 리스 기한의 절반을 넘는 청크가 리스를 연장할 확률
  * @param maxDeliveries 최대 전달 횟수. 없으면 0
  * @param targetRate 프로듀서 전체의 목표 초당 메시지 수. 0이면 목표 없이 최대한 보낸다(무작위 모드)
+ * @param minMessageBytes 메시지 크기의 하한. 0이면 0부터 로그 균등(무작위 모드), 양수면 하한부터 상한까지 균등(고정 속도 모드)
+ * @param consumerPaced 깊은 큐 모드. 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어서, 소비가 유입과 같아지며 깊이가 유지된다
  */
 record RunParams(
         long seed,
@@ -51,7 +53,9 @@ record RunParams(
         boolean singleActiveConsumer,
         long pullWaitMillis,
         long loadMillis,
-        long targetRate) {
+        long targetRate,
+        int minMessageBytes,
+        boolean consumerPaced) {
 
     RunParams {
         producers = List.copyOf(producers);
@@ -61,8 +65,6 @@ record RunParams(
     static final int MAX_MESSAGE_BYTES = 64 * 1024;
     /** 미리 채우기가 만드는 데이터의 상한(바이트 추정). 큰 메시지로 수 GB를 만들지 않으려는 것이다. */
     private static final long PREFILL_BYTES_CAP = 256L * 1024 * 1024;
-    /** 고정 속도 모드의 메시지 크기 상한. 운영의 작은 메시지에 가깝게 맞춘다. */
-    private static final int SOAK_MAX_MESSAGE_BYTES = 1024;
     /**
      * 고정 속도 모드의 청크 크기 하한. 컨슈머 스레드 하나가 꺼내기와 정산(커밋 둘)을 초당 십수 번 하므로, 청크가 작으면 한 스레드가 500/s를
      * 받지 못한다. 단일 활성 큐도 쓰지 않는다: 정산하지 않은 메시지 하나가 큐 전체를 리스 만료까지 막아 초당 수십 건이 한계다.
@@ -85,7 +87,7 @@ record RunParams(
         int consumers = 1 + r.nextInt(4);
         Durability durability = r.nextBoolean() ? Durability.POWER_LOSS : Durability.PROCESS_CRASH;
         int depth = r.nextBoolean() ? 0 : logUniform(r, 1_000, 100_000);
-        long avgBytes = avgMessageBytes(maxBytes);
+        long avgBytes = avgMessageBytes(0, maxBytes);
         depth = (int) Math.min(Math.min(depth, limits.maxDepth()), PREFILL_BYTES_CAP / avgBytes);
 
         double ack = 0.55 + 0.40 * r.nextDouble();
@@ -112,11 +114,15 @@ record RunParams(
             consumerList = perProcessThreads(r, processes);
         }
         long rate = limits.ratePerSecond();
+        int minBytes = 0;
+        boolean consumerPaced = false;
         if (rate > 0) {
             // 고정 속도 모드: 목표 속도를 못 맞추는 원인이 매개변수의 우연이 되지 않게, 지연과 느린 처리를 빼고 작은 메시지로 맞춘다. 미리 채운 깊이는 상한까지 둬서, 비어 있지 않은 큐에서
             // 시작한다.
-            maxBytes = Math.min(maxBytes, SOAK_MAX_MESSAGE_BYTES);
-            depth = (int) Math.min(limits.maxDepth(), PREFILL_BYTES_CAP / avgMessageBytes(maxBytes));
+            maxBytes = limits.soakMessageBytes() > 0 ? limits.soakMessageBytes() : Limits.DEFAULT_SOAK_MESSAGE_BYTES;
+            minBytes = Math.max(1, maxBytes / 2); // 0은 '하한 없음'(무작위 모드) 표식이라 쓰지 않는다
+            consumerPaced = limits.standingQueue();
+            depth = (int) Math.min(limits.maxDepth(), PREFILL_BYTES_CAP / avgMessageBytes(minBytes, maxBytes));
             slow = 0;
             single = false;
             chunkSize = Math.max(chunkSize, SOAK_MIN_CHUNK_SIZE);
@@ -153,7 +159,9 @@ record RunParams(
                 single,
                 pullWait,
                 limits.loadMillis(),
-                rate);
+                rate,
+                minBytes,
+                consumerPaced);
     }
 
     /** 프로세스마다 0~4. 전체가 0이면 첫 프로세스에 1을 준다(전체에서 1 이상). */
@@ -168,9 +176,9 @@ record RunParams(
         return out;
     }
 
-    /** 메시지 크기 상한에서 어림한 평균 크기(바이트). 미리 채우기와 쌓임 상한을 바이트로 환산할 때 쓴다. */
-    static long avgMessageBytes(int maxMessageBytes) {
-        return maxMessageBytes / 4 + 64;
+    /** 메시지 크기 범위에서 어림한 평균 크기(바이트). 하한이 없으면 로그 균등으로 보고 상한의 4분의 1로 어림한다. 미리 채우기와 쌓임 상한을 바이트로 환산할 때 쓴다. */
+    static long avgMessageBytes(int minMessageBytes, int maxMessageBytes) {
+        return (minMessageBytes > 0 ? (minMessageBytes + maxMessageBytes) / 2 : maxMessageBytes / 4) + 64;
     }
 
     /** 고정 속도 모드인가. */
@@ -253,7 +261,9 @@ record RunParams(
                 (Boolean) m.get("singleActiveConsumer"),
                 l(m, "pullWaitMillis"),
                 l(m, "loadMillis"),
-                l(m, "targetRate"));
+                l(m, "targetRate"),
+                i(m, "minMessageBytes"),
+                (Boolean) m.get("consumerPaced"));
     }
 
     private static double d(Map<?, ?> m, String k) {
@@ -299,6 +309,8 @@ record RunParams(
         m.put("pullWaitMillis", pullWaitMillis);
         m.put("loadMillis", loadMillis);
         m.put("targetRate", targetRate);
+        m.put("minMessageBytes", minMessageBytes);
+        m.put("consumerPaced", consumerPaced);
         return m;
     }
 

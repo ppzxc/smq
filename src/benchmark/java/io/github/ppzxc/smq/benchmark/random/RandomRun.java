@@ -55,6 +55,10 @@ final class RandomRun {
 
     private static final long CHILD_KILL_GRACE_MS = 60_000;
     private static final long DEPTH_REFRESH_NANOS = 100_000_000L;
+    /** 깊은 큐 모드에서 깊이가 목표 이하일 때 컨슈머가 쉬는 시간. */
+    private static final long STANDING_IDLE_MS = 20;
+    /** 깊은 큐 모드의 소진 한도를 정할 때 가정하는 최소 소진 속도(건/초). */
+    private static final long STANDING_DRAIN_PER_SECOND = 2_000;
 
     interface Checker {
         List<Violation> check(
@@ -91,7 +95,9 @@ final class RandomRun {
     private long prefillBytes;
     private volatile long loadStartMillis;
     private volatile long loadEndMillis;
-    private volatile long depthAtNanos;
+    /** 마지막으로 깊이를 읽은 시각. nanoTime의 원점은 임의라서, 처음부터 갱신 시각이 지난 것으로 시작한다. */
+    private final AtomicLong depthAtNanos = new AtomicLong(System.nanoTime() - DEPTH_REFRESH_NANOS - 1);
+
     private volatile long depth;
     private volatile Path walFile;
     private volatile long walMax = -1;
@@ -110,7 +116,9 @@ final class RandomRun {
     private record Queues(Queue target, Queue deadLetter) {}
 
     static long drainLimit(RunParams p) {
-        return DRAIN_BASE_MS + p.leaseMillis() + 2_000;
+        // 깊은 큐 모드는 부하가 끝날 때 미리 채운 깊이만큼 남아 있다. 소진이 초당 2,000건 이상은 한다고 보고 그만큼 더 준다.
+        long standingExtra = p.consumerPaced() ? p.prefillDepth() * 1_000L / STANDING_DRAIN_PER_SECOND : 0;
+        return DRAIN_BASE_MS + p.leaseMillis() + 2_000 + standingExtra;
     }
 
     /** {@code dir}에 SQLite 파일을 만들고 돈다. 예외는 {@link Verdict#ERROR}로 돌려준다. */
@@ -394,13 +402,19 @@ final class RandomRun {
             return publishedMessages.get() - ackedMessages.get() >= prefillMessages + BACKLOG_MESSAGES
                     || publishedBytes.get() - ackedBytes.get() >= prefillBytes + BACKLOG_BYTES;
         }
+        return depthSnapshot(target) >= backlogCapMessages(params);
+    }
+
+    /** 대상 큐 깊이(ready+leased+delayed). {@code counts()}가 쓰기 락을 잡으므로 {@link #DEPTH_REFRESH_NANOS}마다만 새로 읽는다. */
+    private long depthSnapshot(Queue target) {
         long now = System.nanoTime();
-        if (now - depthAtNanos > DEPTH_REFRESH_NANOS) {
+        long at = depthAtNanos.get();
+        // 100ms가 지난 순간 모든 스레드가 counts()를 부르지 않도록, 시각을 먼저 바꾼 한 스레드만 새로 읽는다.
+        if (now - at > DEPTH_REFRESH_NANOS && depthAtNanos.compareAndSet(at, now)) {
             QueueCounts c = target.counts();
             depth = c.ready() + c.leased() + c.delayed();
-            depthAtNanos = now;
         }
-        return depth >= backlogCapMessages();
+        return depth;
     }
 
     private void consumerLoop(Queue target, Queue dlq) throws InterruptedException {
@@ -408,9 +422,17 @@ final class RandomRun {
             if (round % 4 == 3) {
                 // 대상 큐만 보다가 dead letter 큐가 소진 때까지 쌓이지 않게 가끔 비운다.
                 ackAll(dlq, QueueKind.DEAD_LETTER, params.chunkSize(), Duration.ZERO);
-            } else {
-                consumeTarget(target);
+                continue;
             }
+            // 깊은 큐 모드: 깊이가 목표(미리 채운 깊이) 이하면 쉬고, 넘으면 꺼낸다. 꺼내는 속도를 맞추면 NACK이나 정산하지 않은
+            // 메시지가 큐로 돌아와 실제로 빠지는 양이 유입보다 적어져 깊이가 늘어난다. 깊이로 피드백하면 그 비율과 무관하게 유지된다.
+            if (params.consumerPaced() && depthSnapshot(target) <= params.prefillDepth()) {
+                if (!sleepUnlessStopped(STANDING_IDLE_MS)) {
+                    return;
+                }
+                continue;
+            }
+            consumeTarget(target);
         }
     }
 
@@ -688,13 +710,17 @@ final class RandomRun {
                 loadAckedMessages.get(),
                 depths,
                 SAMPLE_INTERVAL_MS,
-                backlogCapMessages());
+                backlogCapMessages(params));
     }
 
-    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 다중 프로세스 기준과 같다. */
-    private long backlogCapMessages() {
+    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 {@code counts()} 기준(다중 프로세스와 고정 속도 모드)과 같다. */
+    static long backlogCapMessages(RunParams params) {
+        // 미리 채운 깊이가 크면 그 절반까지는 정상 변동으로 본다(깊은 큐가 유지되는 상태를 포화로 오판하지 않게).
+        long headroom = Math.max(BACKLOG_MESSAGES, params.prefillDepth() / 2);
         return params.prefillDepth()
-                + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / RunParams.avgMessageBytes(params.maxMessageBytes()));
+                + Math.min(
+                        headroom,
+                        BACKLOG_BYTES / RunParams.avgMessageBytes(params.minMessageBytes(), params.maxMessageBytes()));
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

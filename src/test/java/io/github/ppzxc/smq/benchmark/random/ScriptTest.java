@@ -80,4 +80,27 @@ class ScriptTest {
         }
         assertTrue(longest <= p.leaseMillis() * 1.5);
     }
+
+    @Test
+    void 고정_속도_모드의_메시지_크기는_최소와_최대_사이에_고르게_퍼진다() {
+        Script soak = new Script(RunParams.fromSeed(5, FULL.withRate(500)));
+        long total = 0;
+        for (long seq = 0; seq < 2_000; seq++) {
+            int size = soak.message(new Tag(5, 0, seq)).message().payload().length;
+            assertTrue(size >= 512 && size <= 1024, "크기: " + size);
+            total += size;
+        }
+        double mean = total / 2_000.0;
+        assertTrue(mean > 720 && mean < 820, "균등이면 평균은 768 근처다: " + mean);
+    }
+
+    @Test
+    void 무작위_모드는_작은_메시지가_많아_크기가_최소로_묶이지_않는다() {
+        Script random = new Script(RunParams.fromSeed(5, FULL));
+        boolean small = false;
+        for (long seq = 0; seq < 500 && !small; seq++) {
+            small = random.message(new Tag(5, 0, seq)).message().payload().length < 100;
+        }
+        assertTrue(small, "로그 균등이라 0에 가까운 크기도 나온다");
+    }
 }

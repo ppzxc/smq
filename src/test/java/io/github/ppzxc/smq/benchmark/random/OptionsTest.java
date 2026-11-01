@@ -75,4 +75,30 @@ class OptionsTest {
         assertTrue(Options.parse(new String[] {"--rate", "500"}, 0).jfr());
         assertFalse(Options.parse(new String[0], 0).jfr());
     }
+
+    @Test
+    void 메시지_크기_깊이_깊은_큐_옵션은_속도_옵션과_함께_받는다() {
+        Options o = Options.parse(
+                new String[] {"--rate", "500", "--message-bytes", "2048", "--depth", "300000", "--standing-queue"}, 0);
+        assertEquals(2048, o.messageBytes());
+        assertEquals(300_000, o.depth());
+        assertTrue(o.standingQueue());
+        Options d = Options.parse(new String[] {"--rate", "500"}, 0);
+        assertEquals(0, d.messageBytes(), "0이면 기본값(1,024)");
+        assertEquals(0, d.depth(), "0이면 한도의 기본 깊이");
+        assertFalse(d.standingQueue());
+    }
+
+    @Test
+    void 속도_없이_쓰면_거절하고_값은_양수여야_한다() {
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--message-bytes", "1024"}, 0));
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--depth", "1000"}, 0));
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--standing-queue"}, 0));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> Options.parse(new String[] {"--rate", "500", "--message-bytes", "0"}, 0));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> Options.parse(new String[] {"--rate", "500", "--depth", "-1"}, 0));
+    }
 }

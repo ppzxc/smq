@@ -162,4 +162,47 @@ class RunParamsTest {
         assertTrue(multiProcess, "스모크 고정 시드에 다중 프로세스 실행이 하나 이상 있어야 한다");
         assertEquals(EnumSet.allOf(Durability.class), durabilities);
     }
+
+    @Test
+    void 메시지_크기와_깊이와_깊은_큐_옵션은_고정_속도_모드에서만_먹는다() {
+        RunParams def = RunParams.fromSeed(7, FULL.withRate(500));
+        assertEquals(1024, def.maxMessageBytes());
+        assertEquals(512, def.minMessageBytes());
+        assertFalse(def.consumerPaced());
+
+        RunParams big = RunParams.fromSeed(7, FULL.withRate(500).withMessageBytes(4096));
+        assertEquals(4096, big.maxMessageBytes());
+        assertEquals(2048, big.minMessageBytes());
+
+        RunParams deep = RunParams.fromSeed(7, FULL.withRate(500).withDepth(300_000));
+        assertEquals(300_000, deep.prefillDepth(), "256MB 한도 안이면 요청한 깊이 그대로(평균 832바이트)");
+
+        RunParams standing = RunParams.fromSeed(7, FULL.withRate(500).withStandingQueue(true));
+        assertTrue(standing.consumerPaced());
+        assertEquals(RunParams.fromArg(standing.toArg()), standing);
+
+        RunParams random = RunParams.fromSeed(7, FULL.withStandingQueue(true).withMessageBytes(4096));
+        assertFalse(random.consumerPaced(), "목표 속도가 없으면 소비를 조절하지 않는다");
+        assertEquals(0, random.minMessageBytes());
+    }
+
+    @Test
+    void 큰_메시지로_깊이를_늘려도_미리_채우기는_데이터_상한을_넘지_않는다() {
+        RunParams p = RunParams.fromSeed(
+                7, FULL.withRate(500).withMessageBytes(60_000).withDepth(5_000_000));
+        long avg = RunParams.avgMessageBytes(p.minMessageBytes(), p.maxMessageBytes());
+        assertTrue(p.prefillDepth() * avg <= 256L * 1024 * 1024, "미리 채운 데이터 추정: " + p.prefillDepth() * avg);
+        assertTrue(p.prefillDepth() > 0);
+    }
+
+    @Test
+    void 메시지_크기_1도_하한이_0이_되지_않아_로그_균등으로_돌아가지_않는다() {
+        RunParams p = RunParams.fromSeed(7, FULL.withRate(500).withMessageBytes(1));
+        assertEquals(1, p.maxMessageBytes());
+        assertEquals(1, p.minMessageBytes(), "0은 '하한 없음'(무작위 모드)이라는 뜻이라 쓰면 안 된다");
+        Script script = new Script(p);
+        for (long seq = 0; seq < 50; seq++) {
+            assertEquals(1, script.message(new Tag(7, 0, seq)).message().payload().length);
+        }
+    }
 }

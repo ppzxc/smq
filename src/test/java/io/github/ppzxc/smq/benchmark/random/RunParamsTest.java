@@ -194,4 +194,15 @@ class RunParamsTest {
         assertTrue(p.prefillDepth() * avg <= 256L * 1024 * 1024, "미리 채운 데이터 추정: " + p.prefillDepth() * avg);
         assertTrue(p.prefillDepth() > 0);
     }
+
+    @Test
+    void 메시지_크기_1도_하한이_0이_되지_않아_로그_균등으로_돌아가지_않는다() {
+        RunParams p = RunParams.fromSeed(7, FULL.withRate(500).withMessageBytes(1));
+        assertEquals(1, p.maxMessageBytes());
+        assertEquals(1, p.minMessageBytes(), "0은 '하한 없음'(무작위 모드)이라는 뜻이라 쓰면 안 된다");
+        Script script = new Script(p);
+        for (long seq = 0; seq < 50; seq++) {
+            assertEquals(1, script.message(new Tag(7, 0, seq)).message().payload().length);
+        }
+    }
 }

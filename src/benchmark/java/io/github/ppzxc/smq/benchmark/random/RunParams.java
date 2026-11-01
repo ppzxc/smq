@@ -120,7 +120,7 @@ record RunParams(
             // 고정 속도 모드: 목표 속도를 못 맞추는 원인이 매개변수의 우연이 되지 않게, 지연과 느린 처리를 빼고 작은 메시지로 맞춘다. 미리 채운 깊이는 상한까지 둬서, 비어 있지 않은 큐에서
             // 시작한다.
             maxBytes = limits.soakMessageBytes() > 0 ? limits.soakMessageBytes() : Limits.DEFAULT_SOAK_MESSAGE_BYTES;
-            minBytes = maxBytes / 2;
+            minBytes = Math.max(1, maxBytes / 2); // 0은 '하한 없음'(무작위 모드) 표식이라 쓰지 않는다
             consumerPaced = limits.standingQueue();
             depth = (int) Math.min(limits.maxDepth(), PREFILL_BYTES_CAP / avgMessageBytes(minBytes, maxBytes));
             slow = 0;

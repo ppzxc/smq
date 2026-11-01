@@ -32,7 +32,10 @@ final class JvmMetricsSampler implements AutoCloseable {
             long totalGcTimeMs,
             long peakOpenFds,
             long maxFds,
-            int sampleCount) {
+            int sampleCount,
+            double peakCpuLoad,
+            double meanCpuLoad,
+            long peakRssBytes) {
 
         Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -44,6 +47,9 @@ final class JvmMetricsSampler implements AutoCloseable {
             m.put("peakOpenFds", peakOpenFds);
             m.put("maxFds", maxFds);
             m.put("sampleCount", sampleCount);
+            m.put("peakCpuLoad", peakCpuLoad);
+            m.put("meanCpuLoad", meanCpuLoad);
+            m.put("peakRssMB", peakRssBytes < 0 ? null : peakRssBytes / (1024.0 * 1024.0));
             return m;
         }
     }
@@ -62,6 +68,10 @@ final class JvmMetricsSampler implements AutoCloseable {
     private long peakOpenFds;
     private long maxFds;
     private int sampleCount;
+    private double peakCpuLoad = -1;
+    private double cpuLoadSum;
+    private int cpuSamples;
+    private long peakRssBytes = -1;
 
     // MXBeans (불변)
     private final MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
@@ -110,7 +120,77 @@ final class JvmMetricsSampler implements AutoCloseable {
                 totalGcTime,
                 peakOpenFds,
                 maxFds,
-                sampleCount);
+                sampleCount,
+                cpuSamples == 0 ? -1 : peakCpuLoad,
+                cpuSamples == 0 ? -1 : cpuLoadSum / cpuSamples,
+                peakRssBytes);
+    }
+
+    /**
+     * 메트릭 파일 하나에서 요약을 다시 만든다. 자식 JVM은 요약을 부모에게 넘기지 않고 파일만 남기므로 부모가 읽는다. 파일이 없으면
+     * 표본 0개의 요약이다. GC 횟수와 시간은 마지막 표본의 누적값이다. CPU 필드가 없으면 -1이다.
+     */
+    static Summary summarize(Path file) {
+        long peakHeap = 0;
+        long peakNonHeap = 0;
+        long peakThreads = 0;
+        long gcCount = 0;
+        long gcTime = 0;
+        long peakFds = 0;
+        long maxFds = 0;
+        int n = 0;
+        double peakCpu = -1;
+        double cpuSum = 0;
+        int cpuN = 0;
+        long peakRss = -1;
+        List<String> lines;
+        try {
+            lines = Files.exists(file) ? Files.readAllLines(file) : List.of();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        for (String line : lines) {
+            if (line.isBlank()) {
+                continue;
+            }
+            Map<?, ?> m = (Map<?, ?>) Json.parse(line);
+            n++;
+            peakHeap = Math.max(peakHeap, megabytes(m.get("heapUsedMB")));
+            peakNonHeap = Math.max(peakNonHeap, megabytes(m.get("nonHeapUsedMB")));
+            peakThreads = Math.max(peakThreads, longOf(m.get("liveThreads")));
+            gcCount = longOf(m.get("gcCount"));
+            gcTime = longOf(m.get("gcTimeMs"));
+            peakFds = Math.max(peakFds, longOf(m.get("openFds")));
+            maxFds = Math.max(maxFds, longOf(m.get("maxFds")));
+            if (m.get("rssMB") instanceof Number rss) {
+                peakRss = Math.max(peakRss, megabytes(rss));
+            }
+            if (m.get("processCpuLoad") instanceof Number cpu && cpu.doubleValue() >= 0) {
+                peakCpu = Math.max(peakCpu, cpu.doubleValue());
+                cpuSum += cpu.doubleValue();
+                cpuN++;
+            }
+        }
+        return new Summary(
+                peakHeap,
+                peakNonHeap,
+                peakThreads,
+                gcCount,
+                gcTime,
+                peakFds,
+                maxFds,
+                n,
+                peakCpu,
+                cpuN == 0 ? -1 : cpuSum / cpuN,
+                peakRss);
+    }
+
+    private static long megabytes(Object v) {
+        return v instanceof Number x ? Math.round(x.doubleValue() * 1024 * 1024) : 0;
+    }
+
+    private static long longOf(Object v) {
+        return v instanceof Number x ? x.longValue() : 0;
     }
 
     @Override
@@ -164,15 +244,24 @@ final class JvmMetricsSampler implements AutoCloseable {
             // Windows 등에서는 지원하지 않는다
         }
 
-        long rssBytes = -1;
+        long rssBytes = readRssBytes();
+        peakRssBytes = Math.max(peakRssBytes, rssBytes);
+
+        double cpuLoad = -1;
+        long cpuTimeMs = -1;
         try {
-            var os = ManagementFactory.getOperatingSystemMXBean();
-            if (os instanceof com.sun.management.OperatingSystemMXBean sunOs) {
-                // JDK 14+: getProcessCpuLoad 대신 committedVirtualMemorySize로 RSS 근사
-                rssBytes = sunOs.getCommittedVirtualMemorySize();
+            if (ManagementFactory.getOperatingSystemMXBean()
+                    instanceof com.sun.management.OperatingSystemMXBean sunOs) {
+                cpuLoad = sunOs.getProcessCpuLoad(); // 직전 호출 이후 평균. 첫 표본은 음수일 수 있다
+                cpuTimeMs = sunOs.getProcessCpuTime() / 1_000_000L;
             }
         } catch (Exception ignored) {
             // 지원하지 않는 플랫폼
+        }
+        if (cpuLoad >= 0) {
+            peakCpuLoad = Math.max(peakCpuLoad, cpuLoad);
+            cpuLoadSum += cpuLoad;
+            cpuSamples++;
         }
 
         // 피크 갱신
@@ -194,12 +283,43 @@ final class JvmMetricsSampler implements AutoCloseable {
         if (openFds >= 0) m.put("openFds", openFds);
         if (mxFds >= 0) m.put("maxFds", mxFds);
         if (rssBytes >= 0) m.put("rssMB", round2(rssBytes / (1024.0 * 1024.0)));
+        if (cpuLoad >= 0) m.put("processCpuLoad", round4(cpuLoad)); // 코어가 많으면 0.01 단위는 너무 거칠다
+        if (cpuTimeMs >= 0) m.put("processCpuTimeMs", cpuTimeMs);
 
         try {
             Files.writeString(file, Json.write(m) + "\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** 이 프로세스의 상주 메모리(바이트). Linux의 {@code /proc/self/status}에서만 읽고, 못 읽으면 -1이다. */
+    static long readRssBytes() {
+        try {
+            return parseVmRssBytes(Files.readAllLines(Path.of("/proc/self/status")));
+        } catch (IOException | RuntimeException e) {
+            return -1;
+        }
+    }
+
+    static long parseVmRssBytes(List<String> statusLines) {
+        for (String line : statusLines) {
+            if (line.startsWith("VmRSS:")) {
+                try {
+                    return Long.parseLong(line.substring("VmRSS:".length())
+                                    .replace("kB", "")
+                                    .trim())
+                            * 1024;
+                } catch (NumberFormatException e) {
+                    return -1;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static double round4(double v) {
+        return Math.round(v * 10_000.0) / 10_000.0;
     }
 
     private static double round2(double v) {

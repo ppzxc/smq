@@ -13,6 +13,12 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ChildJvm {
 
+    /** 정상 종료 신호 뒤 종료를 기다리는 시간. JFR 덤프는 수 MB라 1초 안팎이면 끝난다. */
+    static final long TERMINATE_GRACE_MILLIS = 15_000;
+
+    /** 강제 종료 뒤 프로세스가 사라지기를 기다리는 시간. */
+    private static final long FORCE_WAIT_MILLIS = 5_000;
+
     private final Process process;
     private final Path out;
     private final String label;
@@ -53,7 +59,7 @@ public final class ChildJvm {
     /** 끝나기를 기다린다. 시간을 넘기거나 종료 코드가 0이 아니면 예외를 낸다. */
     public void await(long timeoutMs) throws Exception {
         if (!process.waitFor(Math.max(timeoutMs, 1_000), TimeUnit.MILLISECONDS)) {
-            process.destroyForcibly();
+            terminate(process, TERMINATE_GRACE_MILLIS);
             throw new IllegalStateException("자식 JVM이 제한 시간 안에 끝나지 않았다: " + label);
         }
         if (process.exitValue() != 0) {
@@ -74,7 +80,29 @@ public final class ChildJvm {
                 .orElseThrow(() -> new IllegalStateException("자식 JVM이 결과를 내지 않았다: " + label));
     }
 
+    /** 정상 종료 신호만 보내고 기다리지 않는다. 자식이 여럿이면 모두에게 먼저 보내고 나서 {@link #destroy}로 기다린다. */
+    public void requestStop() {
+        process.destroy();
+    }
+
+    /**
+     * 자식을 정리한다. 먼저 정상 종료 신호를 보내 JVM의 종료 훅(예: JFR 덤프)이 돌게 하고, {@link #TERMINATE_GRACE_MILLIS} 안에
+     * 끝나지 않으면 강제로 끝낸다. 강제 종료만 쓰면 실패한 실행의 JFR이 덤프되지 않아 실패 시점의 프로파일이 사라진다.
+     */
     public void destroy() {
-        process.destroyForcibly();
+        terminate(process, TERMINATE_GRACE_MILLIS);
+    }
+
+    static void terminate(Process process, long graceMillis) {
+        process.destroy();
+        try {
+            if (!process.waitFor(graceMillis, TimeUnit.MILLISECONDS)) {
+                // destroyForcibly는 기다리지 않고 돌아온다. 끝난 것을 확인하고 나가야 호출자가 자식이 끝났다고 믿을 수 있다.
+                process.destroyForcibly().waitFor(FORCE_WAIT_MILLIS, TimeUnit.MILLISECONDS);
+            }
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+        }
     }
 }

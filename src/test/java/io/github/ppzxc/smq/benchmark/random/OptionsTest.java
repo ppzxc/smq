@@ -55,4 +55,24 @@ class OptionsTest {
         assertFalse(Options.parse(new String[] {}, 0).heapDump());
         assertTrue(Options.parse(new String[] {"--heap-dump"}, 0).heapDump());
     }
+
+    @Test
+    void 속도_옵션은_기본이_0이고_양의_정수를_받는다() {
+        assertEquals(0, Options.parse(new String[0], 0).rate());
+        assertEquals(500, Options.parse(new String[] {"--rate", "500"}, 0).rate());
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--rate", "0"}, 0));
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--rate", "-5"}, 0));
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--rate", "fast"}, 0));
+    }
+
+    @Test
+    void 속도_옵션과_스모크는_함께_쓸_수_없다() {
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--smoke", "--rate", "100"}, 0));
+    }
+
+    @Test
+    void 속도_옵션이_있으면_JFR이_기본으로_켜진다() {
+        assertTrue(Options.parse(new String[] {"--rate", "500"}, 0).jfr());
+        assertFalse(Options.parse(new String[0], 0).jfr());
+    }
 }

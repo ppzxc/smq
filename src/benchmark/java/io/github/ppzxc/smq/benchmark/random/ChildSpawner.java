@@ -22,6 +22,10 @@ interface ChildSpawner {
         /** 끝나기를 기다린다. 실패했거나 시간을 넘기면 예외를 낸다. */
         void await(long timeoutMs) throws Exception;
 
+        /** 정상 종료 신호만 보내고 기다리지 않는다. 기본은 아무것도 하지 않는다. */
+        default void requestStop() {}
+
+        /** 끝나기를 확인하고 나간다. 안 끝나면 강제로 끝낸다. */
         void destroy();
     }
 
@@ -73,6 +77,10 @@ interface ChildSpawner {
                                 ChildFailure.readTail(err, ChildFailure.STDERR_TAIL_BYTES),
                                 e);
                     }
+                }
+
+                public void requestStop() {
+                    jvm.requestStop();
                 }
 
                 public void destroy() {

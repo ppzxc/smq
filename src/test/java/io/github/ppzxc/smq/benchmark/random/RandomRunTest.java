@@ -466,4 +466,19 @@ class RandomRunTest {
                 "미리 채운 깊이 / 2,000 초만큼 더 준다(ms)");
         assertTrue(RandomRun.drainLimit(standing) > RandomRun.drainLimit(plain));
     }
+
+    @Test
+    void 포화_판정_기준은_어떤_메시지_크기와_깊이_조합에서도_깊이_유지_수준보다_높다() {
+        // 미리 채운 깊이는 데이터 256MB 추정으로도 제한되므로, 큰 메시지 + 깊은 큐 조합에서도 정상 깊이가 포화로 판정되지 않아야 한다.
+        Limits full = Limits.full(10_000).withRate(500);
+        for (int bytes : new int[] {256, 1_024, 4_096, 16_384, 60_000}) {
+            for (int depth : new int[] {100_000, 300_000, 5_000_000}) {
+                RunParams p = RunParams.fromSeed(7, full.withMessageBytes(bytes).withDepth(depth));
+                long cap = RandomRun.backlogCapMessages(p);
+                assertTrue(
+                        SoakJudge.SATURATION_FRACTION * cap > p.prefillDepth(),
+                        "크기 " + bytes + ", 깊이 " + depth + ": 깊이 " + p.prefillDepth() + ", 상한 " + cap);
+            }
+        }
+    }
 }

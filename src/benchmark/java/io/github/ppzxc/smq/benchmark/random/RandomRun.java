@@ -95,7 +95,9 @@ final class RandomRun {
     private long prefillBytes;
     private volatile long loadStartMillis;
     private volatile long loadEndMillis;
-    private final AtomicLong depthAtNanos = new AtomicLong();
+    /** 마지막으로 깊이를 읽은 시각. nanoTime의 원점은 임의라서, 처음부터 갱신 시각이 지난 것으로 시작한다. */
+    private final AtomicLong depthAtNanos = new AtomicLong(System.nanoTime() - DEPTH_REFRESH_NANOS - 1);
+
     private volatile long depth;
     private volatile Path walFile;
     private volatile long walMax = -1;
@@ -400,7 +402,7 @@ final class RandomRun {
             return publishedMessages.get() - ackedMessages.get() >= prefillMessages + BACKLOG_MESSAGES
                     || publishedBytes.get() - ackedBytes.get() >= prefillBytes + BACKLOG_BYTES;
         }
-        return depthSnapshot(target) >= backlogCapMessages();
+        return depthSnapshot(target) >= backlogCapMessages(params);
     }
 
     /** 대상 큐 깊이(ready+leased+delayed). {@code counts()}가 쓰기 락을 잡으므로 {@link #DEPTH_REFRESH_NANOS}마다만 새로 읽는다. */
@@ -708,11 +710,11 @@ final class RandomRun {
                 loadAckedMessages.get(),
                 depths,
                 SAMPLE_INTERVAL_MS,
-                backlogCapMessages());
+                backlogCapMessages(params));
     }
 
     /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 {@code counts()} 기준(다중 프로세스와 고정 속도 모드)과 같다. */
-    private long backlogCapMessages() {
+    static long backlogCapMessages(RunParams params) {
         // 미리 채운 깊이가 크면 그 절반까지는 정상 변동으로 본다(깊은 큐가 유지되는 상태를 포화로 오판하지 않게).
         long headroom = Math.max(BACKLOG_MESSAGES, params.prefillDepth() / 2);
         return params.prefillDepth()

@@ -2,8 +2,12 @@ package io.github.ppzxc.smq.benchmark.random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -409,21 +413,21 @@ class RandomRunTest {
     private Path subdir(String name) {
         try {
             return Files.createDirectories(dir.resolve(name));
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
     /** 부하 구간 후반 절반의 깊이 표본 중앙값. 마지막 한 표본은 청크 몇 개가 한꺼번에 빠진 순간일 수 있다. */
     private static long lateLoadMedianDepth(RunResult r) {
-        java.util.List<Long> depths = new java.util.ArrayList<>();
+        List<Long> depths = new ArrayList<>();
         for (CountsSample c : r.records().samples()) {
             if (c.queue() == QueueKind.TARGET && !c.afterDrain()) {
                 depths.add(c.ready() + c.leased() + c.delayed());
             }
         }
-        java.util.List<Long> late = depths.subList(depths.size() / 2, depths.size());
-        java.util.List<Long> sorted = late.stream().sorted().toList();
+        List<Long> late = depths.subList(depths.size() / 2, depths.size());
+        List<Long> sorted = late.stream().sorted().toList();
         return sorted.get(sorted.size() / 2);
     }
 
@@ -439,12 +443,27 @@ class RandomRunTest {
                 lateLoadMedianDepth(kept) > standing.prefillDepth() * 0.5,
                 "깊이가 유지돼야 한다: " + lateLoadMedianDepth(kept) + " / " + standing.prefillDepth());
 
-        // 대조군: 같은 설정에서 조절만 끄면 컨슈머가 깊이를 비운다.
+        // 대조군: 조절 없이 기본 깊이(2,000)면 컨슈머가 비운다. 깊이가 달라 직접 비교는 아니고, 조절이 없으면 비워진다는 것만 확인한다.
+        // (깊이 20,000은 이 짧은 부하에서 비워지지 않아 대조군이 되지 못한다.)
         Limits drainingLimits = Limits.smoke(2_500).withRate(200);
         RunParams draining = paramsWithProcesses(1, drainingLimits);
         RunResult drained = RandomRun.execute(draining, subdir("draining"), InvariantChecker::check);
         assertTrue(
                 lateLoadMedianDepth(drained) < draining.prefillDepth() * 0.5,
                 "조절하지 않으면 컨슈머가 깊이를 비운다(대조군): " + lateLoadMedianDepth(drained));
+    }
+
+    @Test
+    void 깊은_큐_모드의_소진_한도는_부하_끝에_남아_있을_깊이만큼_늘어난다() {
+        Limits base = Limits.full(10_000).withRate(500);
+        RunParams plain = RunParams.fromSeed(7, base);
+        RunParams standing = RunParams.fromSeed(7, base.withStandingQueue(true));
+        assertEquals(plain.leaseMillis(), standing.leaseMillis(), "같은 시드라 리스 기한은 같다");
+        // 소진은 초당 2,000건 이상을 가정한다. 깊이가 유지되면 부하가 끝날 때 그만큼 남아 있다.
+        assertEquals(
+                standing.prefillDepth() / 2,
+                RandomRun.drainLimit(standing) - RandomRun.drainLimit(plain),
+                "미리 채운 깊이 / 2,000 초만큼 더 준다(ms)");
+        assertTrue(RandomRun.drainLimit(standing) > RandomRun.drainLimit(plain));
     }
 }

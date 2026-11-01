@@ -57,6 +57,8 @@ final class RandomRun {
     private static final long DEPTH_REFRESH_NANOS = 100_000_000L;
     /** 깊은 큐 모드에서 깊이가 목표 이하일 때 컨슈머가 쉬는 시간. */
     private static final long STANDING_IDLE_MS = 20;
+    /** 깊은 큐 모드의 소진 한도를 정할 때 가정하는 최소 소진 속도(건/초). */
+    private static final long STANDING_DRAIN_PER_SECOND = 2_000;
 
     interface Checker {
         List<Violation> check(
@@ -93,7 +95,7 @@ final class RandomRun {
     private long prefillBytes;
     private volatile long loadStartMillis;
     private volatile long loadEndMillis;
-    private volatile long depthAtNanos;
+    private final AtomicLong depthAtNanos = new AtomicLong();
     private volatile long depth;
     private volatile Path walFile;
     private volatile long walMax = -1;
@@ -112,7 +114,9 @@ final class RandomRun {
     private record Queues(Queue target, Queue deadLetter) {}
 
     static long drainLimit(RunParams p) {
-        return DRAIN_BASE_MS + p.leaseMillis() + 2_000;
+        // 깊은 큐 모드는 부하가 끝날 때 미리 채운 깊이만큼 남아 있다. 소진이 초당 2,000건 이상은 한다고 보고 그만큼 더 준다.
+        long standingExtra = p.consumerPaced() ? p.prefillDepth() * 1_000L / STANDING_DRAIN_PER_SECOND : 0;
+        return DRAIN_BASE_MS + p.leaseMillis() + 2_000 + standingExtra;
     }
 
     /** {@code dir}에 SQLite 파일을 만들고 돈다. 예외는 {@link Verdict#ERROR}로 돌려준다. */
@@ -402,10 +406,11 @@ final class RandomRun {
     /** 대상 큐 깊이(ready+leased+delayed). {@code counts()}가 쓰기 락을 잡으므로 {@link #DEPTH_REFRESH_NANOS}마다만 새로 읽는다. */
     private long depthSnapshot(Queue target) {
         long now = System.nanoTime();
-        if (now - depthAtNanos > DEPTH_REFRESH_NANOS) {
+        long at = depthAtNanos.get();
+        // 100ms가 지난 순간 모든 스레드가 counts()를 부르지 않도록, 시각을 먼저 바꾼 한 스레드만 새로 읽는다.
+        if (now - at > DEPTH_REFRESH_NANOS && depthAtNanos.compareAndSet(at, now)) {
             QueueCounts c = target.counts();
             depth = c.ready() + c.leased() + c.delayed();
-            depthAtNanos = now;
         }
         return depth;
     }
@@ -706,7 +711,7 @@ final class RandomRun {
                 backlogCapMessages());
     }
 
-    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 다중 프로세스 기준과 같다. */
+    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 {@code counts()} 기준(다중 프로세스와 고정 속도 모드)과 같다. */
     private long backlogCapMessages() {
         // 미리 채운 깊이가 크면 그 절반까지는 정상 변동으로 본다(깊은 큐가 유지되는 상태를 포화로 오판하지 않게).
         long headroom = Math.max(BACKLOG_MESSAGES, params.prefillDepth() / 2);

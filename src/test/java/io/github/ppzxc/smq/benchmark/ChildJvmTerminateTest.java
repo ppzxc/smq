@@ -16,7 +16,7 @@ class ChildJvmTerminateTest {
     Path dir;
 
     private Process sh(String script) throws IOException {
-        assumeFalse(System.getProperty("os.name").toLowerCase().contains("win"), "셸이 필요하다");
+        assumeFalse(System.getProperty("os.name").toLowerCase().startsWith("windows"), "셸이 필요하다");
         return new ProcessBuilder("sh", "-c", script).start();
     }
 

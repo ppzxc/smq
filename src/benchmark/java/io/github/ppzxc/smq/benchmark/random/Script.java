@@ -33,7 +33,9 @@ final class Script {
 
     Planned message(Tag tag) {
         SplittableRandom r = rng(tag, 0, 1);
-        int size = RunParams.logUniform(r, 0, params.maxMessageBytes());
+        int size = params.minMessageBytes() > 0
+                ? params.minMessageBytes() + r.nextInt(params.maxMessageBytes() - params.minMessageBytes() + 1)
+                : RunParams.logUniform(r, 0, params.maxMessageBytes());
         byte[] payload = new byte[size];
         for (int i = 0; i < size; i += 8) {
             long v = r.nextLong();

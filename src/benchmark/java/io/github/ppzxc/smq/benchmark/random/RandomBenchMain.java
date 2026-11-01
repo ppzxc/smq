@@ -32,14 +32,23 @@ public final class RandomBenchMain {
         System.exit(run(o));
     }
 
+    private static Limits soakLimits(Options o) {
+        Limits limits = Limits.full(o.load().toMillis()).withRate(o.rate()).withStandingQueue(o.standingQueue());
+        if (o.messageBytes() > 0) {
+            limits = limits.withMessageBytes(o.messageBytes());
+        }
+        if (o.depth() > 0) {
+            limits = limits.withDepth(o.depth());
+        }
+        return limits;
+    }
+
     static int run(Options o) throws IOException {
         Files.createDirectories(o.outDir());
         Path workRoot = o.outDir().resolve("work");
         Files.createDirectories(workRoot);
         Map<String, String> env = Environment.capture(o.smoke() ? "smoke" : "random", "sqlite", workRoot);
-        Limits limits = o.smoke()
-                ? Limits.smoke(o.load().toMillis())
-                : Limits.full(o.load().toMillis()).withRate(o.rate());
+        Limits limits = o.smoke() ? Limits.smoke(o.load().toMillis()) : soakLimits(o);
         Path jsonLines = o.outDir()
                 .resolve("runs-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                         + ".jsonl");

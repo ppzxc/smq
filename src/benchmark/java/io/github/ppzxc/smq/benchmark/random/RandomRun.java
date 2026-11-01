@@ -55,6 +55,8 @@ final class RandomRun {
 
     private static final long CHILD_KILL_GRACE_MS = 60_000;
     private static final long DEPTH_REFRESH_NANOS = 100_000_000L;
+    /** 깊은 큐 모드에서 깊이가 목표 이하일 때 컨슈머가 쉬는 시간. */
+    private static final long STANDING_IDLE_MS = 20;
 
     interface Checker {
         List<Violation> check(
@@ -394,13 +396,18 @@ final class RandomRun {
             return publishedMessages.get() - ackedMessages.get() >= prefillMessages + BACKLOG_MESSAGES
                     || publishedBytes.get() - ackedBytes.get() >= prefillBytes + BACKLOG_BYTES;
         }
+        return depthSnapshot(target) >= backlogCapMessages();
+    }
+
+    /** 대상 큐 깊이(ready+leased+delayed). {@code counts()}가 쓰기 락을 잡으므로 {@link #DEPTH_REFRESH_NANOS}마다만 새로 읽는다. */
+    private long depthSnapshot(Queue target) {
         long now = System.nanoTime();
         if (now - depthAtNanos > DEPTH_REFRESH_NANOS) {
             QueueCounts c = target.counts();
             depth = c.ready() + c.leased() + c.delayed();
             depthAtNanos = now;
         }
-        return depth >= backlogCapMessages();
+        return depth;
     }
 
     private void consumerLoop(Queue target, Queue dlq) throws InterruptedException {
@@ -408,9 +415,17 @@ final class RandomRun {
             if (round % 4 == 3) {
                 // 대상 큐만 보다가 dead letter 큐가 소진 때까지 쌓이지 않게 가끔 비운다.
                 ackAll(dlq, QueueKind.DEAD_LETTER, params.chunkSize(), Duration.ZERO);
-            } else {
-                consumeTarget(target);
+                continue;
             }
+            // 깊은 큐 모드: 깊이가 목표(미리 채운 깊이) 이하면 쉬고, 넘으면 꺼낸다. 꺼내는 속도를 맞추면 NACK이나 정산하지 않은
+            // 메시지가 큐로 돌아와 실제로 빠지는 양이 유입보다 적어져 깊이가 늘어난다. 깊이로 피드백하면 그 비율과 무관하게 유지된다.
+            if (params.consumerPaced() && depthSnapshot(target) <= params.prefillDepth()) {
+                if (!sleepUnlessStopped(STANDING_IDLE_MS)) {
+                    return;
+                }
+                continue;
+            }
+            consumeTarget(target);
         }
     }
 
@@ -693,8 +708,12 @@ final class RandomRun {
 
     /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 다중 프로세스 기준과 같다. */
     private long backlogCapMessages() {
+        // 미리 채운 깊이가 크면 그 절반까지는 정상 변동으로 본다(깊은 큐가 유지되는 상태를 포화로 오판하지 않게).
+        long headroom = Math.max(BACKLOG_MESSAGES, params.prefillDepth() / 2);
         return params.prefillDepth()
-                + Math.min(BACKLOG_MESSAGES, BACKLOG_BYTES / RunParams.avgMessageBytes(params.maxMessageBytes()));
+                + Math.min(
+                        headroom,
+                        BACKLOG_BYTES / RunParams.avgMessageBytes(params.minMessageBytes(), params.maxMessageBytes()));
     }
 
     /** 부하 구간에 발행해 지연 없이 처음 꺼낸 대상 큐 전달의 발행에서 꺼내기까지 걸린 시간(ms). 정렬해서 돌려준다. */

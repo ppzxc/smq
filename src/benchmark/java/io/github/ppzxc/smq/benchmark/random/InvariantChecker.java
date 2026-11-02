@@ -54,6 +54,20 @@ final class InvariantChecker {
 
     static List<Violation> check(
             Config config, List<Published> published, List<Delivery> deliveries, List<CountsSample> samples) {
+        List<Violation> out = new ArrayList<>(checkTags(config, published, deliveries));
+        checkChunkOrder(deliveries, out);
+        if (config.singleActiveConsumer()) {
+            checkSingleActive(deliveries, out);
+        }
+        checkCounts(samples, out);
+        return out;
+    }
+
+    /**
+     * 태그 단위 검사(유령, 중복, 지연, 유실, dead letter 이동). 한 태그의 발행과 전달이 모두 들어 있어야 맞게 판정하므로,
+     * 기록을 태그로 나눠 조각마다 부르는 호출자는 한 태그를 쪼개지 않아야 한다.
+     */
+    static List<Violation> checkTags(Config config, List<Published> published, List<Delivery> deliveries) {
         List<Violation> out = new ArrayList<>();
         Map<Tag, Published> byTag = new LinkedHashMap<>();
         for (Published p : published) {
@@ -102,10 +116,19 @@ final class InvariantChecker {
                     out);
         }
 
+        return out;
+    }
+
+    /** 청크 안의 메시지 id 순서. 한 청크의 전달이 모두 들어 있어야 맞게 판정한다. */
+    static List<Violation> checkChunks(List<Delivery> deliveries) {
+        List<Violation> out = new ArrayList<>();
         checkChunkOrder(deliveries, out);
-        if (config.singleActiveConsumer()) {
-            checkSingleActive(deliveries, out);
-        }
+        return out;
+    }
+
+    /** counts 표본 검사. */
+    static List<Violation> checkSamples(List<CountsSample> samples) {
+        List<Violation> out = new ArrayList<>();
         checkCounts(samples, out);
         return out;
     }

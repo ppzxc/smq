@@ -139,6 +139,10 @@ final class Session {
                 // 세션은 요약표를 위해 모든 결과를 쌓는다. 통과한 실행의 기록은 여기서 버려야 긴 세션이 힙을 채우지 않는다.
                 return result.withoutRecords();
             }
+            if (params.isSoak() && result.verdict() != Verdict.VIOLATION) {
+                // 위반이 아닌 실패(백로그 증가, 소진 시간 초과, 예외)는 원인이 기록이 아니라서 수 GB의 기록 파일은 남기지 않는다.
+                deleteSpoolFiles(dir);
+            }
             preserve(result, dir);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -178,8 +182,12 @@ final class Session {
     /** 실행 디렉터리(SQLite 파일 포함)에 기록을 더해 {@code failures/<seed>/}로 옮긴다. */
     private void preserve(RunResult r, Path dir) throws IOException {
         RunResult.Records rec = r.records();
-        writeLines(dir.resolve("published.jsonl"), rec.published().stream().map(RecordsJson::line));
-        writeLines(dir.resolve("deliveries.jsonl"), rec.deliveries().stream().map(RecordsJson::line));
+        // 기록을 디스크에 쌓은 실행(고정 속도 모드)은 p<n>-*.bin이 기록이다. 힙에는 없으므로 빈 파일을 만들지 않는다.
+        if (!r.params().isSoak()) {
+            writeLines(dir.resolve("published.jsonl"), rec.published().stream().map(RecordsJson::line));
+            writeLines(
+                    dir.resolve("deliveries.jsonl"), rec.deliveries().stream().map(RecordsJson::line));
+        }
         writeLines(dir.resolve("counts.jsonl"), rec.samples().stream().map(RecordsJson::line));
         writeLines(
                 dir.resolve("violations.txt"),
@@ -271,9 +279,14 @@ final class Session {
         for (String name : List.of("smq.db", "smq.db-wal", "smq.db-shm")) {
             Files.deleteIfExists(dir.resolve(name));
         }
+        deleteSpoolFiles(dir);
+    }
+
+    /** 자식의 발행·전달 기록(jsonl)과 디스크에 쌓은 기록(bin). */
+    private static void deleteSpoolFiles(Path dir) throws IOException {
         try (Stream<Path> s = Files.list(dir)) {
             for (Path p : (Iterable<Path>) s.filter(
-                    f -> f.getFileName().toString().matches("p\\d+-(published|deliveries)\\.jsonl"))::iterator) {
+                    f -> f.getFileName().toString().matches("p\\d+-(published|deliveries)\\.(jsonl|bin)"))::iterator) {
                 Files.delete(p);
             }
         }

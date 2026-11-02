@@ -15,6 +15,7 @@ import io.github.ppzxc.smq.benchmark.Aggregator;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Action;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Pull;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Settle;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -77,6 +78,12 @@ final class RandomRun {
 
     private final ChildSpawner spawner;
     private volatile Path runDir;
+
+    /**
+     * 고정 속도 모드의 기록 저장소. 있으면 발행·전달 기록은 아래 두 큐 대신 여기에 쌓는다. 오래 도는 실행에서 힙이 기록 수에
+     * 비례해 늘지 않게 하려는 것이다. 무작위 모드는 짧아서 큐에 둔다.
+     */
+    private volatile RecordSpool spool;
 
     private final ConcurrentLinkedQueue<Published> published = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<Delivery> deliveries = new ConcurrentLinkedQueue<>();
@@ -162,22 +169,30 @@ final class RandomRun {
         Path db = dir.resolve("smq.db");
         runDir = dir;
         walFile = dir.resolve("smq.db-wal");
-        try (JvmMetricsSampler sampler = JvmMetricsSampler.start(dir);
-                Smq smq = open(db)) {
-            Queues q = declare(smq);
-            prefill(q.target());
-            if (params.processes() > 1) {
-                runChildren(q, db, dir);
-            } else {
-                runLoad(
-                        q,
-                        System.currentTimeMillis(),
-                        params.producers().getFirst(),
-                        params.consumers().getFirst(),
-                        true);
+        try {
+            if (params.isSoak()) {
+                spool = new RecordSpool(dir, process);
             }
-            drained = drain(q.target(), q.deadLetter());
-            jvmSummary = sampler.summary();
+            try (JvmMetricsSampler sampler = JvmMetricsSampler.start(dir);
+                    Smq smq = open(db)) {
+                Queues q = declare(smq);
+                prefill(q.target());
+                if (params.processes() > 1) {
+                    runChildren(q, db, dir);
+                } else {
+                    runLoad(
+                            q,
+                            System.currentTimeMillis(),
+                            params.producers().getFirst(),
+                            params.consumers().getFirst(),
+                            true);
+                }
+                drained = drain(q.target(), q.deadLetter());
+                jvmSummary = sampler.summary();
+            }
+            closeSpool(); // 검사가 읽기 전에 버퍼를 내보낸다. 실패하면 그대로 올린다.
+        } finally {
+            closeSpoolQuietly(); // 위에서 이미 닫았으면 아무 일도 없고, 예외 경로에서는 원래 예외를 가리지 않는다.
         }
         return judge(drained);
     }
@@ -247,6 +262,9 @@ final class RandomRun {
     static void runChild(RunParams params, int process, Path db, Path outDir, long startAt) throws Exception {
         ChildReport.guard(outDir, process, () -> {
             RandomRun run = new RandomRun(params, null, 0, process, null);
+            if (params.isSoak()) {
+                run.spool = new RecordSpool(outDir, process);
+            }
             try (JvmMetricsSampler sampler = JvmMetricsSampler.startChild(outDir, process);
                     Smq smq = run.open(db)) {
                 run.runLoad(
@@ -255,6 +273,9 @@ final class RandomRun {
                         params.producers().get(process),
                         params.consumers().get(process),
                         false);
+                run.closeSpool();
+            } finally {
+                run.closeSpoolQuietly();
             }
             ChildOutput.write(
                     outDir,
@@ -293,7 +314,7 @@ final class RandomRun {
         long before = System.currentTimeMillis();
         target.publish(batch);
         for (Published p : records) {
-            published.add(new Published(p.tag(), p.content(), before, p.delayMillis()));
+            record(new Published(p.tag(), p.content(), before, p.delayMillis()));
         }
         publishedMessages.addAndGet(n);
         publishedBytes.addAndGet(bytes);
@@ -587,7 +608,7 @@ final class RandomRun {
         for (int i = 0; i < messages.size(); i++) {
             Message m = messages.get(i);
             Content content = new Content(Script.checksum(m.payload()), m.headers());
-            deliveries.add(new Delivery(
+            record(new Delivery(
                     kind,
                     tags.get(i),
                     m.id().value(),
@@ -595,6 +616,39 @@ final class RandomRun {
                     content,
                     new Pull(chunkId, i, pulledAt, deadline[i]),
                     settles[i]));
+        }
+    }
+
+    private void record(Published p) {
+        RecordSpool s = spool;
+        if (s != null) {
+            s.add(p);
+        } else {
+            published.add(p);
+        }
+    }
+
+    private void record(Delivery d) {
+        RecordSpool s = spool;
+        if (s != null) {
+            s.add(d);
+        } else {
+            deliveries.add(d);
+        }
+    }
+
+    private void closeSpoolQuietly() {
+        try {
+            closeSpool();
+        } catch (IOException ignored) {
+            // 원래 예외(또는 이미 보고된 닫기 실패)를 가리지 않는다.
+        }
+    }
+
+    private void closeSpool() throws IOException {
+        RecordSpool s = spool;
+        if (s != null) {
+            s.close();
         }
     }
 
@@ -654,14 +708,17 @@ final class RandomRun {
 
     // ---- 검증과 수치
 
-    private RunResult judge(boolean drained) {
+    private RunResult judge(boolean drained) throws IOException {
+        if (spool != null) {
+            return judgeSpooled(drained);
+        }
         List<Published> pub = List.copyOf(published);
         List<Delivery> del = List.copyOf(deliveries);
         List<CountsSample> smp = List.copyOf(samples);
         InvariantChecker.Config config =
                 new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
         List<Violation> violations = checker.check(config, pub, del, smp);
-        SoakJudge.Report soak = params.isSoak() ? soakReport(pub, smp) : null;
+        SoakJudge.Report soak = params.isSoak() ? soakReport(countPublishedInLoad(pub), smp) : null;
         Verdict verdict = verdict(drained, violations, soak);
         double seconds = params.loadMillis() / 1000.0;
         long[] latencies = latenciesMillis(pub, del);
@@ -695,10 +752,39 @@ final class RandomRun {
         return soak != null && soak.backlogGrowing() ? Verdict.BACKLOG_GROWING : Verdict.PASS;
     }
 
-    private SoakJudge.Report soakReport(List<Published> pub, List<CountsSample> smp) {
-        long publishedInLoad = pub.stream()
+    /** 기록을 디스크에 쌓은 실행의 판정. 기록은 조각으로 나눠 검사하고 힙에 한꺼번에 올리지 않는다. */
+    private RunResult judgeSpooled(boolean drained) throws IOException {
+        List<CountsSample> smp = List.copyOf(samples);
+        InvariantChecker.Config config =
+                new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
+        SpoolCheck.Result checked = SpoolCheck.run(runDir, config, smp, loadStartMillis, loadEndMillis);
+        SoakJudge.Report soak = soakReport(checked.publishedInLoad(), smp);
+        Verdict verdict = verdict(drained, checked.violations(), soak);
+        double seconds = params.loadMillis() / 1000.0;
+        return new RunResult(
+                params,
+                verdict,
+                loadAckedMessages.get() / seconds,
+                loadAckedBytes.get() / 1_000_000.0 / seconds,
+                checked.p50Millis(),
+                checked.p99Millis(),
+                checked.violations(),
+                drained ? null : "소진이 " + drainLimitMillis + "ms 안에 끝나지 않았다",
+                new RunResult.Records(List.of(), List.of(), smp),
+                null,
+                walMax < 0 ? null : walMax,
+                jvmSummary,
+                soak,
+                List.copyOf(childSummaries));
+    }
+
+    private long countPublishedInLoad(List<Published> pub) {
+        return pub.stream()
                 .filter(p -> p.atMillis() >= loadStartMillis && p.atMillis() < loadEndMillis)
                 .count();
+    }
+
+    private SoakJudge.Report soakReport(long publishedInLoad, List<CountsSample> smp) {
         List<Long> depths = smp.stream()
                 .filter(c -> c.queue() == QueueKind.TARGET && !c.afterDrain())
                 .map(c -> c.ready() + c.leased() + c.delayed())
@@ -729,15 +815,10 @@ final class RandomRun {
         pub.forEach(p -> byTag.put(p.tag(), p));
         List<Long> out = new ArrayList<>();
         for (Delivery d : del) {
-            if (d.queue() != QueueKind.TARGET
-                    || d.deliveryCount() != 1
-                    || d.pull().atMillis() < loadStartMillis
-                    || d.pull().atMillis() >= loadEndMillis) {
-                continue;
-            }
             Published p = byTag.get(d.tag());
-            if (p != null && p.delayMillis() == 0 && p.atMillis() >= loadStartMillis) {
-                out.add(Math.max(0, d.pull().atMillis() - p.atMillis()));
+            long latency = p == null ? -1 : SpoolCheck.latencyMillis(d, p, loadStartMillis, loadEndMillis);
+            if (latency >= 0) {
+                out.add(latency);
             }
         }
         return out.stream().mapToLong(Long::longValue).sorted().toArray();

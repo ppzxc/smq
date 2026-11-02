@@ -381,7 +381,14 @@ class SqliteStorageTest {
             assertThrows(
                     SmqStorageException.class,
                     () -> assertTimeoutPreemptively(
-                            RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
+                            RETRY_EXHAUST_LIMIT,
+                            () -> SqliteStorage.open(
+                                    db,
+                                    Durability.POWER_LOSS,
+                                    5,
+                                    3,
+                                    Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                                    Duration.ofMillis(500))));
             st.execute("ROLLBACK");
         }
         try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
@@ -433,8 +440,60 @@ class SqliteStorageTest {
             assertThrows(
                     SmqStorageException.class,
                     () -> assertTimeoutPreemptively(
-                            RETRY_EXHAUST_LIMIT, () -> SqliteStorage.open(db, Durability.POWER_LOSS, 5, 3)));
+                            RETRY_EXHAUST_LIMIT,
+                            () -> SqliteStorage.open(
+                                    db,
+                                    Durability.POWER_LOSS,
+                                    5,
+                                    3,
+                                    Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                                    Duration.ofMillis(500))));
             st.execute("ROLLBACK");
+        }
+    }
+
+    @Test
+    void driver가_busy_timeout을_기다리지_않고_BUSY를_바로_돌려줘도_열기는_한도_안에서_재시도해_성공한다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            st.execute("BEGIN IMMEDIATE");
+            List<Thread> threads = new ArrayList<>();
+            // 옛 정책(5회, 합계 100ms)이면 이미 포기했을 시간이다.
+            releaseAfter(st, 800, threads);
+            try (SqliteStorage s = SqliteStorage.open(
+                    db, Durability.POWER_LOSS, 0, 1, Deadline.DEFAULT_LOCK_WAIT_FLOOR, Duration.ofSeconds(10))) {
+                threads.get(0).join();
+                s.declare("q", QueueOptions.defaults());
+            }
+        }
+    }
+
+    @Test
+    void 열기가_한도를_넘기면_시도_횟수와_시도별_소요_시간을_메시지에_담는다() throws Exception {
+        Path db = dir.resolve("smq.db");
+        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db);
+                Statement st = other.createStatement()) {
+            st.execute("BEGIN IMMEDIATE");
+            SmqStorageException e = assertThrows(
+                    SmqStorageException.class,
+                    () -> SqliteStorage.open(
+                            db, Durability.POWER_LOSS, 0, 1, Deadline.DEFAULT_LOCK_WAIT_FLOOR, Duration.ofMillis(300)));
+            assertTrue(e.getMessage().contains("attempts"), e.getMessage());
+            assertTrue(e.getMessage().contains("attemptMillis=["), e.getMessage());
+            assertInstanceOf(SQLException.class, e.getCause());
+            st.execute("ROLLBACK");
+        }
+    }
+
+    @Test
+    void 열기_백오프는_10ms에서_시작해_250ms를_넘지_않고_절반_아래로_내려가지_않는다() {
+        for (int attempt = 1; attempt <= 40; attempt++) {
+            long ceiling = Math.min(250, 10L << Math.min(attempt - 1, 5));
+            for (int i = 0; i < 50; i++) {
+                long ms = TransactionExecutor.openBackoffMillis(attempt);
+                assertTrue(ms >= ceiling / 2 && ms <= ceiling, "attempt=" + attempt + " ms=" + ms);
+            }
         }
     }
 

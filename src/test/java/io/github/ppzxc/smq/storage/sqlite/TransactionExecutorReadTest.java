@@ -33,7 +33,7 @@ class TransactionExecutorReadTest {
             s.execute("CREATE TABLE t (v INTEGER)");
         }
         executor = new TransactionExecutor(connection, new TransactionExecutor.RetryPolicy(5, a -> waits++));
-        executor.executeUnverified(c -> 0); // 기준 버전 0
+        executor.executeUnverified(c -> 0, java.time.Duration.ofSeconds(1)); // 기준 버전 0
     }
 
     @AfterEach

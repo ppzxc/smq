@@ -11,6 +11,10 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -58,6 +62,9 @@ final class TransactionExecutor {
     private static final int CHECKPOINT_BUSY_TIMEOUT_MILLIS = 50;
     /** 되감기에 실패(BUSY)한 뒤 이 커밋 수만큼은 다시 시도하지 않는다. 커밋마다 {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS}씩 쌓이지 않게 한다. */
     private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
+
+    private static final long OPEN_BACKOFF_START_MILLIS = 10;
+    private static final long OPEN_BACKOFF_MAX_MILLIS = 250;
 
     private static final Path NO_WAL = Path.of("");
 
@@ -127,8 +134,8 @@ final class TransactionExecutor {
     }
 
     /** 확인 없는 쓰기 트랜잭션. 열 때만 쓴다. 돌려준 버전이 기준 버전이 된다. */
-    int executeUnverified(TxBody<Integer> body) {
-        int version = retryOnBusy(() -> runOnce(body, false));
+    int executeUnverified(TxBody<Integer> body, Duration limit) {
+        int version = retryOnBusyWithin(() -> runOnce(body, false), limit);
         baselineVersion = version;
         return version;
     }
@@ -298,6 +305,57 @@ final class TransactionExecutor {
 
     <T> T retryOnBusy(SqlAction<T> action) {
         return retryOnBusy(action, Deadline.NONE);
+    }
+
+    /**
+     * 열 때 쓰는 BUSY 재시도. 횟수 대신 총 시간으로 한도를 둔다. 여러 프로세스가 빈 DB를 동시에 열 때 driver가
+     * {@code busy_timeout}을 기다리지 않고 BUSY를 바로 돌려주더라도 한도 안에서는 포기하지 않는다. 시도 사이 대기는
+     * 지터가 섞인 지수 증가({@link #openBackoffMillis})다. 한도를 넘으면 시도별 소요 시간을 메시지에 담아 던진다.
+     * 한도는 시도 사이에만 확인하므로 최악은 한도에 한 번의 {@code busy_timeout}을 더한 값이다.
+     */
+    <T> T retryOnBusyWithin(SqlAction<T> action, Duration limit) {
+        lock.lock();
+        try {
+            long startNanos = System.nanoTime();
+            long limitNanos = limit.toNanos();
+            List<Long> attemptMillis = new ArrayList<>();
+            for (int attempt = 1; ; attempt++) {
+                long attemptStart = System.nanoTime();
+                try {
+                    return action.run();
+                } catch (SQLException e) {
+                    long now = System.nanoTime();
+                    attemptMillis.add(TimeUnit.NANOSECONDS.toMillis(now - attemptStart));
+                    if (!isBusy(e)) {
+                        throw new SmqStorageException("sqlite operation failed", e);
+                    }
+                    long remainingNanos = limitNanos - (now - startNanos);
+                    if (remainingNanos <= 0) {
+                        throw new SmqStorageException(
+                                "sqlite operation failed: busy for "
+                                        + TimeUnit.NANOSECONDS.toMillis(now - startNanos) + "ms over "
+                                        + attemptMillis.size() + " attempts (attemptMillis=" + attemptMillis + ")",
+                                e);
+                    }
+                    long sleepMillis = Math.min(
+                            openBackoffMillis(attempt), Math.max(1, TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
+                    try {
+                        Thread.sleep(sleepMillis);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new SmqStorageException("interrupted while retrying sqlite operation", e);
+                    }
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** 시도 번호(1부터)별 대기. 10ms에서 시작해 2배씩 늘고 250ms가 상한이며, 같은 박자로 부딪히지 않게 절반에서 전체 사이로 흩는다. */
+    static long openBackoffMillis(int attempt) {
+        long ceiling = Math.min(OPEN_BACKOFF_MAX_MILLIS, OPEN_BACKOFF_START_MILLIS << Math.min(attempt - 1, 5));
+        return ThreadLocalRandom.current().nextLong(ceiling / 2, ceiling + 1);
     }
 
     <T> T retryOnBusy(SqlAction<T> action, Deadline deadline) {

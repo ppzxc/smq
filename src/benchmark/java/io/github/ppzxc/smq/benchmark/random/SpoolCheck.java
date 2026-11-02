@@ -29,8 +29,11 @@ final class SpoolCheck {
     /** 조각 하나의 목표 크기(스풀 파일 바이트). 객체로 올리면 몇 배가 된다. */
     static final long PARTITION_BYTES = 48L << 20;
 
-    /** 조각마다 파일 넷(발행, 전달, 청크, id)을 동시에 열므로, 기본 FD 한도 1,024 안에 들게 잡는다. */
-    private static final int MAX_PARTITIONS = 200;
+    /**
+     * 조각 수의 상한. 파일은 종류별로 차례로 열어 한 번에 최대 두 배(발행·전달)를 쓰므로 기본 FD 한도 1,024 안에 든다. 스풀이
+     * {@code 400 * PARTITION_BYTES}(약 19GB)를 넘으면 조각이 목표보다 커지고 힙이 그만큼 는다.
+     */
+    private static final int MAX_PARTITIONS = 400;
 
     private static final int WRITER_BUFFER_BYTES = 32 << 10;
     /** 위반이 이만큼 쌓이면 더 모으지 않는다. 같은 원인으로 수백만 건이 나는 경우에 힙을 지킨다. */
@@ -90,7 +93,7 @@ final class SpoolCheck {
         } finally {
             try {
                 deleteTree(work);
-            } catch (IOException ignored) {
+            } catch (IOException | java.io.UncheckedIOException ignored) {
                 // 임시 조각 파일을 못 지워도 검사 결과나 원래 예외를 가리지 않는다.
             }
         }
@@ -109,39 +112,71 @@ final class SpoolCheck {
 
     // ---- 나누기
 
+    /**
+     * 조각 파일은 종류별로 따로, 차례로 만든다(발행·전달 태그 조각 → 청크 조각 → id 조각). 한꺼번에 열면 조각 수의 네 배가 FD를
+     * 쓰는데, 이렇게 하면 한 번에 최대 조각 수의 두 배다. 스풀을 세 번 읽는 값을 치르지만 읽기는 쓰기보다 싸다.
+     */
     private static void split(Path dir, Path work, int partitions) throws IOException {
-        DataOutputStream[] pub = new DataOutputStream[partitions];
-        DataOutputStream[] del = new DataOutputStream[partitions];
-        DataOutputStream[] chunk = new DataOutputStream[partitions];
-        DataOutputStream[] ids = new DataOutputStream[partitions];
-        try {
-            for (int k = 0; k < partitions; k++) {
-                pub[k] = writer(work.resolve("tag-" + k + "-pub.bin"));
-                del[k] = writer(work.resolve("tag-" + k + "-del.bin"));
-                chunk[k] = writer(work.resolve("chunk-" + k + ".bin"));
-                ids[k] = writer(work.resolve("id-" + k + ".bin"));
-            }
+        try (Writers pub = new Writers(work, "tag-%d-pub.bin", partitions);
+                Writers del = new Writers(work, "tag-%d-del.bin", partitions)) {
             for (Path f : RecordSpool.publishedFiles(dir)) {
                 try (DataInputStream in = reader(f)) {
                     for (Published p = RecordCodec.readPublished(in); p != null; p = RecordCodec.readPublished(in)) {
-                        RecordCodec.write(pub[bucket(tagHash(p.tag()), partitions)], p);
+                        RecordCodec.write(pub.outs[bucket(tagHash(p.tag()), partitions)], p);
                     }
                 }
             }
             for (Path f : RecordSpool.deliveriesFiles(dir)) {
                 try (DataInputStream in = reader(f)) {
                     for (Delivery d = RecordCodec.readDelivery(in); d != null; d = RecordCodec.readDelivery(in)) {
-                        RecordCodec.write(del[bucket(tagHash(d.tag()), partitions)], d);
-                        RecordCodec.write(chunk[bucket(mix(d.pull().chunk()), partitions)], d);
-                        writeId(ids[bucket(idHash(d.queue(), d.messageId()), partitions)], d);
+                        RecordCodec.write(del.outs[bucket(tagHash(d.tag()), partitions)], d);
                     }
                 }
             }
-        } finally {
-            closeAll(pub);
-            closeAll(del);
-            closeAll(chunk);
-            closeAll(ids);
+        }
+        try (Writers chunk = new Writers(work, "chunk-%d.bin", partitions)) {
+            for (Path f : RecordSpool.deliveriesFiles(dir)) {
+                try (DataInputStream in = reader(f)) {
+                    for (Delivery d = RecordCodec.readDelivery(in); d != null; d = RecordCodec.readDelivery(in)) {
+                        RecordCodec.write(chunk.outs[bucket(mix(d.pull().chunk()), partitions)], d);
+                    }
+                }
+            }
+        }
+        try (Writers ids = new Writers(work, "id-%d.bin", partitions)) {
+            for (Path f : RecordSpool.deliveriesFiles(dir)) {
+                try (DataInputStream in = reader(f)) {
+                    for (Delivery d = RecordCodec.readDelivery(in); d != null; d = RecordCodec.readDelivery(in)) {
+                        writeId(ids.outs[bucket(idHash(d.queue(), d.messageId()), partitions)], d);
+                    }
+                }
+            }
+        }
+    }
+
+    /** 조각 수만큼의 출력 파일. 닫기 실패는 본문의 예외를 가리지 않고(try-with-resources가 suppressed로 붙인다) 첫 실패만 올린다. */
+    private static final class Writers implements AutoCloseable {
+        final DataOutputStream[] outs;
+
+        Writers(Path work, String pattern, int partitions) throws IOException {
+            outs = new DataOutputStream[partitions];
+            try {
+                for (int k = 0; k < partitions; k++) {
+                    outs[k] = writer(work.resolve(String.format(pattern, k)));
+                }
+            } catch (IOException | RuntimeException e) {
+                try {
+                    close();
+                } catch (IOException suppressed) {
+                    e.addSuppressed(suppressed);
+                }
+                throw e;
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            closeAll(outs);
         }
     }
 
@@ -211,40 +246,58 @@ final class SpoolCheck {
             long loadEndMillis,
             int partitions)
             throws IOException {
-        List<Violation> violations = new ArrayList<>();
+        Collected violations = new Collected();
         long publishedInLoad = 0;
         LatencyHistogram latencies = new LatencyHistogram();
         for (int k = 0; k < partitions; k++) {
-            List<Published> pub = readAllPublished(work.resolve("tag-" + k + "-pub.bin"));
-            List<Delivery> del = readAllDeliveries(work.resolve("tag-" + k + "-del.bin"));
-            addCapped(violations, InvariantChecker.checkTags(config, pub, del));
-            Map<Tag, Published> byTag = new HashMap<>();
-            for (Published p : pub) {
-                byTag.put(p.tag(), p);
-                if (p.atMillis() >= loadStartMillis && p.atMillis() < loadEndMillis) {
-                    publishedInLoad++;
-                }
-            }
-            for (Delivery d : del) {
-                Published p = byTag.get(d.tag());
-                long latency = p == null ? -1 : latencyMillis(d, p, loadStartMillis, loadEndMillis);
-                if (latency >= 0) {
-                    latencies.add(latency);
-                }
-            }
-            Files.delete(work.resolve("tag-" + k + "-pub.bin"));
-            Files.delete(work.resolve("tag-" + k + "-del.bin"));
+            publishedInLoad += verifyTags(work, k, config, loadStartMillis, loadEndMillis, violations, latencies);
+            // 태그 조각은 위 메서드가 끝나며 힙에서 내려간다. 청크 조각과 id 조각은 그 뒤에 올린다.
             Path chunkFile = work.resolve("chunk-" + k + ".bin");
-            addCapped(violations, InvariantChecker.checkChunks(readAllDeliveries(chunkFile)));
+            violations.add(InvariantChecker.checkChunks(readAllDeliveries(chunkFile)));
             Files.delete(chunkFile);
             Path idFile = work.resolve("id-" + k + ".bin");
-            addCapped(violations, sameIdDifferentTag(idFile));
+            violations.add(sameIdDifferentTag(idFile));
             Files.delete(idFile);
         }
-        addCapped(violations, InvariantChecker.checkSamples(samples));
+        violations.add(InvariantChecker.checkSamples(samples));
         Double p50 = latencies.total() == 0 ? null : (double) latencies.percentile(50);
         Double p99 = latencies.total() == 0 ? null : (double) latencies.percentile(99);
-        return new Result(List.copyOf(violations), publishedInLoad, p50, p99);
+        return new Result(List.copyOf(violations.list), publishedInLoad, p50, p99);
+    }
+
+    /** 태그 조각 하나를 검사하고 지우며, 부하 구간에 발행한 수를 돌려준다. 지연 표본은 {@code latencies}에 더한다. */
+    private static long verifyTags(
+            Path work,
+            int k,
+            InvariantChecker.Config config,
+            long loadStartMillis,
+            long loadEndMillis,
+            Collected violations,
+            LatencyHistogram latencies)
+            throws IOException {
+        Path pubFile = work.resolve("tag-" + k + "-pub.bin");
+        Path delFile = work.resolve("tag-" + k + "-del.bin");
+        List<Published> pub = readAllPublished(pubFile);
+        List<Delivery> del = readAllDeliveries(delFile);
+        violations.add(InvariantChecker.checkTags(config, pub, del));
+        Map<Tag, Published> byTag = new HashMap<>();
+        long inLoad = 0;
+        for (Published p : pub) {
+            byTag.put(p.tag(), p);
+            if (p.atMillis() >= loadStartMillis && p.atMillis() < loadEndMillis) {
+                inLoad++;
+            }
+        }
+        for (Delivery d : del) {
+            Published p = byTag.get(d.tag());
+            long latency = p == null ? -1 : latencyMillis(d, p, loadStartMillis, loadEndMillis);
+            if (latency >= 0) {
+                latencies.add(latency);
+            }
+        }
+        Files.delete(pubFile);
+        Files.delete(delFile);
+        return inLoad;
     }
 
     /** 같은 큐의 같은 메시지 id가 서로 다른 태그로 전달된 것. {@link InvariantChecker}의 같은 이름의 유령 검사와 같은 뜻이다. */
@@ -276,19 +329,21 @@ final class SpoolCheck {
         }
     }
 
-    /** 상한까지만 모으되 같은 위반(불변식, 설명, 메시지 id, 태그 집합)은 한 번만 넣는다. 태그 검사와 id 검사가 같은 유령을 따로 볼 수 있다. */
-    private static void addCapped(List<Violation> into, List<Violation> found) {
-        for (Violation v : found) {
-            if (into.size() >= MAX_VIOLATIONS) {
-                return;
-            }
-            boolean duplicate = into.stream()
-                    .anyMatch(o -> o.invariant() == v.invariant()
-                            && o.detail().equals(v.detail())
-                            && o.messageIds().equals(v.messageIds())
-                            && java.util.Set.copyOf(o.tags()).equals(java.util.Set.copyOf(v.tags())));
-            if (!duplicate) {
-                into.add(v);
+    /** 위반 모음. 상한까지만 모으고, 같은 위반(불변식, 설명, 메시지 id, 태그 집합)은 한 번만 넣는다(태그 검사와 id 검사가 같은 유령을 따로 볼 수 있다). */
+    private static final class Collected {
+        private final List<Violation> list = new ArrayList<>();
+        private final java.util.Set<String> keys = new java.util.HashSet<>();
+
+        void add(List<Violation> found) {
+            for (Violation v : found) {
+                if (list.size() >= MAX_VIOLATIONS) {
+                    return;
+                }
+                List<String> tags =
+                        v.tags().stream().map(Tag::toString).sorted().toList();
+                if (keys.add(v.invariant() + "|" + v.detail() + "|" + v.messageIds() + "|" + tags)) {
+                    list.add(v);
+                }
             }
         }
     }

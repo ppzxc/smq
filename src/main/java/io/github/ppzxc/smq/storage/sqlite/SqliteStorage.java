@@ -79,18 +79,17 @@ public final class SqliteStorage implements Storage {
 
     private static final int BUSY_TIMEOUT_MILLIS = 5000;
     private static final int MAX_ATTEMPTS = 5;
-    /** 열 때의 BUSY 재시도 총 시간. 빈 DB를 여러 프로세스가 동시에 열 때 driver가 기다리지 않아도 버티게 시간으로 정한다(ADR-0009). */
-    static final Duration OPEN_RETRY_LIMIT = Duration.ofSeconds(30);
-
     /** 운영 스키마: 목표 버전 1, 업그레이드 단계 없음. */
     private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
 
     private final TransactionExecutor executor;
     private final Duration lockWaitFloor;
+    private final StorageLock storageLock;
 
-    private SqliteStorage(TransactionExecutor executor, Duration lockWaitFloor) {
+    private SqliteStorage(TransactionExecutor executor, Duration lockWaitFloor, StorageLock storageLock) {
         this.executor = executor;
         this.lockWaitFloor = lockWaitFloor;
+        this.storageLock = storageLock;
     }
 
     public static SqliteStorage open(Path path, Durability durability) {
@@ -114,27 +113,20 @@ public final class SqliteStorage implements Storage {
     /** 테스트가 경합을 짧게 재현할 수 있게 busy timeout과 시도 횟수를 정한다. */
     static SqliteStorage open(
             Path path, Durability durability, int busyTimeoutMillis, int maxAttempts, Duration lockWaitFloor) {
-        return open(path, durability, busyTimeoutMillis, maxAttempts, lockWaitFloor, OPEN_RETRY_LIMIT);
-    }
-
-    /** 테스트가 열기 재시도 한도도 짧게 정할 수 있게 한다. */
-    static SqliteStorage open(
-            Path path,
-            Durability durability,
-            int busyTimeoutMillis,
-            int maxAttempts,
-            Duration lockWaitFloor,
-            Duration openRetryLimit) {
         if (lockWaitFloor.isNegative()) {
             throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
         }
         SQLiteConfig config = new SQLiteConfig();
-        config.setBusyTimeout(busyTimeoutMillis);
+        // 열 때는 기다리지 않는다. 락 파일을 잡은 뒤의 BUSY는 smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012).
+        config.setBusyTimeout(0);
+        // 연결이 락을 놓지 않게 한다. WAL로 바꾸기 전에 켜야 -shm이 생기지 않는다.
+        config.setLockingMode(SQLiteConfig.LockingMode.EXCLUSIVE);
         // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
         config.setSynchronous(
                 durability == Durability.POWER_LOSS
                         ? SQLiteConfig.SynchronousMode.FULL
                         : SQLiteConfig.SynchronousMode.NORMAL);
+        StorageLock storageLock = StorageLock.acquire(path);
         @Nullable Connection connection = null;
         try {
             connection = StatementCachingConnection.wrap(
@@ -143,28 +135,41 @@ public final class SqliteStorage implements Storage {
                     connection,
                     new TransactionExecutor.RetryPolicy(maxAttempts, attempt -> Thread.sleep(10L * attempt)));
             // 열기는 아직 기준 버전이 없으므로 확인 없이 판정하고, 그 결과가 기준 버전이 된다.
-            executor.executeUnverified(SCHEMA::establish, openRetryLimit);
+            executor.executeUnverified(SCHEMA::establish);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
-            executor.retryOnBusyWithin(
-                    () -> {
-                        try (Statement s = executor.connection().createStatement()) {
-                            s.execute("PRAGMA wal_autocheckpoint = 0");
-                            s.execute("PRAGMA journal_size_limit = " + TransactionExecutor.WAL_FILE_KEEP_BYTES);
-                            return s.execute("PRAGMA journal_mode = WAL");
-                        }
-                    },
-                    openRetryLimit);
-            return new SqliteStorage(executor, lockWaitFloor);
+            executor.attemptOnce(() -> {
+                try (Statement s = executor.connection().createStatement()) {
+                    s.execute("PRAGMA wal_autocheckpoint = 0");
+                    s.execute("PRAGMA journal_size_limit = " + TransactionExecutor.WAL_FILE_KEEP_BYTES);
+                    s.execute("PRAGMA journal_mode = WAL");
+                    s.execute("PRAGMA busy_timeout = " + busyTimeoutMillis);
+                    return Boolean.TRUE;
+                }
+            });
+            return new SqliteStorage(executor, lockWaitFloor, storageLock);
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
+            storageLock.close();
             if (isNotADatabase(e)) {
                 throw SCHEMA.notSmq("not a SQLite file");
+            }
+            if (isBusyCause(e)) {
+                throw StorageLock.locked(path, StorageLock.lockPathOf(path), e);
             }
             if (e instanceof RuntimeException re) {
                 throw re;
             }
             throw new SmqStorageException("cannot open " + path, e);
         }
+    }
+
+    private static boolean isBusyCause(Throwable t) {
+        for (; t != null; t = t.getCause()) {
+            if (t instanceof SQLException se && TransactionExecutor.isBusy(se)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isNotADatabase(Throwable t) {
@@ -622,7 +627,11 @@ public final class SqliteStorage implements Storage {
 
     @Override
     public void close() {
-        executor.close();
+        try {
+            executor.close();
+        } finally {
+            storageLock.close();
+        }
     }
 
     private static void closeQuietly(@Nullable Connection c) {

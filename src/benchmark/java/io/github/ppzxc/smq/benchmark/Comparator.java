@@ -11,7 +11,6 @@ import java.util.TreeMap;
  *
  * <ul>
  *   <li>floor: 1프로세스 빈 큐 POWER_LOSS의 S1 절대 하한(P1 10000, P2 8000, P3 4000 msg/s). P0과 P4(4KB)는 기록만 한다.
- *   <li>scaling: 4프로세스 S1은 1프로세스의 70% 이상(P1~P4, 내구성 수준마다).
  *   <li>depth: P1의 100만 건 깊이 S1은 같은 조건 빈 큐의 70% 이상.
  *   <li>latency: S3 p99는 같은 프로세스 10ms 이하, 다른 프로세스 260ms 이하.
  *   <li>regression: 기준선에 있는 항목이 20% 넘게 나빠지면 FAIL(처리량은 떨어짐, 지연은 늘어남).
@@ -46,7 +45,6 @@ final class Comparator {
         });
         List<Check> checks = new ArrayList<>();
         floors(results, checks);
-        scaling(samples, checks);
         depth(samples, checks);
         latency(results, checks);
         regressions(results, baseline, checks);
@@ -69,21 +67,8 @@ final class Comparator {
         }
     }
 
-    private static void scaling(Map<String, List<Double>> r, List<Check> out) {
-        for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4)) {
-            for (Durability d : Durability.values()) {
-                String name = "scaling S1 " + p + " " + d + " proc4 >= 70% of proc1";
-                ratio(
-                        out,
-                        name,
-                        r.get(Keys.throughput(key(p, "proc4", d, 0))),
-                        r.get(Keys.throughput(key(p, "proc1", d, 0))));
-            }
-        }
-    }
-
     private static void depth(Map<String, List<Double>> r, List<Check> out) {
-        for (String shape : List.of("proc1", "proc4")) {
+        for (String shape : List.of("proc1")) {
             for (Durability d : Durability.values()) {
                 String name = "depth S1 P1 " + shape + " " + d + " 1m >= 70% of empty";
                 ratio(
@@ -134,7 +119,7 @@ final class Comparator {
     }
 
     private static void latency(Map<String, Double> r, List<Check> out) {
-        for (Object[] c : new Object[][] {{Topology.SAME_PROCESS, 10}, {Topology.CROSS_PROCESS, 260}}) {
+        for (Object[] c : new Object[][] {{Topology.SAME_PROCESS, 10}}) {
             Topology t = (Topology) c[0];
             int ceiling = (Integer) c[1];
             String name = "latency S3 P1 " + t.id() + " p99 <= " + ceiling + " ms";

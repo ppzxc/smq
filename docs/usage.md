@@ -129,12 +129,14 @@ if (!ext.outcomes().allOk()) { /* 일부는 이미 다른 리스로 넘어갔거
 | `NoDeadLetterQueueException` | dead letter 큐가 없는 큐에서 reject했다. |
 | `IncompatibleStorageException` | 파일이 smq 파일이 아니거나 스키마 버전이 맞지 않는다. |
 | `SmqStorageException` | 저장소 연산의 효력을 알 수 없다. 반영됐을 수도, 안 됐을 수도 있다. |
+| `StorageLockedException` | SQLite 파일을 다른 곳(다른 프로세스, 같은 JVM의 중복 열기, 외부 도구)이 쥐고 있어 열 수 없다. 기다리지 않고 바로 던진다. 아무것도 변경되지 않았다. |
 
 `SmqStorageException` 뒤에는 발행을 다시 해도 된다(앞선 발행이 반영됐다면 중복되지만 at-least-once 범위 안이다). 정산은 같은 `Settlement` 값으로 다시 하면 된다.
 
 ## 내구성과 동시성
 
 - **내구성 수준**: SQLite 저장소의 `Durability`는 두 가지다. `POWER_LOSS`(기본)는 커밋마다 fsync해서 전원 장애나 OS 멈춤 뒤에도 성공한 발행·정산이 남는다. `PROCESS_CRASH`는 프로세스가 죽어도 남지만 전원 장애 때는 마지막 커밋 몇 개를 잃을 수 있고, 대신 처리량이 높다([ADR 0005](adr/0005-default-durability-survives-power-loss.md)). 인메모리 저장소에는 해당 없다.
-- **다중 프로세스**: 여러 프로세스가 같은 SQLite 파일을 열어 큐를 공유할 수 있다. 쓰기 경합(`SQLITE_BUSY`)은 내부에서 트랜잭션 단위로 다시 시도한다. 다른 프로세스가 쓰기 락을 오래 쥐면 선언, 발행, 정산, 연장, `close()`는 재시도가 끝날 때까지(기본값 기준 최대 약 25초) 같은 프로세스의 다른 호출과 직렬로 막힐 수 있다. 저장소를 여는 `open`만 시도 횟수 대신 총 30초 안에서 다시 시도한다. 꺼내기만 `wait`가 이 대기도 한정해 시간이 다하면 빈 청크를 돌려준다. 정상적인 짧은 직렬화는 `wait`가 0이어도 기다리는데, 이 하한은 기본 100ms이고 쓰기 트랜잭션 하나가 그보다 오래 걸리는 느린 저장 장치에서는 `lockWaitFloor`로 늘린다([ADR 0009](adr/0009-pull-wait-bounds-lock-and-busy-wait.md)). 쓰기를 커밋한 호출은 WAL이 커졌을 때 되감기를 위해 `wait`와 별개로 최대 50ms 더 걸릴 수 있다([ADR 0010](adr/0010-wal-is-checkpointed-by-size-not-by-sqlite-auto-checkpoint.md)). 컨슈머를 서로 구별하지 않으며, 리스가 같은 메시지를 두 컨슈머에게 동시에 주지 않는다.
-- **스키마 업그레이드**: 파일을 열 때 스키마 버전이 낮으면 자동으로 올린다. 업그레이드 뒤에도 남아 있는 옛 버전 프로세스는 다음 트랜잭션에서 예외로 멈춘다. 이때 그 프로세스가 쥔 리스는 만료되어 재전달되므로 전달이 유실되지 않는다([ADR 0004](adr/0004-schema-auto-upgrade-with-per-transaction-version-check.md)).
+- **한 JVM 전용**: SQLite 파일은 한 JVM만 연다. 열 때 DB 옆의 락 파일(`<DB 파일명>.lock`)에 OS 배타 락을 잡고 연결을 `locking_mode=EXCLUSIVE`로 연다. 다른 프로세스나 같은 JVM의 중복 열기, 외부 SQLite 도구가 파일을 쥔 경우에는 기다리지 않고 `StorageLockedException`이 올라온다(메시지에 DB 경로와 락 파일 경로가 있다). 락 파일은 닫은 뒤에도 남지만 존재가 아니라 OS 락으로 판단하므로 지워도 되고 남겨도 된다. 락 파일을 만들거나 잠그지 못하면 `SmqStorageException`이다. 같은 JVM의 스레드들은 연결 하나를 락 하나로 직렬화해 쓴다. 꺼내기만 `wait`가 lock 대기를 한정해 시간이 다하면 빈 청크를 돌려준다. 정상적인 짧은 직렬화는 `wait`가 0이어도 기다리는데, 이 하한은 기본 100ms이고 쓰기 트랜잭션 하나가 그보다 오래 걸리는 느린 저장 장치에서는 `lockWaitFloor`로 늘린다([ADR 0009](adr/0009-pull-wait-bounds-lock-and-busy-wait.md)). 쓰기를 커밋한 호출은 WAL이 커졌을 때 되감기를 위해 `wait`와 별개로 최대 50ms 더 걸릴 수 있다([ADR 0010](adr/0010-wal-is-checkpointed-by-size-not-by-sqlite-auto-checkpoint.md)). 컨슈머를 서로 구별하지 않으며, 리스가 같은 메시지를 두 컨슈머에게 동시에 주지 않는다([ADR 0012](adr/0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)).
+- **SQLite 파일을 디버깅 도구로 열기**: smq가 멈춰 있을 때는 sqlite3 CLI 같은 도구로 열어도 된다. 단 도구를 띄워 둔 채 smq를 시작하면 도구의 공유 락 때문에 smq가 `StorageLockedException`으로 못 열 수 있으니 도구를 닫고 시작한다. smq가 실행 중일 때는 `EXCLUSIVE` 모드라 외부 연결이 읽을 수 없다. 비상용으로 URI `file:<경로>?immutable=1`로 읽을 수는 있지만 파일이 바뀌면 결과가 틀리거나 `SQLITE_CORRUPT`가 날 수 있어 안전하지 않다. 실행 중 안전한 스냅샷 API는 아직 없다.
+- **스키마 업그레이드**: 파일을 열 때 스키마 버전이 낮으면 자동으로 올린다. 버전이 더 높거나 smq 파일이 아니면 `IncompatibleStorageException`으로 거부한다([ADR 0004](adr/0004-schema-auto-upgrade-with-per-transaction-version-check.md)).
 - **스레드 안전**: `Smq`와 `Queue`, 불변 값인 `Chunk`와 `Settlement`는 여러 스레드에서 써도 된다.

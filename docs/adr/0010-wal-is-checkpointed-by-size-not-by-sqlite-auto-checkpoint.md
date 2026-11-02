@@ -1,5 +1,7 @@
 # WAL은 SQLite 자동 체크포인트가 아니라 파일 크기를 보고 smq가 되감는다
 
+> **부분 대체(ADR-0012)**: 연결 여럿(프로세스 여럿)이 같은 WAL을 되감는 경우를 위한 salt 감지는 한 JVM 전용에서는 필요 없다(코드는 후속 이슈에서 걷어 낸다). 크기를 보고 되감는 결정은 그대로다. [ADR 0012](0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)
+
 여러 프로세스가 같은 SQLite 파일을 쉬지 않고 읽고 쓰면 `smq.db-wal`이 정산한 데이터와 무관하게 자란다. `randomBench`가 ERROR가 된 실행에서 WAL이 852MB였고(#102), 같은 매개변수(프로세스 4, `PROCESS_CRASH`, 청크 132, 생산자 [0,0,4,4], 소비자 [2,1,1,3], pullWait 371ms)로 부하 시간만 늘려 재 보니 계속 커졌다.
 
 | 부하 | WAL 최대 크기(수정 전) | WAL 최대 크기(`TRUNCATE` 16MB안, 처음 구현) |

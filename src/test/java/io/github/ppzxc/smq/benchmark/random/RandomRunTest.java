@@ -95,24 +95,6 @@ class RandomRunTest {
     }
 
     @Test
-    void theParentMergesTheRecordsOfEveryChildProcess() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r =
-                RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of()));
-        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
-        assertEquals(
-                java.util.Set.of(0, 1, 2, 3),
-                r.records().published().stream()
-                        .map(x -> x.tag().process())
-                        .collect(java.util.stream.Collectors.toSet()));
-        assertEquals(
-                java.util.Set.of(0L, 1L, 2L, 3L),
-                r.records().deliveries().stream()
-                        .map(d -> d.pull().chunk() >>> 40)
-                        .collect(java.util.stream.Collectors.toSet()));
-    }
-
-    @Test
     void aChildThatNeverGotTheWriteLockLeavesTheOthersRecordsMergedAndTheRunPassing() {
         RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
         RunResult r = RandomRun.execute(
@@ -123,31 +105,6 @@ class RandomRunTest {
                 r.records().published().stream()
                         .map(x -> x.tag().process())
                         .collect(java.util.stream.Collectors.toSet()));
-    }
-
-    @Test
-    void multiProcessRunMergesEveryProcessAndPasses() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(1_000));
-        assertEquals(4, p.processes());
-        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, inProcess());
-        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
-        // 어느 프로세스가 실제로 발행하고 꺼내는지는 SQLite 쓰기 락 경합이 정한다. 한 프로세스가 부하 구간 내내 락을 못 잡을 수
-        // 있으므로(ADR-0009의 락 대기 규약) 여기서 프로세스 분포는 단언하지 않는다. 합치기는 아래 고정 입력 테스트가 본다.
-        assertTrue(r.records().published().stream()
-                .allMatch(x -> x.tag().process() >= 0 && x.tag().process() <= p.processes()));
-        for (int i = 0; i < p.processes(); i++) {
-            assertTrue(Files.exists(dir.resolve("p" + i + "-deliveries.jsonl")), "자식 " + i + "의 전달 기록 파일");
-        }
-        assertTrue(r.records().samples().stream().anyMatch(CountsSample::afterDrain));
-    }
-
-    @Test
-    void aFailingChildMakesTheRunAnError() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, spec -> {
-            throw new java.io.IOException("자식을 띄우지 못했다");
-        });
-        assertEquals(Verdict.ERROR, r.verdict());
     }
 
     @Test
@@ -168,31 +125,6 @@ class RandomRunTest {
         assertEquals(java.util.List.of(del), back.deliveries());
         assertEquals(11, back.loadAckedMessages());
         assertEquals(2222, back.loadAckedBytes());
-    }
-
-    @Test
-    void aViolationInAMultiProcessRunKeepsEveryProcessDeliveriesInTheFailureDir() throws Exception {
-        Violation v = new Violation(Invariant.GHOST, java.util.List.of(), java.util.List.of(), "합성");
-        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-        Session session = new Session(
-                dir,
-                dir.resolve("runs.jsonl"),
-                java.util.Map.of(),
-                Limits.smoke(1_000),
-                (params, runDir) -> RandomRun.execute(
-                        params, runDir, (c, pub, del, smp) -> java.util.List.of(v), fixedOutputs(java.util.Set.of())),
-                new java.io.PrintStream(bytes, true));
-        assertEquals(Session.EXIT_FAILED, session.run(java.util.List.of(2L).iterator(), Long.MAX_VALUE));
-        Path failure = session.failureDir(2);
-        for (int i = 0; i < 4; i++) {
-            assertTrue(Files.size(failure.resolve("p" + i + "-deliveries.jsonl")) >= 0, "프로세스 " + i);
-        }
-        assertTrue(Files.exists(failure.resolve("smq.db")));
-        java.util.Set<String> processes = new java.util.HashSet<>();
-        for (String line : Files.readAllLines(failure.resolve("deliveries.jsonl"))) {
-            processes.add(RecordsJson.parseDelivery(line).tag().toString().split("/")[1]);
-        }
-        assertTrue(processes.size() > 1, "합친 전달 기록에 여러 프로세스의 태그가 있다: " + processes);
     }
 
     // ---- ERROR 진단: 발생 위치, 스택 트레이스, 자식 종료 코드와 표준 오류
@@ -217,60 +149,6 @@ class RandomRunTest {
     }
 
     @Test
-    void aChildOutOfMemoryErrorIsReportedWithItsLocationAndFullStackTrace() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, failingChild(1, () -> {
-            throw new OutOfMemoryError("Java heap space");
-        }));
-        assertEquals(Verdict.ERROR, r.verdict());
-        ErrorDetail d = r.errorDetail();
-        assertNotNull(d);
-        assertEquals("child-1", d.location());
-        assertEquals("java.lang.OutOfMemoryError", d.exceptionClass());
-        assertEquals("Java heap space", d.message());
-        assertTrue(d.stackTrace().startsWith("java.lang.OutOfMemoryError: Java heap space"), d.stackTrace());
-        assertTrue(d.stackTrace().contains("\tat "), "스택 프레임");
-        assertEquals(1, d.exitCode());
-    }
-
-    @Test
-    void aChildThatDiesWithoutReportingIsJudgedByItsExitCodeAndStderrTail() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, spec -> new ChildSpawner.Running() {
-            public void await(long timeoutMs) throws Exception {
-                if (spec.process() == 0) {
-                    throw new ChildFailure(0, 137, "Killed", new IllegalStateException("자식 JVM 실패, 종료 코드 137"));
-                }
-            }
-
-            public void destroy() {}
-        });
-        assertEquals(Verdict.ERROR, r.verdict());
-        ErrorDetail d = r.errorDetail();
-        assertEquals("child-0", d.location());
-        assertEquals(137, d.exitCode());
-        assertEquals("Killed", d.stderrTail());
-        assertEquals("java.lang.IllegalStateException", d.exceptionClass());
-    }
-
-    @Test
-    void anExceptionFromAnUnidentifiedAwaitIsStillAttributedToTheChildThatWasAwaited() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, spec -> new ChildSpawner.Running() {
-            public void await(long timeoutMs) throws Exception {
-                if (spec.process() == 2) {
-                    throw new java.util.concurrent.TimeoutException("시간 초과");
-                }
-            }
-
-            public void destroy() {}
-        });
-        assertEquals("child-2", r.errorDetail().location());
-        assertEquals("java.util.concurrent.TimeoutException", r.errorDetail().exceptionClass());
-        assertNull(r.errorDetail().exitCode());
-    }
-
-    @Test
     void anExceptionInTheHarnessJvmIsReportedAsHarness() {
         RunParams p = RunParams.fromSeed(5, Limits.smoke(300));
         RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> {
@@ -284,15 +162,6 @@ class RandomRunTest {
         assertTrue(d.stackTrace().contains("\tat "));
         assertNull(d.exitCode());
         assertNull(d.stderrTail());
-    }
-
-    @Test
-    void aSpawnFailureIsAHarnessError() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, spec -> {
-            throw new java.io.IOException("자식을 띄우지 못했다");
-        });
-        assertEquals("harness", r.errorDetail().location());
     }
 
     @Test
@@ -357,18 +226,6 @@ class RandomRunTest {
     }
 
     @Test
-    void 자식_프로세스마다_메트릭_요약이_결과에_붙는다() {
-        Limits soak = Limits.smoke(1_000).withRate(200);
-        RunParams p = paramsWithProcesses(2, soak);
-        RunResult r = RandomRun.execute(p, dir, InvariantChecker::check, inProcess());
-        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
-        assertEquals(2, r.childMetrics().size());
-        assertTrue(
-                r.childMetrics().stream().allMatch(m -> m.sampleCount() > 0),
-                r.childMetrics().toString());
-    }
-
-    @Test
     void 백로그_증가는_불변식이_멀쩡해도_실패이고_위반과_소진_실패가_우선한다() {
         SoakJudge.Report growing = new SoakJudge.Report(500, 1.0, 100, 200, 5_000, true);
         SoakJudge.Report fine = new SoakJudge.Report(500, 0.3, 100, 0, 10, false);
@@ -378,36 +235,6 @@ class RandomRunTest {
         assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), null));
         assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), growing));
         assertEquals(Verdict.DRAIN_TIMEOUT, RandomRun.verdict(false, java.util.List.of(v), growing));
-    }
-
-    @Test
-    void 자식을_정리할_때는_모두에게_종료를_먼저_알리고_그다음_기다린다() {
-        java.util.List<String> events = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-        ChildSpawner recording = spec -> {
-            int n = spec.process();
-            ChildOutput.write(spec.outDir(), n, new ChildOutput(0, 0, java.util.List.of(), java.util.List.of()));
-            return new ChildSpawner.Running() {
-                @Override
-                public void await(long timeoutMs) {}
-
-                @Override
-                public void requestStop() {
-                    events.add("stop" + n);
-                }
-
-                @Override
-                public void destroy() {
-                    events.add("destroy" + n);
-                }
-            };
-        };
-        RunParams p = paramsWithProcesses(3, Limits.smoke(300));
-        RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(), recording);
-
-        assertEquals(
-                java.util.List.of("stop0", "stop1", "stop2", "destroy0", "destroy1", "destroy2"),
-                events,
-                "순서대로 하나씩 신호를 보내고 기다리면 늦게 끝나는 자식 뒤의 자식은 그동안 부하를 돌린다");
     }
 
     private Path subdir(String name) {

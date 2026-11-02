@@ -1,5 +1,7 @@
 # 꺼내기의 wait는 lock과 BUSY 대기까지 한정하고 나머지 연산은 직렬로 둔다
 
+> **부분 대체(ADR-0012)**: BUSY 재시도(5회 × 5초)와 열기 30초 재시도는 다중 프로세스를 전제한 결정이다. 열기는 이제 재시도 없이 즉시 `StorageLockedException`이다. 꺼내기 `wait`의 lock 대기 한정과 `lockWaitFloor`는 그대로다. [ADR 0012](0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)
+
 SQLite 저장소는 연결 하나를 lock 하나로 보호한다(ADR-0007). 다른 프로세스가 쓰기 락을 오래 쥐면 BUSY 재시도(시도마다 driver 안 `busy_timeout` 5초, 시도 사이 `10ms × 번호`, 기본 5회)가 lock을 쥔 채 최대 약 25초 걸리고, 같은 프로세스의 모든 호출이 그동안 lock에서 기다린다(#68). 꺼내기의 `wait`가 짧아도 실제로는 훨씬 오래 막힐 수 있었다.
 
 꺼내기의 `wait`가 이 대기를 한정한다. `Storage`에 `default pull(queue, max, lease, now, wait)`를 더했고 SQLite 저장소만 구현한다. `wait` 안에 lock을 잡지 못하거나, BUSY로 실패한 뒤 마감이 지났으면 아무것도 반영하지 않고 빈 청크를 돌려준다(BUSY 실패는 롤백되므로 안전하다). 단일 연결과 단일 lock은 그대로다. 그래서 ADR-0007(문장 캐시)을 다시 열지 않았고, SPI 확장은 ADR-0002의 큐 연산 수준 안이다.

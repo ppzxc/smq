@@ -25,7 +25,14 @@ final class RecordSpool implements AutoCloseable {
 
     RecordSpool(Path dir, int process) throws IOException {
         this.published = open(publishedFile(dir, process));
-        this.deliveries = open(deliveriesFile(dir, process));
+        DataOutputStream second;
+        try {
+            second = open(deliveriesFile(dir, process));
+        } catch (IOException | RuntimeException e) {
+            published.close();
+            throw e;
+        }
+        this.deliveries = second;
     }
 
     static Path publishedFile(Path dir, int process) {

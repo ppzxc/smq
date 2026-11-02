@@ -190,8 +190,9 @@ final class RandomRun {
                 drained = drain(q.target(), q.deadLetter());
                 jvmSummary = sampler.summary();
             }
+            closeSpool(); // 검사가 읽기 전에 버퍼를 내보낸다. 실패하면 그대로 올린다.
         } finally {
-            closeSpool();
+            closeSpoolQuietly(); // 위에서 이미 닫았으면 아무 일도 없고, 예외 경로에서는 원래 예외를 가리지 않는다.
         }
         return judge(drained);
     }
@@ -272,8 +273,9 @@ final class RandomRun {
                         params.producers().get(process),
                         params.consumers().get(process),
                         false);
-            } finally {
                 run.closeSpool();
+            } finally {
+                run.closeSpoolQuietly();
             }
             ChildOutput.write(
                     outDir,
@@ -635,6 +637,14 @@ final class RandomRun {
         }
     }
 
+    private void closeSpoolQuietly() {
+        try {
+            closeSpool();
+        } catch (IOException ignored) {
+            // 원래 예외(또는 이미 보고된 닫기 실패)를 가리지 않는다.
+        }
+    }
+
     private void closeSpool() throws IOException {
         RecordSpool s = spool;
         if (s != null) {
@@ -751,16 +761,13 @@ final class RandomRun {
         SoakJudge.Report soak = soakReport(checked.publishedInLoad(), smp);
         Verdict verdict = verdict(drained, checked.violations(), soak);
         double seconds = params.loadMillis() / 1000.0;
-        long[] latencies = checked.latenciesMillis();
-        Double p50 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 50);
-        Double p99 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 99);
         return new RunResult(
                 params,
                 verdict,
                 loadAckedMessages.get() / seconds,
                 loadAckedBytes.get() / 1_000_000.0 / seconds,
-                p50,
-                p99,
+                checked.p50Millis(),
+                checked.p99Millis(),
                 checked.violations(),
                 drained ? null : "소진이 " + drainLimitMillis + "ms 안에 끝나지 않았다",
                 new RunResult.Records(List.of(), List.of(), smp),
@@ -808,15 +815,10 @@ final class RandomRun {
         pub.forEach(p -> byTag.put(p.tag(), p));
         List<Long> out = new ArrayList<>();
         for (Delivery d : del) {
-            if (d.queue() != QueueKind.TARGET
-                    || d.deliveryCount() != 1
-                    || d.pull().atMillis() < loadStartMillis
-                    || d.pull().atMillis() >= loadEndMillis) {
-                continue;
-            }
             Published p = byTag.get(d.tag());
-            if (p != null && p.delayMillis() == 0 && p.atMillis() >= loadStartMillis) {
-                out.add(Math.max(0, d.pull().atMillis() - p.atMillis()));
+            long latency = p == null ? -1 : SpoolCheck.latencyMillis(d, p, loadStartMillis, loadEndMillis);
+            if (latency >= 0) {
+                out.add(latency);
             }
         }
         return out.stream().mapToLong(Long::longValue).sorted().toArray();

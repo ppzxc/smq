@@ -146,7 +146,62 @@ class SpoolCheckTest {
         spool();
         SpoolCheck.Result r = SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, 3);
         assertEquals(3, r.publishedInLoad());
-        assertArrayEquals(new long[] {50, 400}, r.latenciesMillis());
+        assertEquals(50.0, r.p50Millis());
+        assertEquals(400.0, r.p99Millis());
+    }
+
+    @Test
+    void 같은_메시지_id가_서로_다른_태그로_전달된_유령은_조각이_달라도_찾는다() throws Exception {
+        for (long s = 0; s < 60; s++) {
+            good(0, s, 1_100, 1_200);
+        }
+        // 두 태그가 같은 큐의 같은 메시지 id로 전달됐다. 태그가 다르므로 태그 조각은 서로 다를 수 있다.
+        for (int i = 0; i < 20; i++) {
+            Tag a = tag(1, 700 + 2 * i);
+            Tag b = tag(1, 701 + 2 * i);
+            pub.add(new Published(a, content(700 + 2 * i), 1_100, 0));
+            pub.add(new Published(b, content(701 + 2 * i), 1_100, 0));
+            long id = 5_000 + i;
+            del.add(new Delivery(
+                    QueueKind.TARGET,
+                    a,
+                    id,
+                    1,
+                    content(700 + 2 * i),
+                    new Pull(chunk++, 0, 1_300, 31_300),
+                    Settle.ack(1_305)));
+            del.add(new Delivery(
+                    QueueKind.TARGET,
+                    b,
+                    id,
+                    1,
+                    content(701 + 2 * i),
+                    new Pull(chunk++, 0, 1_300, 31_300),
+                    Settle.ack(1_305)));
+        }
+        spool();
+        assertTrue(InvariantChecker.check(CONFIG, pub, del, drained()).stream()
+                .anyMatch(v -> v.invariant() == Invariant.GHOST));
+        for (int k : new int[] {1, 2, 7, 16}) {
+            long ghosts = SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, k).violations().stream()
+                    .filter(v -> v.invariant() == Invariant.GHOST && v.detail().contains("서로 다른 태그"))
+                    .count();
+            assertEquals(20, ghosts, "조각 " + k + "개");
+        }
+    }
+
+    @Test
+    void 쓰다_죽어_끝이_잘린_파일이_있어도_앞의_기록은_검사한다() throws Exception {
+        for (long s = 0; s < 50; s++) {
+            good(0, s, 1_100, 1_200);
+        }
+        spool();
+        Path last = RecordSpool.deliveriesFiles(dir).getFirst();
+        byte[] bytes = Files.readAllBytes(last);
+        Files.write(last, java.util.Arrays.copyOf(bytes, bytes.length - 7));
+        SpoolCheck.Result r = SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, 3);
+        assertFalse(r.violations().isEmpty(), "잘려서 사라진 전달은 유실로 보인다");
+        assertTrue(r.violations().stream().allMatch(v -> v.invariant() == Invariant.LOSS));
     }
 
     @Test

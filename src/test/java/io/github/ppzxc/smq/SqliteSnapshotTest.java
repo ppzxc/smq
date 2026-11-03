@@ -2,8 +2,8 @@ package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.nio.charset.StandardCharsets;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -189,6 +189,21 @@ class SqliteSnapshotTest {
                 assertTrue(inSnapshot >= initial + before, "snapshot=" + inSnapshot + " before=" + before);
                 assertTrue(inSnapshot <= initial + after + 1, "snapshot=" + inSnapshot + " after=" + after);
             }
+        }
+    }
+
+    @Test
+    void 대상_디렉터리_이름에_작은따옴표가_있어도_스냅샷을_만든다() throws Exception {
+        Path quoted = Files.createDirectory(dir.resolve("it's here"));
+        Path target = quoted.resolve("snap's.db");
+        try (Smq smq = open()) {
+            smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
+
+            smq.snapshot(target);
+        }
+
+        try (Connection c = external(target)) {
+            assertEquals(List.of("a"), payloads(c));
         }
     }
 }

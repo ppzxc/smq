@@ -24,7 +24,7 @@ smq는 한 JVM이 쓰는 로컬 큐다. 여러 프로세스가 같은 SQLite 파
 
 ## 결과와 한계
 
-- **디버깅**: smq가 멈춰 있으면 외부 도구로 열 수 있다. 단 도구를 띄워 둔 채 smq를 시작하면, WAL 연결이 공유 락을 계속 쥐므로 smq가 `StorageLockedException`으로 못 연다. 실행 중에는 스냅샷 API(`VACUUM INTO`)가 안전하다(아직 없다, 후속 이슈). `immutable=1` URI로 여는 읽기는 파일이 바뀌면 결과가 틀리거나 `SQLITE_CORRUPT`가 날 수 있는 비상용이다.
+- **디버깅**: smq가 멈춰 있으면 외부 도구로 열 수 있다. 단 도구를 띄워 둔 채 smq를 시작하면, WAL 연결이 공유 락을 계속 쥐므로 smq가 `StorageLockedException`으로 못 연다. 실행 중에는 스냅샷 API(`VACUUM INTO`)가 안전하다(ADR-0013). `immutable=1` URI로 여는 읽기는 파일이 바뀌면 결과가 틀리거나 `SQLITE_CORRUPT`가 날 수 있는 비상용이다.
 - **Windows**: ADR-0006의 "다중 프로세스 안전성" 검증 조건은 "NTFS에서도 거부된다"로 바뀐다.
 - **WSL의 `/mnt/c`, 네트워크 파일시스템**: 지원 범위 밖인 점은 그대로다. 락 파일 락도 이런 곳에서는 믿을 수 없다.
 - **이전 다중 프로세스 사용이 남긴 `-shm` 파일**이 있는 DB도 열린다(테스트로 확인).

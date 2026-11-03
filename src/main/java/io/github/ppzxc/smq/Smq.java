@@ -31,7 +31,25 @@ public interface Smq extends AutoCloseable {
     /** 큐를 메시지째 지운다. 지웠으면 true, 없었으면 false. */
     boolean delete(String name);
 
-    /** 실행 중인 저장소의 일관된 사본을 {@code target}에 만든다. */
+    /**
+     * 실행 중인 SQLite 저장소의 일관된 사본을 {@code target}에 만든다. 끝날 때까지 기다리고, 외부 SQLite 도구로 열 수 있는
+     * 파일을 남긴다.
+     *
+     * <ul>
+     *   <li>SQLite 전용이다. 인메모리 저장소는 {@link UnsupportedOperationException}을 던진다.
+     *   <li>{@code VACUUM INTO}가 도는 동안 저장소의 lock을 쥐므로 {@code publish}, {@code pull}, {@code settle},
+     *       {@code extend} 같은 다른 연산이 DB 크기에 비례해 멈춘다.
+     *   <li>같은 디렉터리에 임시 파일을 만들었다가 하드 링크로 연결하므로, {@code target}의 디렉터리에 DB 크기만큼의 여유
+     *       공간이 있어야 한다. 사전 검사는 하지 않는다.
+     *   <li>{@code target}의 파일시스템이 하드 링크를 지원해야 한다. 지원하지 않으면 예외로 실패하고 대체 경로는 없다.
+     *   <li>{@code target}이 이미 있으면 덮어쓰지 않고 예외를 던진다. 부모 디렉터리가 없어도 예외이며 만들지 않는다.
+     *   <li>실패하면 임시 파일을 지우고 {@code target}을 만들지 않는다.
+     * </ul>
+     *
+     * @throws IllegalArgumentException {@code target}이 실행 중인 DB, 그 {@code -wal} 파일, 락 파일과 같은 파일일 때
+     * @throws SmqStorageException 대상이 이미 있거나 부모 디렉터리가 없거나, 복사나 연결에 실패했을 때
+     * @throws UnsupportedOperationException 저장소가 스냅샷을 지원하지 않을 때
+     */
     void snapshot(Path target);
 
     @Override

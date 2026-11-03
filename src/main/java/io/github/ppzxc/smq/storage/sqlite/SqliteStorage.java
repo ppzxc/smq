@@ -633,7 +633,7 @@ public final class SqliteStorage implements Storage {
                 executor.executeOutsideTransaction(() -> {
                     StatementCachingConnection.releaseStatements(executor.connection());
                     try (Statement s = executor.connection().createStatement()) {
-                        s.execute("VACUUM INTO '" + temp + "'");
+                        s.execute("VACUUM INTO '" + temp.toString().replace("'", "''") + "'");
                         return Boolean.TRUE;
                     }
                 });

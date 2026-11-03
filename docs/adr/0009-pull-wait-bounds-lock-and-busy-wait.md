@@ -1,12 +1,12 @@
 # 꺼내기의 wait는 lock과 BUSY 대기까지 한정하고 나머지 연산은 직렬로 둔다
 
-> **부분 대체(ADR-0012)**: BUSY 재시도(5회 × 5초)와 열기 30초 재시도는 다중 프로세스를 전제한 결정이다. 열기는 이제 재시도 없이 즉시 `StorageLockedException`이다. 꺼내기 `wait`의 lock 대기 한정과 `lockWaitFloor`는 그대로다. [ADR 0012](0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)
+> **부분 대체(ADR-0012, #126에서 코드 제거 완료)**: BUSY 재시도(5회 × 5초)와 열기 30초 재시도는 다중 프로세스를 전제한 결정이라 코드까지 걷어 냈다. 열기는 재시도 없이 즉시 `StorageLockedException`이고, `busy_timeout`은 0이다. 아래 본문에서 BUSY 재시도, `busy_timeout` 대기, 약 25초 최악 대기를 말하는 부분은 결정 당시의 기록이며 현재 동작이 아니다. 꺼내기 `wait`의 자바 lock 대기 한정, `lockWaitFloor`, `Deadline.DEFAULT_LOCK_WAIT_FLOOR`는 그대로 유지한다. [ADR 0012](0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)
 
 SQLite 저장소는 연결 하나를 lock 하나로 보호한다(ADR-0007). 다른 프로세스가 쓰기 락을 오래 쥐면 BUSY 재시도(시도마다 driver 안 `busy_timeout` 5초, 시도 사이 `10ms × 번호`, 기본 5회)가 lock을 쥔 채 최대 약 25초 걸리고, 같은 프로세스의 모든 호출이 그동안 lock에서 기다린다(#68). 꺼내기의 `wait`가 짧아도 실제로는 훨씬 오래 막힐 수 있었다.
 
 꺼내기의 `wait`가 이 대기를 한정한다. `Storage`에 `default pull(queue, max, lease, now, wait)`를 더했고 SQLite 저장소만 구현한다. `wait` 안에 lock을 잡지 못하거나, BUSY로 실패한 뒤 마감이 지났으면 아무것도 반영하지 않고 빈 청크를 돌려준다(BUSY 실패는 롤백되므로 안전하다). 단일 연결과 단일 lock은 그대로다. 그래서 ADR-0007(문장 캐시)을 다시 열지 않았고, SPI 확장은 ADR-0002의 큐 연산 수준 안이다.
 
-선언, 발행, 정산, 연장, `close()`는 직렬 대기를 유지하고 최악 대기(기본값 기준 약 25초)를 `Queue`, `SmqStorageException`, `docs/usage.md`에 밝혔다. 이들은 결과를 호출자가 기다리는 쓰기라 빈 결과로 돌려줄 의미가 없고, `close()`를 끊으면 진행 중인 쓰기의 효력이 불명이 된다.
+선언, 발행, 정산, 연장, `close()`는 직렬 대기를 유지하고 최악 대기(당시 기본값 기준 약 25초, 현재는 BUSY 재시도가 없어 해당 없음)를 `Queue`, `SmqStorageException`, `docs/usage.md`에 밝혔다. 이들은 결과를 호출자가 기다리는 쓰기라 빈 결과로 돌려줄 의미가 없고, `close()`를 끊으면 진행 중인 쓰기의 효력이 불명이 된다.
 
 ## Considered Options
 
@@ -19,7 +19,7 @@ SQLite 저장소는 연결 하나를 lock 하나로 보호한다(ADR-0007). 다�
 
 ## 조건과 한계
 
-- driver 안 `busy_timeout` 대기는 끊을 수 없다. 최악은 `wait`에 한 번의 `busy_timeout`을 더한 값이다. 시도 사이에는 마감을 확인한다.
-- lock 대기에는 하한이 있고 기본은 100ms다(`Deadline.DEFAULT_LOCK_WAIT_FLOOR`). 빌더의 `lockWaitFloor`로 바꾼다. 처음에는 남은 `wait`만 기다리게 했더니 `wait=0`인 동시 꺼내기가 정상적인 짧은 직렬화조차 기다리지 않아, 메시지가 있는데 빈 청크를 돌려주며 적합성 스위트(여러 스레드가 `pull(max, ZERO)`를 동시에 호출)가 깨졌다. 정상 직렬화는 하한 안에 끝나고, 다른 스레드가 BUSY 재시도로 lock을 오래 쥘 때만 하한을 넘는다. 쓰기 트랜잭션 하나가 하한을 넘는 느린 저장 장치에서는 경합 중 `wait=0` 꺼내기가 메시지가 있는데도 빈 청크를 돌려줄 수 있다. 정상 직렬화와 BUSY 정체는 lock 대기 시간만으로 구분할 수 없고(첫 시도의 `busy_timeout` 대기는 driver 안이라 밖에서 보이지 않는다), 구분하려면 BUSY 대기를 직접 구현해야 해서 하지 않았다. 대신 운영자가 하한을 늘릴 수 있게 열었다. 적응형 하한(최근 트랜잭션 시간 기반)은 상태와 설명이 늘어 기각했다.
+- (대체됨, 현재는 `busy_timeout`이 0이라 해당 없음) driver 안 `busy_timeout` 대기는 끊을 수 없다. 최악은 `wait`에 한 번의 `busy_timeout`을 더한 값이다. 시도 사이에는 마감을 확인한다.
+- lock 대기에는 하한이 있고 기본은 100ms다(`Deadline.DEFAULT_LOCK_WAIT_FLOOR`). 빌더의 `lockWaitFloor`로 바꾼다. 이 하한은 BUSY 재시도 때문이 아니라 자바 lock 대기 하한이므로 BUSY 재시도를 걷어 낸 뒤에도 유지한다(#126). 아래 설명 중 BUSY 재시도를 이유로 드는 문장은 당시의 사정이고, 하한이 필요한 근본 이유는 `wait=0`인 동시 꺼내기가 정상적인 짧은 직렬화조차 기다리지 않는 문제다. 처음에는 남은 `wait`만 기다리게 했더니 `wait=0`인 동시 꺼내기가 정상적인 짧은 직렬화조차 기다리지 않아, 메시지가 있는데 빈 청크를 돌려주며 적합성 스위트(여러 스레드가 `pull(max, ZERO)`를 동시에 호출)가 깨졌다. 정상 직렬화는 하한 안에 끝나고, 다른 스레드가 BUSY 재시도로 lock을 오래 쥘 때만 하한을 넘는다. 쓰기 트랜잭션 하나가 하한을 넘는 느린 저장 장치에서는 경합 중 `wait=0` 꺼내기가 메시지가 있는데도 빈 청크를 돌려줄 수 있다. 정상 직렬화와 BUSY 정체는 lock 대기 시간만으로 구분할 수 없고(첫 시도의 `busy_timeout` 대기는 driver 안이라 밖에서 보이지 않는다), 구분하려면 BUSY 대기를 직접 구현해야 해서 하지 않았다. 대신 운영자가 하한을 늘릴 수 있게 열었다. 적응형 하한(최근 트랜잭션 시간 기반)은 상태와 설명이 늘어 기각했다.
 - 이 한도는 꺼내기에만 있다. 같은 프로세스의 쓰기 호출이 재시도 중이면 다른 쓰기와 `close()`는 계속 기다린다.
-- 열 때(`SqliteStorage.open`의 스키마 만들기와 WAL 전환)는 예외다. 빈 DB를 여러 프로세스가 동시에 열 때 driver가 `busy_timeout`을 기다리지 않고 BUSY를 바로 돌려주면 5회, 합계 100ms 재시도는 곧 바닥나므로(#114), 이 구간만 시도 횟수 대신 총 30초 안에서 10ms부터 2배씩 늘고 250ms가 상한이며 지터를 섞은 대기로 다시 시도한다. 한도는 시도 사이에만 확인하므로 최악은 30초에 한 번의 `busy_timeout`을 더한 값이다. 한도를 넘으면 시도 횟수와 시도별 소요 시간(`attemptMillis`)을 예외 메시지에 담는다. 거의 0이면 driver가 기다리지 않은 것이고 5초 근처면 `busy_timeout`이 동작한 것이라, Windows 파일 잠금 가설이 이 값으로 판별된다. 실행 중 경로의 정책과 꺼내기 `wait` 한도는 바뀌지 않았다.
+- (대체됨: ADR-0012로 열기 재시도를 없앴고 열 때 BUSY는 즉시 `StorageLockedException`이다. 아래는 #114 당시의 기록이다.) 열 때(`SqliteStorage.open`의 스키마 만들기와 WAL 전환)는 예외다. 빈 DB를 여러 프로세스가 동시에 열 때 driver가 `busy_timeout`을 기다리지 않고 BUSY를 바로 돌려주면 5회, 합계 100ms 재시도는 곧 바닥나므로(#114), 이 구간만 시도 횟수 대신 총 30초 안에서 10ms부터 2배씩 늘고 250ms가 상한이며 지터를 섞은 대기로 다시 시도한다. 한도는 시도 사이에만 확인하므로 최악은 30초에 한 번의 `busy_timeout`을 더한 값이다. 한도를 넘으면 시도 횟수와 시도별 소요 시간(`attemptMillis`)을 예외 메시지에 담는다. 거의 0이면 driver가 기다리지 않은 것이고 5초 근처면 `busy_timeout`이 동작한 것이라, Windows 파일 잠금 가설이 이 값으로 판별된다. 실행 중 경로의 정책과 꺼내기 `wait` 한도는 바뀌지 않았다.

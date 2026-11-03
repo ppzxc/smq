@@ -1,6 +1,6 @@
 # 기준선
 
-`baseline.json`은 `./gradlew benchmark`의 결과 파일과 같은 형식이다(형식은 `docs/benchmark.md`). 항목 값은 같은 장비에서 6회 잰 값의 중앙값이다.
+`baseline.json`은 `./gradlew benchmark`의 결과 파일과 같은 형식이다(형식은 `docs/benchmark.md`). 항목 값은 같은 장비에서 6회 잰 값의 중앙값이다. 측정값은 그대로이고 키 이름만 바꿨다(형태 구성요소 `proc1`, `same-process`를 뺐다, #129).
 
 ## 현재 기준선: ns0270
 

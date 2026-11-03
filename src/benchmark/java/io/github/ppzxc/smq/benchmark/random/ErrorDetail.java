@@ -10,21 +10,13 @@ import java.util.Map;
  *
  * @param location {@link #HARNESS}(하네스 JVM). 이전 기록과 형식을 맞추려고 문자열로 남겼다
  * @param stackTrace {@code Throwable.printStackTrace} 형식의 전체. 원인 사슬을 포함한다
- * @param exitCode 자식 JVM이 비정상 종료했을 때의 종료 코드. 자식 JVM이 없으므로 지금은 항상 null이다(기록 형식 호환용)
- * @param stderrTail 자식 JVM 표준 오류의 끝부분. 지금은 항상 null이다(기록 형식 호환용)
  */
-record ErrorDetail(
-        String location,
-        String exceptionClass,
-        String message,
-        String stackTrace,
-        Integer exitCode,
-        String stderrTail) {
+record ErrorDetail(String location, String exceptionClass, String message, String stackTrace) {
 
     static final String HARNESS = "harness";
 
-    static ErrorDetail of(String location, Throwable t, Integer exitCode, String stderrTail) {
-        return new ErrorDetail(location, t.getClass().getName(), t.getMessage(), stackTraceOf(t), exitCode, stderrTail);
+    static ErrorDetail of(String location, Throwable t) {
+        return new ErrorDetail(location, t.getClass().getName(), t.getMessage(), stackTraceOf(t));
     }
 
     static String stackTraceOf(Throwable t) {
@@ -39,8 +31,6 @@ record ErrorDetail(
         m.put("exceptionClass", exceptionClass);
         m.put("message", message);
         m.put("stackTrace", stackTrace);
-        m.put("exitCode", exitCode);
-        m.put("stderrTail", stderrTail);
         return m;
     }
 
@@ -50,12 +40,6 @@ record ErrorDetail(
         b.append("errorLocation=").append(location).append('\n');
         b.append("errorClass=").append(exceptionClass).append('\n');
         b.append("errorMessage=").append(message).append('\n');
-        if (exitCode != null) {
-            b.append("exitCode=").append(exitCode).append('\n');
-        }
-        if (stderrTail != null && !stderrTail.isEmpty()) {
-            b.append("stderrTail:\n").append(stderrTail).append('\n');
-        }
         b.append("stackTrace:\n").append(stackTrace);
         return b.toString();
     }

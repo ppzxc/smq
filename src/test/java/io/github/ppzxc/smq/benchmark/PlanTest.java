@@ -22,28 +22,27 @@ class PlanTest {
         assertEquals(27, plan.size());
         // S1: P1~P4 x {POWER_LOSS, PROCESS_CRASH}
         for (String p : List.of("P1", "P2", "P3", "P4"))
-            for (String n : List.of("proc1"))
-                for (String d : List.of("POWER_LOSS", "PROCESS_CRASH"))
-                    assertTrue(k.contains("sqlite/S1/" + p + "/" + n + "/" + d + "/empty"), p + n + d);
+            for (String d : List.of("POWER_LOSS", "PROCESS_CRASH"))
+                assertTrue(k.contains("sqlite/S1/" + p + "/" + d + "/empty"), p + d);
         // P0은 빈 큐만
-        assertTrue(k.contains("sqlite/S1/P0/proc1/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S1/P0/POWER_LOSS/empty"));
         // 100만 건 깊이는 P1에서만
-        assertTrue(k.contains("sqlite/S1/P1/proc1/POWER_LOSS/1m"));
-        assertTrue(k.contains("sqlite/S1/P1/proc1/PROCESS_CRASH/1m"));
-        assertFalse(k.contains("sqlite/S1/P2/proc1/POWER_LOSS/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/POWER_LOSS/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/PROCESS_CRASH/1m"));
+        assertFalse(k.contains("sqlite/S1/P2/POWER_LOSS/1m"));
         // S2: P1~P4, 빈 큐
-        assertTrue(k.contains("sqlite/S2/P3/proc1/POWER_LOSS/empty"));
-        assertTrue(k.contains("sqlite/S2/P4/proc1/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S2/P3/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S2/P4/POWER_LOSS/empty"));
         // 단건(청크 1) 프로파일: 크기마다 S1 빈 큐(두 내구성)와 S2
         for (String p : List.of("P0", "P2S", "P3S", "P4S")) {
-            assertTrue(k.contains("sqlite/S1/" + p + "/proc1/POWER_LOSS/empty"), p);
-            assertTrue(k.contains("sqlite/S1/" + p + "/proc1/PROCESS_CRASH/empty"), p);
-            assertTrue(k.contains("sqlite/S2/" + p + "/proc1/POWER_LOSS/empty"), p);
+            assertTrue(k.contains("sqlite/S1/" + p + "/POWER_LOSS/empty"), p);
+            assertTrue(k.contains("sqlite/S1/" + p + "/PROCESS_CRASH/empty"), p);
+            assertTrue(k.contains("sqlite/S2/" + p + "/POWER_LOSS/empty"), p);
         }
         // P4(4KB)는 100만 건 깊이를 재지 않는다
-        assertFalse(k.contains("sqlite/S1/P4/proc1/POWER_LOSS/1m"));
+        assertFalse(k.contains("sqlite/S1/P4/POWER_LOSS/1m"));
         // S3: P1만
-        assertTrue(k.contains("sqlite/S3/P1/same-process/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S3/P1/POWER_LOSS/empty"));
         assertEquals(1, k.stream().filter(s -> s.contains("/S3/")).count());
         assertTrue(plan.stream().filter(s -> s.depth() > 0).allMatch(s -> s.depth() == 1_000_000));
     }
@@ -59,13 +58,13 @@ class PlanTest {
         assertEquals(4, ratio.size(), "depth의 분자와 분모가 되는 S1 조건은 P1 빈 큐와 100만 건 x 두 내구성");
         assertTrue(ratio.stream().allMatch(s -> s.scenario() == Scenario.S1));
         Set<String> k = keys(ratio);
-        assertTrue(k.contains("sqlite/S1/P1/proc1/POWER_LOSS/1m"));
-        assertTrue(k.contains("sqlite/S1/P1/proc1/POWER_LOSS/empty"));
-        assertTrue(k.contains("sqlite/S1/P1/proc1/PROCESS_CRASH/1m"));
-        assertTrue(k.contains("sqlite/S1/P1/proc1/PROCESS_CRASH/empty"));
-        assertFalse(k.contains("sqlite/S1/P0/proc1/POWER_LOSS/empty"));
-        assertFalse(k.contains("sqlite/S1/P2S/proc1/POWER_LOSS/empty"));
-        assertFalse(k.contains("sqlite/S1/P2/proc1/POWER_LOSS/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/POWER_LOSS/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S1/P1/PROCESS_CRASH/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/PROCESS_CRASH/empty"));
+        assertFalse(k.contains("sqlite/S1/P0/POWER_LOSS/empty"));
+        assertFalse(k.contains("sqlite/S1/P2S/POWER_LOSS/empty"));
+        assertFalse(k.contains("sqlite/S1/P2/POWER_LOSS/1m"));
     }
 
     @Test
@@ -89,8 +88,8 @@ class PlanTest {
     void fullMemoryPlanIsSingleJvmDiagnostics() {
         List<RunSpec> plan = Plan.full(Storage.MEMORY);
         assertTrue(plan.stream().allMatch(s -> s.storage() == Storage.MEMORY));
-        assertTrue(keys(plan).contains("memory/S1/P1/proc1/none/empty"));
-        assertTrue(keys(plan).contains("memory/S3/P1/same-process/none/empty"));
+        assertTrue(keys(plan).contains("memory/S1/P1/none/empty"));
+        assertTrue(keys(plan).contains("memory/S3/P1/none/empty"));
     }
 
     @Test
@@ -135,7 +134,7 @@ class PlanTest {
         RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P3, Durability.PROCESS_CRASH, 1_000_000, 5000, 700);
         RunSpec back = RunSpec.fromJson(s.toJson());
         assertEquals(s, back);
-        RunSpec m = RunSpec.s3(Storage.MEMORY, Profile.P1, Topology.SAME_PROCESS, 10, 1);
+        RunSpec m = RunSpec.s3(Storage.MEMORY, Profile.P1, 10, 1);
         assertEquals(m, RunSpec.fromJson(m.toJson()));
     }
 }

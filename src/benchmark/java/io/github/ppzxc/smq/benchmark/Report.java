@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * 결과 파일이자 기준선 파일의 형식. 같은 형식이라 측정 결과를 그대로 기준선으로 커밋할 수 있다.
  *
- * <pre>{"environment":{"os":"..."},"entries":{"sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec":12345.6}}</pre>
+ * <pre>{"environment":{"os":"..."},"entries":{"sqlite/S1/P1/POWER_LOSS/empty:msgPerSec":12345.6}}</pre>
  *
  * 반복 측정한 항목만 {@code "samples":{"<항목 id>":[바퀴별 값...]}}을 덧붙인다. 항목 값은 그 표본의 중앙값이다. 표본 필드가 없으면 단일 표본이다.
  *

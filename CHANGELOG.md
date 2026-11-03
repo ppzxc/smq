@@ -8,6 +8,10 @@
 
 - 실행 중인 SQLite 저장소의 일관된 사본을 만드는 `Smq.snapshot(Path)`를 추가했다. `VACUUM INTO`를 자바 락 아래에서 돌리므로 그동안 다른 연산이 DB 크기에 비례해 멈춘다. 대상이 이미 있으면 덮어쓰지 않고 예외를 던진다. 인메모리 저장소는 지원하지 않는다. (#127, ADR-0013)
 
+### Changed
+
+- 벤치마크 결과와 기준선의 항목 키에서 형태 구성요소(`proc1`, `same-process`)를 뺐다. 예: `sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec`는 `sqlite/S1/P1/POWER_LOSS/empty:msgPerSec`가 된다. `--filter`에 옛 키를 쓰던 스크립트는 고쳐야 한다. (#129)
+
 ### Removed
 
 - 한 JVM 전용(ADR-0012)이 되어 쓸 곳이 없는 다중 프로세스용 저장소 런타임 코드(BUSY 재시도, 트랜잭션마다 하는 `user_version` 확인, WAL salt 감지)를 걷어냈다. (#126)

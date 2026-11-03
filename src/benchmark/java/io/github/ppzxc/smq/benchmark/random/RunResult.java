@@ -12,7 +12,6 @@ import java.util.List;
  * @param walMaxBytes 실행 중 측정한 {@code smq.db-wal} 크기의 최댓값(바이트). 한 번도 측정하지 못했으면 null
  * @param jvmMetrics 부모 JVM의 JVM 메트릭 요약. 표본이 없으면 null
  * @param soak 고정 속도 모드의 달성률과 백로그 보고. 고정 속도가 아니면 null
- * @param childMetrics 자식 JVM마다의 메트릭 요약. 자식 JVM이 없으므로 지금은 항상 빈 목록이다(기록 형식 호환용)
  */
 record RunResult(
         RunParams params,
@@ -27,8 +26,7 @@ record RunResult(
         ErrorDetail errorDetail,
         Long walMaxBytes,
         JvmMetricsSampler.Summary jvmMetrics,
-        SoakJudge.Report soak,
-        List<JvmMetricsSampler.Summary> childMetrics) {
+        SoakJudge.Report soak) {
 
     /** 검사기에 넘긴 기록. 실패한 실행에서 파일로 보존한다. */
     record Records(List<Published> published, List<Delivery> deliveries, List<CountsSample> samples) {
@@ -50,8 +48,7 @@ record RunResult(
                 errorDetail,
                 walMaxBytes,
                 jvmMetrics,
-                soak,
-                childMetrics);
+                soak);
     }
 
     boolean passed() {
@@ -60,7 +57,7 @@ record RunResult(
 
     /** 하네스 JVM에서 난 예외. */
     static RunResult error(RunParams params, Throwable t) {
-        return error(params, ErrorDetail.of(ErrorDetail.HARNESS, t, null, null), String.valueOf(t), null);
+        return error(params, ErrorDetail.of(ErrorDetail.HARNESS, t), String.valueOf(t), null);
     }
 
     static RunResult error(RunParams params, ErrorDetail detail, String summary, Long walMaxBytes) {
@@ -77,7 +74,6 @@ record RunResult(
                 detail,
                 walMaxBytes,
                 null,
-                null,
-                List.of());
+                null);
     }
 }

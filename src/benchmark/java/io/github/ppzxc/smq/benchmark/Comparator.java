@@ -10,9 +10,9 @@ import java.util.TreeMap;
  * 측정 결과를 스펙의 하한과 기준선에 견주어 항목별 PASS/FAIL/SKIP으로 보고한다. 검사 대상은 SQLite뿐이고 인메모리 항목은 보지 않는다.
  *
  * <ul>
- *   <li>floor: 1프로세스 빈 큐 POWER_LOSS의 S1 절대 하한(P1 10000, P2 8000, P3 4000 msg/s). P0과 P4(4KB)는 기록만 한다.
+ *   <li>floor: 빈 큐 POWER_LOSS의 S1 절대 하한(P1 10000, P2 8000, P3 4000 msg/s). P0과 P4(4KB)는 기록만 한다.
  *   <li>depth: P1의 100만 건 깊이 S1은 같은 조건 빈 큐의 70% 이상.
- *   <li>latency: S3 p99는 같은 프로세스 10ms 이하, 다른 프로세스 260ms 이하.
+ *   <li>latency: S3 p99는 10ms 이하.
  *   <li>regression: 기준선에 있는 항목이 20% 넘게 나빠지면 FAIL(처리량은 떨어짐, 지연은 늘어남).
  * </ul>
  *
@@ -51,15 +51,15 @@ final class Comparator {
         return checks;
     }
 
-    private static String key(Profile p, String shape, Durability d, int depth) {
-        return Keys.of(Storage.SQLITE, Scenario.S1, p, shape, d.name(), depth);
+    private static String key(Profile p, Durability d, int depth) {
+        return Keys.of(Storage.SQLITE, Scenario.S1, p, d.name(), depth);
     }
 
     private static void floors(Map<String, Double> r, List<Check> out) {
         Map<Profile, Integer> floor = Map.of(Profile.P1, 10_000, Profile.P2, 8_000, Profile.P3, 4_000);
         for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3)) {
-            String name = "floor S1 " + p + " proc1 POWER_LOSS >= " + floor.get(p) + " msg/s";
-            Double v = r.get(Keys.throughput(key(p, "proc1", Durability.POWER_LOSS, 0)));
+            String name = "floor S1 " + p + " POWER_LOSS >= " + floor.get(p) + " msg/s";
+            Double v = r.get(Keys.throughput(key(p, Durability.POWER_LOSS, 0)));
             out.add(
                     v == null
                             ? notMeasured(name)
@@ -68,15 +68,13 @@ final class Comparator {
     }
 
     private static void depth(Map<String, List<Double>> r, List<Check> out) {
-        for (String shape : List.of("proc1")) {
-            for (Durability d : Durability.values()) {
-                String name = "depth S1 P1 " + shape + " " + d + " 1m >= 70% of empty";
-                ratio(
-                        out,
-                        name,
-                        r.get(Keys.throughput(key(Profile.P1, shape, d, RunSpec.DEEP))),
-                        r.get(Keys.throughput(key(Profile.P1, shape, d, 0))));
-            }
+        for (Durability d : Durability.values()) {
+            String name = "depth S1 P1 " + d + " 1m >= 70% of empty";
+            ratio(
+                    out,
+                    name,
+                    r.get(Keys.throughput(key(Profile.P1, d, RunSpec.DEEP))),
+                    r.get(Keys.throughput(key(Profile.P1, d, 0))));
         }
     }
 
@@ -119,17 +117,13 @@ final class Comparator {
     }
 
     private static void latency(Map<String, Double> r, List<Check> out) {
-        for (Object[] c : new Object[][] {{Topology.SAME_PROCESS, 10}}) {
-            Topology t = (Topology) c[0];
-            int ceiling = (Integer) c[1];
-            String name = "latency S3 P1 " + t.id() + " p99 <= " + ceiling + " ms";
-            Double v = r.get(Keys.p99(
-                    Keys.of(Storage.SQLITE, Scenario.S3, Profile.P1, t.id(), Durability.POWER_LOSS.name(), 0)));
-            out.add(
-                    v == null
-                            ? notMeasured(name)
-                            : v <= ceiling + EPS ? pass(name, fmt(v) + " ms") : fail(name, fmt(v) + " ms"));
-        }
+        int ceiling = 10;
+        String name = "latency S3 P1 p99 <= " + ceiling + " ms";
+        Double v = r.get(Keys.p99(Keys.of(Storage.SQLITE, Scenario.S3, Profile.P1, Durability.POWER_LOSS.name(), 0)));
+        out.add(
+                v == null
+                        ? notMeasured(name)
+                        : v <= ceiling + EPS ? pass(name, fmt(v) + " ms") : fail(name, fmt(v) + " ms"));
     }
 
     private static void regressions(Map<String, Double> r, Map<String, Double> baseline, List<Check> out) {

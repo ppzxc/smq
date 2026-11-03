@@ -75,12 +75,11 @@ final class RecordCodec {
 
     private static void writeTag(DataOutput out, Tag t) throws IOException {
         out.writeLong(t.seed());
-        out.writeInt(t.process());
         out.writeLong(t.seq());
     }
 
     private static Tag readTag(DataInput in) throws IOException {
-        return new Tag(in.readLong(), in.readInt(), in.readLong());
+        return new Tag(in.readLong(), in.readLong());
     }
 
     private static void writeContent(DataOutput out, Content c) throws IOException {

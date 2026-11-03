@@ -188,7 +188,6 @@ final class SpoolCheck {
         out.writeByte(d.queue().ordinal());
         out.writeLong(d.messageId());
         out.writeLong(d.tag().seed());
-        out.writeInt(d.tag().process());
         out.writeLong(d.tag().seq());
     }
 
@@ -224,7 +223,7 @@ final class SpoolCheck {
     }
 
     private static long tagHash(Tag t) {
-        return mix(t.seed() * 31 + t.process()) ^ mix(t.seq());
+        return mix(t.seed() * 31) ^ mix(t.seq());
     }
 
     private static long mix(long x) {
@@ -316,7 +315,7 @@ final class SpoolCheck {
                 try {
                     queue = QueueKind.values()[in.readUnsignedByte()];
                     id = in.readLong();
-                    tag = new Tag(in.readLong(), in.readInt(), in.readLong());
+                    tag = new Tag(in.readLong(), in.readLong());
                 } catch (java.io.EOFException e) {
                     return out;
                 }

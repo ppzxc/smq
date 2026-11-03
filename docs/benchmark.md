@@ -34,7 +34,7 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 
 | 옵션 | 뜻 |
 |---|---|
-| `--filter <문자열>` | 키에 이 문자열이 든 조건만 돈다. 예: `--filter S1/P1/proc1` |
+| `--filter <문자열>` | 키에 이 문자열이 든 조건만 돈다. 예: `--filter S1/P1` |
 | `--storage memory` | 인메모리로 돈다. 코어 오버헤드를 보는 진단값이고 임계값은 적용하지 않는다. 한 JVM에서 도는 조건만 있다 |
 | `--repeat <횟수>` (태스크 옵션) | 비율 검사의 S1 조건을 재는 횟수(기본 3). 1이면 단발이다. 스모크와 인메모리에는 적용되지 않는다 |
 | `--work-dir <디렉터리>` | SQLite 파일을 만들 곳. 기본은 `build/benchmark/work` |
@@ -65,8 +65,8 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 {
   "environment": {"os": "Linux 6.x", "cpus": "16", "workDirFs": "ext4", "caveat": "..."},
   "entries": {
-    "sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec": 12345.6,
-    "sqlite/S3/P1/same-process/POWER_LOSS/empty:p99Ms": 7.0
+    "sqlite/S1/P1/POWER_LOSS/empty:msgPerSec": 12345.6,
+    "sqlite/S3/P1/POWER_LOSS/empty:p99Ms": 7.0
   }
 }
 ```
@@ -74,22 +74,22 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 반복 측정한 항목은 항목 값에 중앙값을 두고, 바퀴별 값은 `samples` 필드에 덧붙인다(반복하지 않은 항목은 `samples`에 없다).
 
 ```json
-  "entries": {"sqlite/S1/P1/proc1/POWER_LOSS/1m:msgPerSec": 4100.0},
-  "samples": {"sqlite/S1/P1/proc1/POWER_LOSS/1m:msgPerSec": [3900.0, 4100.0, 4300.0]}
+  "entries": {"sqlite/S1/P1/POWER_LOSS/1m:msgPerSec": 4100.0},
+  "samples": {"sqlite/S1/P1/POWER_LOSS/1m:msgPerSec": [3900.0, 4100.0, 4300.0]}
 ```
 
 `samples`가 없는 파일(이전 결과 파일과 `benchmark/baseline.json`)은 항목마다 표본 하나로 읽는다. 기준선은 6회 중앙값이라 `samples` 없이 그대로 쓴다.
 
-항목 id는 `<저장소>/<시나리오>/<프로파일>/<형태>/<내구성>/<깊이>:<지표>`다. 형태는 `proc1`, `same-process`, 깊이는 `empty` 또는 `1m`이다. 지표는 `msgPerSec`(높을수록 좋음), `p50Ms`, `p99Ms`(낮을수록 좋음)다.
+항목 id는 `<저장소>/<시나리오>/<프로파일>/<내구성>/<깊이>:<지표>`다. 깊이는 `empty` 또는 `1m`이다. 지표는 `msgPerSec`(높을수록 좋음), `p50Ms`, `p99Ms`(낮을수록 좋음)다.
 
 ## 비교 보고
 
 비교기는 SQLite 항목만 검사하고 항목마다 한 줄로 보고한다.
 
 ```
-PASS  floor S1 P1 proc1 POWER_LOSS >= 10000 msg/s  [12345 msg/s]
-FAIL  depth S1 P1 proc1 PROCESS_CRASH 1m >= 70% of empty  [중앙값 66.0%, 바퀴별 1회 5200 / 9000 = 57.8%; 2회 6000 / 9100 = 65.9%; 3회 6900 / 9000 = 76.7%]
-SKIP  regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec  [기준선에 없다]
+PASS  floor S1 P1 POWER_LOSS >= 10000 msg/s  [12345 msg/s]
+FAIL  depth S1 P1 PROCESS_CRASH 1m >= 70% of empty  [중앙값 66.0%, 바퀴별 1회 5200 / 9000 = 57.8%; 2회 6000 / 9100 = 65.9%; 3회 6900 / 9000 = 76.7%]
+SKIP  regression sqlite/S2/P1/POWER_LOSS/empty:msgPerSec  [기준선에 없다]
 합계: 통과 20, 실패 1, 건너뜀 1
 ```
 
@@ -125,7 +125,7 @@ SKIP  regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec  [기준선에 �
 
 ## 무작위 블랙박스 테스트 (`randomBench`, `randomBenchSmoke`)
 
-고정 프로파일 벤치는 정해진 조건만 돈다. 무작위 하네스(`...benchmark.random` 패키지, 같은 `benchmark` 소스셋)는 시드 하나에서 무작위 워크로드를 만들어 SQLite 저장소에서 돌리고, 불변식 8개(유실, 유령, 중복 범위, dead letter 이동, 지연, 단일 활성 컨슈머, counts, 청크 안 순서)로 판정한다. 처리량과 지연(p50/p99)은 기록만 하고 판정하지 않는다. 고정 프로파일 벤치와 ns0270 기준선은 이것으로 대체되지 않는다. 프로세스 수는 1로 고정이다(smq는 한 JVM만 파일을 연다, ADR-0012). 이 JVM의 스레드 여럿이 돈다. 태그와 기록 파일 이름의 프로세스 번호는 기록 형식 호환을 위해 남겼고 항상 0이다. 크래시 주입은 없다. 모듈 경로에서 돌고 공개 API만 쓴다. 하네스는 배포 jar와 sources jar에 들어가지 않는다(`verifyJarExcludesBenchmark`).
+고정 프로파일 벤치는 정해진 조건만 돈다. 무작위 하네스(`...benchmark.random` 패키지, 같은 `benchmark` 소스셋)는 시드 하나에서 무작위 워크로드를 만들어 SQLite 저장소에서 돌리고, 불변식 8개(유실, 유령, 중복 범위, dead letter 이동, 지연, 단일 활성 컨슈머, counts, 청크 안 순서)로 판정한다. 처리량과 지연(p50/p99)은 기록만 하고 판정하지 않는다. 고정 프로파일 벤치와 ns0270 기준선은 이것으로 대체되지 않는다. 프로세스 수는 1로 고정이다(smq는 한 JVM만 파일을 연다, ADR-0012). 이 JVM의 스레드 여럿이 돈다. 태그는 `<seed>/<seq>`다. 이전 실행의 기록(JSONL, `.bin`)을 읽는 호환 계층은 없다(스풀은 같은 실행 안에서 쓰고 검사한 뒤 지운다). 크래시 주입은 없다. 모듈 경로에서 돌고 공개 API만 쓴다. 하네스는 배포 jar와 sources jar에 들어가지 않는다(`verifyJarExcludesBenchmark`).
 
 - `./gradlew randomBench`: 수동 실행. 마스터 시드(기본 현재 시각, 출력에 찍는다)에서 실행 시드를 뽑아 `--budget`(기본 30m)이 다할 때까지 돈다. 예산은 새 실행을 시작할 수 있는 시간이고 도는 실행은 끝낸다.
 - `./gradlew randomBench --seed <n>`: 그 시드 하나만 다시 돈다. 같은 시드는 같은 매개변수(스레드 수 포함)와 같은 워크로드(메시지 크기와 내용, 지연, 전달마다의 정산 결정)를 뜻한다. 실제 시계로 돌므로 끼어들기 순서까지 같지는 않다. 부하 구간 길이(`--load`)와 스모크의 한도가 다르면 같은 시드도 다른 워크로드이므로, 재현할 때는 같은 `--load`로 돌린다(`randomBenchSmoke`의 시드는 `randomBench`에서 한도가 달라 같은 워크로드가 아니다).
@@ -153,9 +153,9 @@ SKIP  regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec  [기준선에 �
 - 깊은 큐 유지(`--standing-queue`): 기본에서는 미리 채운 깊이를 컨슈머가 1~2분 안에 비우므로, 그 뒤로는 큐가 거의 빈 채로 돈다. 이 옵션을 주면 큐 깊이가 미리 채운 깊이 이하일 때 컨슈머가 쉬어서 깊이가 그 근처에 머문다. 꺼내는 속도를 고정하는 방식은 쓰지 않는다: NACK이나 정산하지 않은 메시지가 큐로 돌아와 실제로 빠지는 양이 유입보다 적어지므로 깊이가 늘어난다. 이 모드에서는 먼저 들어간 메시지가 깊이만큼 기다리므로(FIFO) 지연이 크게 나오거나 표본이 없을 수 있다(관측: 깊이 10만 건, 부하 2분 실행에서 p50이 비었다). 용량을 재려면 이 옵션을 쓰지 않는다.
 - 판정은 불변식 검사에 더해 **백로그 증가**를 본다. 부하 중 대상 큐 깊이(ready+leased+delayed, 0.5초 간격)의 최소제곱 기울기가 목표 속도의 5%를 넘고, 그 기울기로 늘어난 양이 목표 속도 2초 분량보다 많으면 `BACKLOG_GROWING`으로 실패한다. 깊이가 프로듀서가 쉬는 상한(미리 채운 깊이에 5만 건, 미리 채운 깊이의 절반이 더 크면 그 절반을 더한 값. 바이트 상한 128MB ÷ 평균 크기가 더 작으면 그 값. 미리 채우기가 10만이면 15만 건)의 90%에 닿으면 기울기와 무관하게 `BACKLOG_GROWING`이다(소비가 못 따라가면 프로듀서가 쉬어 깊이가 상한에서 멈추고 추세가 평평해지기 때문이다). 표본이 3개 미만이면 추세를 판정하지 않으므로 `--load`는 최소 2초 이상으로 준다. 소진 실패와 불변식 위반이 먼저다. 세션은 `BACKLOG_GROWING`과 예외(예: `SmqStorageException`)를 기록하고 다음 시드를 계속 돌며 끝에서 실패로 종료한다. 예외가 연속 3번이면 하네스 문제로 보고 멈춘다. 불변식 위반과 소진 실패는 데이터가 틀렸다는 뜻이라 첫 번째에서 멈춘다.
 - **달성률**(부하 구간에 실제 발행한 수 / 목표 × 구간 길이)은 기록만 하고 판정하지 않는다. fsync가 느린 환경(WSL2 등)에서 `POWER_LOSS`가 목표를 못 따라갈 수 있어서다. `runs-*.jsonl`의 `soak`에 `targetRate`, `achievedRatio`, `ackRate`, `backlogSlopePerSec`, `maxDepth`, `backlogGrowing`이 남는다.
-- JFR이 기본으로 켜진다(`build/random-bench/parent.jfr`). 통과한 고정 속도 실행도 DB와 발행·전달 기록(`p0-published.bin`, `p0-deliveries.bin`)만 지우고 JFR과 메트릭 파일을 `work/<seed>/`에 남긴다. 불변식 위반(`VIOLATION`)으로 끝난 실행만 기록 파일을 `failures/<seed>/`에 보존한다(백로그 증가, 소진 시간 초과, 예외는 원인이 기록이 아니라서 지운다).
-- 고정 속도 모드의 발행·전달 기록은 힙이 아니라 디스크에 쌓는다. 힙에 쌓으면 길이에 비례해 늘어서, 500 msg/s에 메시지 1KB로 약 3시간 만에 부모 JVM이 `OutOfMemoryError`로 죽었다(힙이 선형으로 늘다 GC가 폭주했다). 지금은 이진 파일(`p0-*.bin`)에 쌓고, 실행이 끝나면 태그의 해시로 조각을 나눠 한 조각씩 읽어 검사하고 버린다(힙은 가장 큰 조각에 머문다. 조각의 목표 크기는 스풀 48MB이고 객체로 올리면 몇 배가 된다는 추정이며 재지는 않았다). 청크 순서는 청크 번호로 따로 나눈다. 단일 활성 컨슈머 검사는 모든 청크의 리스 구간을 시간순으로 겹쳐 봐야 해서 조각으로 못 하는데, 고정 속도 모드가 단일 활성을 끄므로 문제가 없다. 위반은 1,000건까지만 모은다. 무작위 모드는 짧아서 이전처럼 힙에서 한 번에 검사한다. 디스크는 500 msg/s, 메시지 1KB의 실행에서 분당 약 12MB가 쌓였다(관측은 8분까지이고 12시간은 약 9GB로 선형 외삽한 값이다). 검사는 전달 기록을 태그 조각, 청크 조각, id 조각으로 다시 쓰므로 그 동안은 스풀의 2~3배를 더 쓴다. 조각은 최대 400개이고(스풀이 약 19GB를 넘으면 조각이 목표보다 커져 힙이 그만큼 는다), 조각 파일을 종류별로 차례로 만들어 FD는 한 번에 최대 800개 안에 든다. 지연 p50/p99는 1ms 간격 히스토그램(한 시간 초과는 한 시간으로 센다)으로 내서 표본 수에 따라 힙이 늘지 않는다. 실행 디렉터리를 RAM 파일시스템(tmpfs)에 두면 그만큼 메모리를 쓰므로, 롱텀 실행은 디스크에서 돌린다.
-- `jvm-metrics.jsonl`(힙, 비힙, GC, 스레드, FD, `rssMB`, `processCpuLoad`, `processCpuTimeMs`)과 요약 `jvmMetrics`(`peakCpuLoad`, `meanCpuLoad`, `peakRssMB` 포함)는 이 JVM의 것이다. `processCpuTimeMs`는 파일에만 있고 요약에는 없다. `childMetrics`는 기록 형식 호환을 위해 남겼고 항상 비어 있다. `rssMB`는 Linux의 `/proc/self/status` `VmRSS`(실제 상주 메모리)이고, 못 읽는 플랫폼에서는 jsonl에 필드가 없다. 요약의 `peakRssMB`가 그 최댓값이고 읽지 못했으면 null이다.
+- JFR이 기본으로 켜진다(`build/random-bench/parent.jfr`). 통과한 고정 속도 실행도 DB와 발행·전달 기록(`published.bin`, `deliveries.bin`)만 지우고 JFR과 메트릭 파일을 `work/<seed>/`에 남긴다. 불변식 위반(`VIOLATION`)으로 끝난 실행만 기록 파일을 `failures/<seed>/`에 보존한다(백로그 증가, 소진 시간 초과, 예외는 원인이 기록이 아니라서 지운다).
+- 고정 속도 모드의 발행·전달 기록은 힙이 아니라 디스크에 쌓는다. 힙에 쌓으면 길이에 비례해 늘어서, 500 msg/s에 메시지 1KB로 약 3시간 만에 부모 JVM이 `OutOfMemoryError`로 죽었다(힙이 선형으로 늘다 GC가 폭주했다). 지금은 이진 파일(`published.bin`, `deliveries.bin`)에 쌓고, 실행이 끝나면 태그의 해시로 조각을 나눠 한 조각씩 읽어 검사하고 버린다(힙은 가장 큰 조각에 머문다. 조각의 목표 크기는 스풀 48MB이고 객체로 올리면 몇 배가 된다는 추정이며 재지는 않았다). 청크 순서는 청크 번호로 따로 나눈다. 단일 활성 컨슈머 검사는 모든 청크의 리스 구간을 시간순으로 겹쳐 봐야 해서 조각으로 못 하는데, 고정 속도 모드가 단일 활성을 끄므로 문제가 없다. 위반은 1,000건까지만 모은다. 무작위 모드는 짧아서 이전처럼 힙에서 한 번에 검사한다. 디스크는 500 msg/s, 메시지 1KB의 실행에서 분당 약 12MB가 쌓였다(관측은 8분까지이고 12시간은 약 9GB로 선형 외삽한 값이다). 검사는 전달 기록을 태그 조각, 청크 조각, id 조각으로 다시 쓰므로 그 동안은 스풀의 2~3배를 더 쓴다. 조각은 최대 400개이고(스풀이 약 19GB를 넘으면 조각이 목표보다 커져 힙이 그만큼 는다), 조각 파일을 종류별로 차례로 만들어 FD는 한 번에 최대 800개 안에 든다. 지연 p50/p99는 1ms 간격 히스토그램(한 시간 초과는 한 시간으로 센다)으로 내서 표본 수에 따라 힙이 늘지 않는다. 실행 디렉터리를 RAM 파일시스템(tmpfs)에 두면 그만큼 메모리를 쓰므로, 롱텀 실행은 디스크에서 돌린다.
+- `jvm-metrics.jsonl`(힙, 비힙, GC, 스레드, FD, `rssMB`, `processCpuLoad`, `processCpuTimeMs`)과 요약 `jvmMetrics`(`peakCpuLoad`, `meanCpuLoad`, `peakRssMB` 포함)는 이 JVM의 것이다. `processCpuTimeMs`는 파일에만 있고 요약에는 없다. `rssMB`는 Linux의 `/proc/self/status` `VmRSS`(실제 상주 메모리)이고, 못 읽는 플랫폼에서는 jsonl에 필드가 없다. 요약의 `peakRssMB`가 그 최댓값이고 읽지 못했으면 null이다.
 
 시각 규약: 발행과 정산은 호출 직전의 벽시계를, 꺼내기는 호출이 돌아온 직후의 벽시계를 기록한다. 검사기는 지연과 단일 활성 컨슈머 판정에 50ms 허용 오차를 둔다.
 

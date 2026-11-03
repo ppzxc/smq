@@ -57,12 +57,12 @@ final class Plan {
             plan.add(RunSpec.s1(storage, Profile.P1, Durability.POWER_LOSS, 0, d, w));
             plan.add(RunSpec.s1(storage, Profile.P1, Durability.PROCESS_CRASH, SMOKE_DEPTH, d, w));
             plan.add(RunSpec.s2(storage, Profile.P1, d, w));
-            plan.add(RunSpec.s3(storage, Profile.P1, Topology.SAME_PROCESS, d, w));
+            plan.add(RunSpec.s3(storage, Profile.P1, d, w));
         } else {
             plan.add(RunSpec.s1(storage, Profile.P1, null, 0, d, w));
             plan.add(RunSpec.s1(storage, Profile.P1, null, SMOKE_DEPTH, d, w));
             plan.add(RunSpec.s2(storage, Profile.P1, d, w));
-            plan.add(RunSpec.s3(storage, Profile.P1, Topology.SAME_PROCESS, d, w));
+            plan.add(RunSpec.s3(storage, Profile.P1, d, w));
         }
         return plan;
     }
@@ -86,7 +86,7 @@ final class Plan {
                 Profile.P1, Profile.P2, Profile.P3, Profile.P4, Profile.P0, Profile.P2S, Profile.P3S, Profile.P4S))
             plan.add(RunSpec.s2(storage, p, d, w));
         // S3: P1만.
-        plan.add(RunSpec.s3(storage, Profile.P1, Topology.SAME_PROCESS, d, w));
+        plan.add(RunSpec.s3(storage, Profile.P1, d, w));
         return plan;
     }
 }

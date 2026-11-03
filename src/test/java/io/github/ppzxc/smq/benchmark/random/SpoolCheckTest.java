@@ -31,8 +31,8 @@ class SpoolCheckTest {
     private long nextId = 1;
     private long chunk = 10_000;
 
-    private static Tag tag(int process, long seq) {
-        return new Tag(9, process, seq);
+    private static Tag tag(long seq) {
+        return new Tag(9, seq);
     }
 
     private static Content content(long seq) {
@@ -40,8 +40,8 @@ class SpoolCheckTest {
     }
 
     /** 발행하고 한 번에 꺼내 ACK한 메시지. */
-    private void good(int process, long seq, long publishedAt, long pulledAt) {
-        Tag t = tag(process, seq);
+    private void good(long seq, long publishedAt, long pulledAt) {
+        Tag t = tag(seq);
         pub.add(new Published(t, content(seq), publishedAt, 0));
         del.add(delivery(t, seq, 1, chunk++, 0, pulledAt, Settle.ack(pulledAt + 5)));
     }
@@ -64,15 +64,9 @@ class SpoolCheckTest {
     }
 
     private void spool() throws Exception {
-        // 태그가 다른 두 파일 묶음으로 쌓는다.
-        try (RecordSpool a = new RecordSpool(dir, 0);
-                RecordSpool b = new RecordSpool(dir, 1)) {
-            for (int i = 0; i < pub.size(); i++) {
-                (i % 2 == 0 ? a : b).add(pub.get(i));
-            }
-            for (int i = 0; i < del.size(); i++) {
-                (i % 3 == 0 ? a : b).add(del.get(i));
-            }
+        try (RecordSpool spool = new RecordSpool(dir)) {
+            pub.forEach(spool::add);
+            del.forEach(spool::add);
         }
     }
 
@@ -90,7 +84,7 @@ class SpoolCheckTest {
     @Test
     void 위반이_없는_기록은_조각을_몇_개로_나눠도_위반이_없다() throws Exception {
         for (long s = 0; s < 300; s++) {
-            good((int) (s % 2), s, 1_100, 1_200);
+            good(s, 1_100, 1_200);
         }
         spool();
         for (int k : new int[] {1, 2, 7, 33}) {
@@ -104,20 +98,20 @@ class SpoolCheckTest {
     @Test
     void 유실_유령_재전달_청크_순서_위반을_일괄_검사와_같게_찾는다() throws Exception {
         for (long s = 0; s < 120; s++) {
-            good((int) (s % 2), s, 1_100, 1_200);
+            good(s, 1_100, 1_200);
         }
         // 유실: 발행했지만 한 번도 꺼내지 않았다.
-        pub.add(new Published(tag(0, 900), content(900), 1_100, 0));
+        pub.add(new Published(tag(900), content(900), 1_100, 0));
         // 유령: 발행하지 않은 태그가 전달됐다.
-        del.add(delivery(tag(1, 901), 901, 1, 500, 0, 1_300, Settle.ack(1_305)));
+        del.add(delivery(tag(901), 901, 1, 500, 0, 1_300, Settle.ack(1_305)));
         // 중복: ACK가 반영된 뒤 다시 전달됐다.
-        Tag dup = tag(0, 902);
+        Tag dup = tag(902);
         pub.add(new Published(dup, content(902), 1_100, 0));
         del.add(delivery(dup, 902, 1, 501, 0, 1_200, Settle.ack(1_205)));
         del.add(delivery(dup, 902, 2, 502, 0, 1_400, Settle.ack(1_405)));
         // 청크 순서: 한 청크 안에서 메시지 id가 줄어든다. 두 태그가 서로 다른 조각에 가도록 여러 태그를 쓴다.
         for (int i = 0; i < 6; i++) {
-            Tag t = tag(1, 950 + i);
+            Tag t = tag(950 + i);
             pub.add(new Published(t, content(950 + i), 1_100, 0));
             del.add(new Delivery(
                     QueueKind.TARGET,
@@ -139,10 +133,10 @@ class SpoolCheckTest {
 
     @Test
     void 부하_구간에_발행한_수와_첫_전달_지연을_센다() throws Exception {
-        good(0, 1, 500, 1_100); // 부하 전에 발행: 세지 않는다.
-        good(0, 2, 1_100, 1_150); // 지연 50ms
-        good(1, 3, 1_500, 1_900); // 지연 400ms
-        good(1, 4, 1_950, 2_100); // 꺼낸 시각이 구간 밖: 지연에 넣지 않는다.
+        good(1, 500, 1_100); // 부하 전에 발행: 세지 않는다.
+        good(2, 1_100, 1_150); // 지연 50ms
+        good(3, 1_500, 1_900); // 지연 400ms
+        good(4, 1_950, 2_100); // 꺼낸 시각이 구간 밖: 지연에 넣지 않는다.
         spool();
         SpoolCheck.Result r = SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, 3);
         assertEquals(3, r.publishedInLoad());
@@ -153,12 +147,12 @@ class SpoolCheckTest {
     @Test
     void 같은_메시지_id가_서로_다른_태그로_전달된_유령은_조각이_달라도_찾는다() throws Exception {
         for (long s = 0; s < 60; s++) {
-            good(0, s, 1_100, 1_200);
+            good(s, 1_100, 1_200);
         }
         // 두 태그가 같은 큐의 같은 메시지 id로 전달됐다. 태그가 다르므로 태그 조각은 서로 다를 수 있다.
         for (int i = 0; i < 20; i++) {
-            Tag a = tag(1, 700 + 2 * i);
-            Tag b = tag(1, 701 + 2 * i);
+            Tag a = tag(700 + 2 * i);
+            Tag b = tag(701 + 2 * i);
             pub.add(new Published(a, content(700 + 2 * i), 1_100, 0));
             pub.add(new Published(b, content(701 + 2 * i), 1_100, 0));
             long id = 5_000 + i;
@@ -193,7 +187,7 @@ class SpoolCheckTest {
     @Test
     void 쓰다_죽어_끝이_잘린_파일이_있어도_앞의_기록은_검사한다() throws Exception {
         for (long s = 0; s < 50; s++) {
-            good(0, s, 1_100, 1_200);
+            good(s, 1_100, 1_200);
         }
         spool();
         Path last = RecordSpool.deliveriesFiles(dir).getFirst();
@@ -206,7 +200,7 @@ class SpoolCheckTest {
 
     @Test
     void 검사가_끝나면_임시_조각_파일을_남기지_않는다() throws Exception {
-        good(0, 1, 1_100, 1_200);
+        good(1, 1_100, 1_200);
         spool();
         SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, 4);
         try (Stream<Path> s = Files.list(dir)) {
@@ -217,7 +211,7 @@ class SpoolCheckTest {
     @Test
     void 위반이_상한을_넘으면_상한까지만_모은다() throws Exception {
         for (long s = 0; s < SpoolCheck.MAX_VIOLATIONS + 200L; s++) {
-            pub.add(new Published(tag(0, s), content(s), 1_100, 0)); // 모두 유실
+            pub.add(new Published(tag(s), content(s), 1_100, 0)); // 모두 유실
         }
         spool();
         SpoolCheck.Result r = SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, 2);
@@ -226,7 +220,7 @@ class SpoolCheckTest {
 
     @Test
     void 단일_활성_컨슈머_검사는_조각으로_하지_못해_거부한다() throws Exception {
-        good(0, 1, 1_100, 1_200);
+        good(1, 1_100, 1_200);
         spool();
         assertThrows(
                 IllegalArgumentException.class,

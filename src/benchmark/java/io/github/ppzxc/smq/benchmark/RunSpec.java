@@ -14,7 +14,6 @@ record RunSpec(
         Storage storage,
         Scenario scenario,
         Profile profile,
-        Topology topology,
         Durability durability,
         int depth,
         long durationMs,
@@ -24,32 +23,24 @@ record RunSpec(
 
     static RunSpec s1(
             Storage storage, Profile profile, Durability durability, int depth, long durationMs, long warmupMs) {
-        return new RunSpec(storage, Scenario.S1, profile, Topology.NONE, durability, depth, durationMs, warmupMs);
+        return new RunSpec(storage, Scenario.S1, profile, durability, depth, durationMs, warmupMs);
     }
 
     static RunSpec s2(Storage storage, Profile profile, long durationMs, long warmupMs) {
-        return new RunSpec(
-                storage, Scenario.S2, profile, Topology.NONE, defaultDurability(storage), 0, durationMs, warmupMs);
+        return new RunSpec(storage, Scenario.S2, profile, defaultDurability(storage), 0, durationMs, warmupMs);
     }
 
-    static RunSpec s3(Storage storage, Profile profile, Topology topology, long durationMs, long warmupMs) {
-        return new RunSpec(
-                storage, Scenario.S3, profile, topology, defaultDurability(storage), 0, durationMs, warmupMs);
+    static RunSpec s3(Storage storage, Profile profile, long durationMs, long warmupMs) {
+        return new RunSpec(storage, Scenario.S3, profile, defaultDurability(storage), 0, durationMs, warmupMs);
     }
 
     private static Durability defaultDurability(Storage storage) {
         return storage == Storage.SQLITE ? Durability.POWER_LOSS : null;
     }
 
-    /** 결과와 기준선에서 이 조건을 가리키는 키. 예: {@code sqlite/S1/P1/proc1/POWER_LOSS/1m}. 형태 구성요소 {@code proc1}은 기준선 호환을 위해 남겼다. */
+    /** 결과와 기준선에서 이 조건을 가리키는 키. 예: {@code sqlite/S1/P1/POWER_LOSS/1m}. */
     String key() {
-        return Keys.of(
-                storage,
-                scenario,
-                profile,
-                topology == Topology.NONE ? "proc1" : topology.id(),
-                durability == null ? "none" : durability.name(),
-                depth);
+        return Keys.of(storage, scenario, profile, durability == null ? "none" : durability.name(), depth);
     }
 
     String toJson() {
@@ -57,7 +48,6 @@ record RunSpec(
         m.put("storage", storage.name());
         m.put("scenario", scenario.name());
         m.put("profile", profile.name());
-        m.put("topology", topology.name());
         m.put("durability", durability == null ? null : durability.name());
         m.put("depth", depth);
         m.put("durationMs", durationMs);
@@ -84,7 +74,6 @@ record RunSpec(
                 Storage.valueOf((String) m.get("storage")),
                 Scenario.valueOf((String) m.get("scenario")),
                 Profile.valueOf((String) m.get("profile")),
-                Topology.valueOf((String) m.get("topology")),
                 d == null ? null : Durability.valueOf((String) d),
                 ((Double) m.get("depth")).intValue(),
                 ((Double) m.get("durationMs")).longValue(),

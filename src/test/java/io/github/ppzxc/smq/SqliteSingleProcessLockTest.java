@@ -105,6 +105,14 @@ class SqliteSingleProcessLockTest {
         }
     }
 
+    @Test
+    void 락_파일을_만들_수_없으면_StorageLockedException이_아니라_SmqStorageException이다() {
+        Path db = dir.resolve("없는_디렉터리").resolve("smq.db");
+        SmqStorageException e =
+                assertThrows(SmqStorageException.class, () -> Smq.sqlite(db).open());
+        assertTrue(e.getMessage().contains(db + ".lock"), e.getMessage());
+    }
+
     private Process startHolder(Path db) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         Process p = new ProcessBuilder(

@@ -185,7 +185,7 @@ final class TransactionExecutor {
      * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시
      * 되감을 필요가 없을 때도 계속 건다. 그래서 되감은 직후의 크기를 기억해 파일이 그보다 더 커졌을 때(되감은 구간을 다 채웠을 때)만 다시 건다.
      * 다른 연결이나 프로세스가 되감은 것은 WAL 헤더의 salt가 바뀐 것으로 안다. 바뀌었으면 그 크기를 새 기준으로 삼고 건너뛴다.
-     * 이미 되감긴 WAL을 연결마다 다시 되감으면 동기화가 늘어 여러 프로세스의 처리량이 흔들린다. 못 되감으면(BUSY) {@link #CHECKPOINT_RETRY_AFTER_COMMITS}번
+     * 이미 되감긴 WAL을 연결마다 다시 되감으면 동기화가 늘어 처리량이 흔들린다. 못 되감으면(BUSY) {@link #CHECKPOINT_RETRY_AFTER_COMMITS}번
      * 커밋 동안은 다시 시도하지 않고 그 뒤에 다시 한다. 이미 커밋된 쓰기의 결과를 바꾸지 않으므로 BUSY는 삼킨다. BUSY가 아닌 오류는
      * 숨기지 않고 {@link SmqStorageException}으로 던진다(이미 커밋됐으므로 호출자에게는 효력 불명이다). lock을 쥔 채 하므로 한 번에
      * {@link #CHECKPOINT_BUSY_TIMEOUT_MILLIS} 이상 기다리지 않는다.

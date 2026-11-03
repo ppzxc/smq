@@ -48,8 +48,10 @@ import org.sqlite.SQLiteException;
 
 /**
  * SQLite 파일 하나를 쓰는 저장소. 이 클래스에는 열기 순서, 큐 연산 SQL, row codec이 있다.
+ * 한 JVM만 파일을 열 수 있다. 열 때 {@link StorageLock}으로 락 파일을 잡고 연결을 {@code locking_mode=EXCLUSIVE}로
+ * 열며, 이미 누가 쥐고 있으면 기다리지 않고 {@code StorageLockedException}이다(ADR-0012).
  * 단일 연결, 단일 lock, 트랜잭션마다 하는 스키마 버전 확인, {@code SQLITE_BUSY} 재시도(기본 5회, 시도마다 늘어나는
- * 대기. 열 때만 총 30초)는 {@link TransactionExecutor}가 소유한다. 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의
+ * 대기)는 {@link TransactionExecutor}가 소유한다. 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의
  * 확인하는 쓰기 트랜잭션({@code BEGIN IMMEDIATE})을 거치며 BUSY면 재시도한다.
  * 읽기 경로는 따로 있다. 꺼내기 대기용 {@link #anyReady}는 같은 실행기의 autocommit 읽기를 써서 쓰기 락과
  * 재시도 없이 보고, 확실하지 않으면 "있다"고 답해 쓰기 경로가 다시 확인하게 한다.

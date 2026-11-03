@@ -1,6 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
-/** 프로듀서가 메시지마다 붙이는 식별 태그. 시드와 프로세스 안에서 순번이 유일하다. */
+/** 프로듀서가 메시지마다 붙이는 식별 태그. 시드 안에서 순번이 유일하다. {@code process}는 기록 형식 호환을 위해 남겼고 항상 0이다. */
 record Tag(long seed, int process, long seq) {
 
     /** {@link #toString()}의 역. 형식이 틀리면 {@link IllegalArgumentException}. */

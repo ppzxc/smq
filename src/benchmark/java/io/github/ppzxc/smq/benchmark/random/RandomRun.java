@@ -30,9 +30,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 시드 하나의 실행: 미리 채우기, 부하 구간, 소진, 검증. 프로세스 수가 1이면 이 JVM의 스레드 여럿이 돈다. 1보다 크면 이 JVM(부모)은
- * 미리 채우기와 표본과 소진과 판정을 맡고, 프로듀서와 컨슈머는 자식 JVM이 같은 SQLite 파일에서 돈다. 공개 API({@code Smq}, {@code Queue})만 쓰고
- * 실제 시계로 돈다.
+ * 시드 하나의 실행: 미리 채우기, 부하 구간, 소진, 검증. 이 JVM의 스레드 여럿이 돈다(smq는 한 JVM만 연다, ADR-0012). 공개 API({@code Smq},
+ * {@code Queue})만 쓰고 실제 시계로 돈다.
  *
  * <p>시각 규약: 발행과 정산은 호출 직전 벽시계를, 꺼내기는 호출이 돌아온 직후 벽시계를 기록한다. 검사기의 부등식이 모두 거짓 위반을 내지
  * 않는 쪽으로 기울도록 하는 것이다(발행·정산 시각은 실제보다 이르고, 꺼낸 시각은 실제보다 늦다).
@@ -468,7 +467,7 @@ final class RandomRun {
         return true;
     }
 
-    /** 청크 번호. 위쪽 비트가 프로세스 번호다. */
+    /** 청크 번호. 위쪽 비트는 기록 형식 호환을 위해 남긴 프로세스 번호 자리이고 항상 {@code PROCESS}(0)다. */
     private long nextChunkId() {
         return ((long) PROCESS << 40) | nextChunk.incrementAndGet();
     }
@@ -685,7 +684,7 @@ final class RandomRun {
                 backlogCapMessages(params));
     }
 
-    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 {@code counts()} 기준(다중 프로세스와 고정 속도 모드)과 같다. */
+    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 {@code counts()} 기준(고정 속도 모드)과 같다. */
     static long backlogCapMessages(RunParams params) {
         // 미리 채운 깊이가 크면 그 절반까지는 정상 변동으로 본다(깊은 큐가 유지되는 상태를 포화로 오판하지 않게).
         long headroom = Math.max(BACKLOG_MESSAGES, params.prefillDepth() / 2);

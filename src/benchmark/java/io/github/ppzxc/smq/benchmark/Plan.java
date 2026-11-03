@@ -72,16 +72,16 @@ final class Plan {
         List<Durability> durabilities =
                 sqlite ? List.of(Durability.POWER_LOSS, Durability.PROCESS_CRASH) : Collections.singletonList(null);
         List<RunSpec> plan = new ArrayList<>();
-        // S1: P0은 1프로세스, 빈 큐만. P1~P4는 내구성 수준별.
+        // S1: P0은 빈 큐만. P1~P4는 내구성 수준별.
         for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P0, dur, 0, d, w));
         for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4))
             for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
-        // 단건(청크 1): 데이터 크기마다 S1 1프로세스 빈 큐(두 내구성)와 S2. P0은 위에서 S1을 이미 더했다.
+        // 단건(청크 1): 데이터 크기마다 S1 빈 큐(두 내구성)와 S2. P0은 위에서 S1을 이미 더했다.
         for (Profile p : List.of(Profile.P2S, Profile.P3S, Profile.P4S))
             for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
         // 100만 건 깊이는 P1에서만.
         for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, dur, deep, d, w));
-        // S2: P1~P4와 단건 프로파일(P0, P2S, P3S, P4S), 1프로세스, 빈 큐.
+        // S2: P1~P4와 단건 프로파일(P0, P2S, P3S, P4S), 빈 큐.
         for (Profile p : List.of(
                 Profile.P1, Profile.P2, Profile.P3, Profile.P4, Profile.P0, Profile.P2S, Profile.P3S, Profile.P4S))
             plan.add(RunSpec.s2(storage, p, d, w));

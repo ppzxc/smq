@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- 한 JVM 전용(ADR-0012)이 되어 쓸 곳이 없는 다중 프로세스용 저장소 런타임 코드(BUSY 재시도, 트랜잭션마다 하는 `user_version` 확인, WAL salt 감지)를 걷어냈다. (#126)
+
 ## [0.0.1] - 2026-10-28
 
 ### Added

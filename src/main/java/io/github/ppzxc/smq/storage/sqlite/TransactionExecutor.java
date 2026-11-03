@@ -42,7 +42,10 @@ final class TransactionExecutor {
      * 줄지 않는다.
      */
     static final long WAL_FILE_KEEP_BYTES = 12L * 1024 * 1024;
-    /** 되감기에 실패한 뒤 이 커밋 수만큼은 다시 시도하지 않는다. */
+    /**
+     * 되감기에 실패한 뒤 이 커밋 수만큼은 다시 시도하지 않는다. 방어 코드: 락 파일은 권고라서 이를 우회한 외부 도구가
+     * 읽고 있으면 되감기가 막힐 수 있다.
+     */
     private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
 
     private static final Path NO_WAL = Path.of("");
@@ -91,6 +94,7 @@ final class TransactionExecutor {
         try {
             return probe.apply(connection);
         } catch (SQLException e) {
+            // 방어 코드: 락 파일은 권고라서 이를 우회해 파일을 쥔 외부 도구가 있으면 BUSY가 날 수 있다.
             if (isBusy(e)) {
                 return true;
             }
@@ -110,14 +114,7 @@ final class TransactionExecutor {
      * 아무것도 반영되지 않았다.
      */
     <T> T execute(TxBody<T> body, Deadline deadline) {
-        acquire(deadline);
-        try {
-            return runOnce(body);
-        } catch (SQLException e) {
-            throw new SmqStorageException("sqlite operation failed", e);
-        } finally {
-            lock.unlock();
-        }
+        return runLocked(() -> runOnce(body), deadline);
     }
 
     void close() {
@@ -188,6 +185,7 @@ final class TransactionExecutor {
             if (!isBusy(e)) {
                 throw new SmqStorageException("sqlite checkpoint failed after commit", e);
             }
+            // 방어 코드: 락 파일은 권고라서 이를 우회해 파일을 쥔 외부 도구가 있으면 BUSY가 날 수 있다.
             walOverLimit = true;
             checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;
         }
@@ -224,12 +222,17 @@ final class TransactionExecutor {
     }
 
     /**
-     * 트랜잭션 밖에서 하는 열기 단계(저널 모드 전환 등)를 lock 아래에서 한 번 실행한다. 락 파일을 잡은 뒤의 BUSY는
+     * 트랜잭션 밖에서 하는 열기 단계(저널 모드 전환 등)를 lock 아래에서 마감 없이 한 번 실행한다. 락 파일을 잡은 뒤의 BUSY는
      * smq 밖의 도구가 DB를 쥔 것이라 기다려도 풀리지 않는다(ADR-0012). BUSY도 다른 오류도 {@link SmqStorageException}으로
      * 올리고, 호출자가 원인 사슬의 {@link #isBusy}로 구분한다.
      */
-    <T> T attemptOnce(SqlAction<T> action) {
-        lock.lock();
+    <T> T executeOutsideTransaction(SqlAction<T> action) {
+        return runLocked(action, Deadline.NONE);
+    }
+
+    /** lock을 잡고(마감 규칙은 {@link #acquire}) 한 번 실행한다. SQL 오류는 {@link SmqStorageException}이다. */
+    private <T> T runLocked(SqlAction<T> action, Deadline deadline) {
+        acquire(deadline);
         try {
             return action.run();
         } catch (SQLException e) {

@@ -64,7 +64,7 @@ class SpoolCheckTest {
     }
 
     private void spool() throws Exception {
-        // 프로세스 둘이 나눠 쓴 것처럼 두 파일 묶음으로 쌓는다.
+        // 태그가 다른 두 파일 묶음으로 쌓는다.
         try (RecordSpool a = new RecordSpool(dir, 0);
                 RecordSpool b = new RecordSpool(dir, 1)) {
             for (int i = 0; i < pub.size(); i++) {

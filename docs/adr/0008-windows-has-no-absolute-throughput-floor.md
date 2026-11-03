@@ -1,6 +1,6 @@
 # Windows에는 절대 처리량 하한을 두지 않고, 기준선과 릴리스 판정은 Linux 기준 환경에만 적용한다
 
-Windows(로컬 NTFS)의 처리량은 Linux 기준 환경보다 크게 낮고, 원인은 smq 코드가 아니라 플랫폼의 파일 I/O 비용이다. 그래서 Linux 하한(P1 10,000, P2 8,000, P3 4,000 msg/s)과 `benchmark/baseline.json`은 그대로 두고 Windows에는 절대 하한을 두지 않는다. Windows 결과는 기록만 하고 릴리스를 막는 데 쓰지 않는다. [ADR 0006](0006-windows-support-is-conditional-on-verification.md)이 미룬 하한 결정이 이것이다. 설정으로 푸는 방안은 택하지 않는다. 격차가 내구성 수준이나 배치 크기로 조절되는 값이 아니라 장비와 OS의 속성이기 때문이다.
+Windows(로컬 NTFS)의 처리량은 Linux 기준 환경보다 크게 낮고, 원인은 smq 코드가 아니라 플랫폼의 파일 I/O 비용이다. 그래서 Linux 하한(P1 10,000, P3 8,000, P7 4,000 msg/s)과 `benchmark/baseline.json`은 그대로 두고 Windows에는 절대 하한을 두지 않는다. Windows 결과는 기록만 하고 릴리스를 막는 데 쓰지 않는다. [ADR 0006](0006-windows-support-is-conditional-on-verification.md)이 미룬 하한 결정이 이것이다. 설정으로 푸는 방안은 택하지 않는다. 격차가 내구성 수준이나 배치 크기로 조절되는 값이 아니라 장비와 OS의 속성이기 때문이다.
 
 ## 원인 조사 (2026-10-27)
 
@@ -16,15 +16,15 @@ Windows(로컬 NTFS)의 처리량은 Linux 기준 환경보다 크게 낮고, �
 | 항목 | Windows | 기준선(ns0270) |
 |---|---|---|
 | S1 P1 POWER_LOSS 1프로세스 | 7,676 | 16,612 |
-| S1 P2 POWER_LOSS | 5,204 | 9,797 |
-| S1 P3 POWER_LOSS | 2,361 | 5,583 |
+| S1 P3 POWER_LOSS | 5,204 | 9,797 |
+| S1 P7 POWER_LOSS | 2,361 | 5,583 |
 | S1 P1 PROCESS_CRASH | 41,390 | 36,789 |
-| S1 P0/P2S/P3S/P4S POWER_LOSS(단건) | 82~93 | 632~722 |
+| S1 P0/P2/P6/P4 POWER_LOSS(단건) | 82~93 | 632~722 |
 | 4프로세스 ÷ 1프로세스 | 대부분 70% 이상 (P1 PROCESS_CRASH만 68%) | |
 | 100만 건 깊이 ÷ 빈 큐 | POWER_LOSS 86%, PROCESS_CRASH 43% | |
 | S3 p99 같은 프로세스 | 29.7ms | 7.0ms |
 
-이전에 기록한 891 msg/s(P3)는 우회 패치한 하네스와 짧은 측정이라 흔들렸다. 이번 측정은 1,142~2,361 사이다. 같은 조건에서도 회차 편차가 크므로 Windows 수치는 한 자리 정확도로 읽지 않는다.
+이전에 기록한 891 msg/s(P7)는 우회 패치한 하네스와 짧은 측정이라 흔들렸다. 이번 측정은 1,142~2,361 사이다. 같은 조건에서도 회차 편차가 크므로 Windows 수치는 한 자리 정확도로 읽지 않는다.
 
 ## Considered Options
 

@@ -12,9 +12,9 @@ class AggregatorTest {
 
     @Test
     void s2UsesTheSameThroughputMetric() {
-        RunSpec spec = RunSpec.s2(Storage.SQLITE, Profile.P2, 1000, 0);
+        RunSpec spec = RunSpec.s2(Storage.SQLITE, Profile.P3, 1000, 0);
         Map<String, Double> m = Aggregator.aggregate(spec, List.of(new ChildResult("WORKER", 500, SEC, new long[0])));
-        assertEquals(Map.of("sqlite/S2/P2/POWER_LOSS/empty:msgPerSec", 500.0), m);
+        assertEquals(Map.of("sqlite/S2/P3/POWER_LOSS/empty:msgPerSec", 500.0), m);
     }
 
     @Test

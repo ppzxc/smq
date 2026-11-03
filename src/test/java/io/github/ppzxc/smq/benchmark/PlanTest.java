@@ -20,8 +20,8 @@ class PlanTest {
         Set<String> k = keys(plan);
         assertEquals(plan.size(), k.size(), "키가 겹치면 안 된다");
         assertEquals(27, plan.size());
-        // S1: P1~P4 x {POWER_LOSS, PROCESS_CRASH}
-        for (String p : List.of("P1", "P2", "P3", "P4"))
+        // S1: 묶음 프로파일(P1, P3, P5, P7) x {POWER_LOSS, PROCESS_CRASH}
+        for (String p : List.of("P1", "P3", "P5", "P7"))
             for (String d : List.of("POWER_LOSS", "PROCESS_CRASH"))
                 assertTrue(k.contains("sqlite/S1/" + p + "/" + d + "/empty"), p + d);
         // P0은 빈 큐만
@@ -29,18 +29,18 @@ class PlanTest {
         // 100만 건 깊이는 P1에서만
         assertTrue(k.contains("sqlite/S1/P1/POWER_LOSS/1m"));
         assertTrue(k.contains("sqlite/S1/P1/PROCESS_CRASH/1m"));
-        assertFalse(k.contains("sqlite/S1/P2/POWER_LOSS/1m"));
-        // S2: P1~P4, 빈 큐
-        assertTrue(k.contains("sqlite/S2/P3/POWER_LOSS/empty"));
-        assertTrue(k.contains("sqlite/S2/P4/POWER_LOSS/empty"));
+        assertFalse(k.contains("sqlite/S1/P3/POWER_LOSS/1m"));
+        // S2: 묶음 프로파일, 빈 큐
+        assertTrue(k.contains("sqlite/S2/P7/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S2/P5/POWER_LOSS/empty"));
         // 단건(청크 1) 프로파일: 크기마다 S1 빈 큐(두 내구성)와 S2
-        for (String p : List.of("P0", "P2S", "P3S", "P4S")) {
+        for (String p : List.of("P0", "P2", "P4", "P6")) {
             assertTrue(k.contains("sqlite/S1/" + p + "/POWER_LOSS/empty"), p);
             assertTrue(k.contains("sqlite/S1/" + p + "/PROCESS_CRASH/empty"), p);
             assertTrue(k.contains("sqlite/S2/" + p + "/POWER_LOSS/empty"), p);
         }
-        // P4(4KB)는 100만 건 깊이를 재지 않는다
-        assertFalse(k.contains("sqlite/S1/P4/POWER_LOSS/1m"));
+        // P5(4KB)는 100만 건 깊이를 재지 않는다
+        assertFalse(k.contains("sqlite/S1/P5/POWER_LOSS/1m"));
         // S3: P1만
         assertTrue(k.contains("sqlite/S3/P1/POWER_LOSS/empty"));
         assertEquals(1, k.stream().filter(s -> s.contains("/S3/")).count());
@@ -63,8 +63,8 @@ class PlanTest {
         assertTrue(k.contains("sqlite/S1/P1/PROCESS_CRASH/1m"));
         assertTrue(k.contains("sqlite/S1/P1/PROCESS_CRASH/empty"));
         assertFalse(k.contains("sqlite/S1/P0/POWER_LOSS/empty"));
-        assertFalse(k.contains("sqlite/S1/P2S/POWER_LOSS/empty"));
-        assertFalse(k.contains("sqlite/S1/P2/POWER_LOSS/1m"));
+        assertFalse(k.contains("sqlite/S1/P3/POWER_LOSS/empty"));
+        assertFalse(k.contains("sqlite/S1/P3/POWER_LOSS/1m"));
     }
 
     @Test
@@ -104,25 +104,25 @@ class PlanTest {
         assertEquals(256, Profile.P0.payloadBytes());
         assertEquals(1, Profile.P0.chunk());
         assertEquals(100, Profile.P1.chunk());
-        assertEquals(2048, Profile.P2.payloadBytes());
-        assertEquals(300, Profile.P2.chunk());
-        assertEquals(6144, Profile.P3.payloadBytes());
-        assertEquals(500, Profile.P3.chunk());
-        assertEquals(4096, Profile.P4.payloadBytes());
-        assertEquals(400, Profile.P4.chunk());
+        assertEquals(2048, Profile.P3.payloadBytes());
+        assertEquals(300, Profile.P3.chunk());
+        assertEquals(6144, Profile.P7.payloadBytes());
+        assertEquals(500, Profile.P7.chunk());
+        assertEquals(4096, Profile.P5.payloadBytes());
+        assertEquals(400, Profile.P5.chunk());
         // 단건 프로파일은 같은 데이터 크기에 청크만 1이다
-        assertEquals(Profile.P2.payloadBytes(), Profile.P2S.payloadBytes());
-        assertEquals(Profile.P3.payloadBytes(), Profile.P3S.payloadBytes());
-        assertEquals(Profile.P4.payloadBytes(), Profile.P4S.payloadBytes());
+        assertEquals(Profile.P3.payloadBytes(), Profile.P2.payloadBytes());
+        assertEquals(Profile.P7.payloadBytes(), Profile.P6.payloadBytes());
+        assertEquals(Profile.P5.payloadBytes(), Profile.P4.payloadBytes());
         assertEquals(Profile.P1.payloadBytes(), Profile.P0.payloadBytes());
-        assertEquals(1, Profile.P2S.chunk());
-        assertEquals(1, Profile.P3S.chunk());
-        assertEquals(1, Profile.P4S.chunk());
+        assertEquals(1, Profile.P2.chunk());
+        assertEquals(1, Profile.P6.chunk());
+        assertEquals(1, Profile.P4.chunk());
     }
 
     @Test
     void specTravelsToChildAsOneQuoteFreeArgument() {
-        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P4, Durability.PROCESS_CRASH, 0, 5000, 700);
+        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P5, Durability.PROCESS_CRASH, 0, 5000, 700);
         String arg = s.toArg();
         // Windows의 ProcessBuilder는 인자 안의 큰따옴표를 지우므로, 따옴표와 공백이 없어야 한다.
         assertFalse(arg.contains("\"") || arg.contains(" "), arg);
@@ -131,7 +131,7 @@ class PlanTest {
 
     @Test
     void specRoundTripsThroughJson() {
-        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P3, Durability.PROCESS_CRASH, 1_000_000, 5000, 700);
+        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P7, Durability.PROCESS_CRASH, 1_000_000, 5000, 700);
         RunSpec back = RunSpec.fromJson(s.toJson());
         assertEquals(s, back);
         RunSpec m = RunSpec.s3(Storage.MEMORY, Profile.P1, 10, 1);

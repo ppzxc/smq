@@ -113,6 +113,30 @@ class SqliteSingleProcessLockTest {
         assertTrue(e.getMessage().contains(db + ".lock"), e.getMessage());
     }
 
+    @Test
+    void 스키마_판정이_거부해도_BUSY로_오인하지_않고_락을_풀어_다시_열어도_같은_거부다() throws Exception {
+        Path newer = dir.resolve("newer.db");
+        try (Smq smq = Smq.sqlite(newer).open()) {
+            assertNotNull(smq);
+        }
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + newer);
+                Statement s = c.createStatement()) {
+            s.execute("PRAGMA user_version = 999");
+        }
+        Path foreign = dir.resolve("foreign.db");
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + foreign);
+                Statement s = c.createStatement()) {
+            s.execute("CREATE TABLE t(x)");
+        }
+        for (Path db : new Path[] {newer, foreign}) {
+            // 두 번 열어 첫 거부가 락 파일을 쥔 채 남지 않았는지 본다.
+            for (int i = 0; i < 2; i++) {
+                assertThrows(
+                        IncompatibleStorageException.class, () -> Smq.sqlite(db).open(), db.toString());
+            }
+        }
+    }
+
     private Process startHolder(Path db) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         Process p = new ProcessBuilder(

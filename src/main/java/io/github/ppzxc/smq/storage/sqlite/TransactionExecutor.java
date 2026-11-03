@@ -48,14 +48,30 @@ final class TransactionExecutor {
      */
     private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
 
+    // 실험(#139): manual(현재), auto(자동 체크포인트, journal_size_limit 없음), auto-jsl(자동 + journal_size_limit).
+    static final String EXP_MODE = System.getenv().getOrDefault("SMQ_EXP_CHECKPOINT", "manual");
+
     /**
      * 저장소를 열 때 연결에 거는 WAL 설정. 자동 체크포인트를 끄고, 되감은 파일의 상한을 {@link #WAL_FILE_KEEP_BYTES}로 두고, 저널 모드를
      * WAL로 바꾼다. 이 순서로 건다. 열 때와 테스트가 같은 것을 쓴다.
      */
     static void configureWal(Statement s) throws SQLException {
-        s.execute("PRAGMA wal_autocheckpoint = 0");
-        s.execute("PRAGMA journal_size_limit = " + WAL_FILE_KEEP_BYTES);
+        if (EXP_MODE.equals("manual")) {
+            s.execute("PRAGMA wal_autocheckpoint = 0");
+        }
+        if (!EXP_MODE.equals("auto")) {
+            s.execute("PRAGMA journal_size_limit = " + WAL_FILE_KEEP_BYTES);
+        }
         s.execute("PRAGMA journal_mode = WAL");
+        try (ResultSet a = s.executeQuery("PRAGMA wal_autocheckpoint")) {
+            a.next();
+            int ac = a.getInt(1);
+            try (ResultSet j = s.executeQuery("PRAGMA journal_size_limit")) {
+                j.next();
+                System.err.println(
+                        "[exp] mode=" + EXP_MODE + ", autocheckpoint=" + ac + ", journal_size_limit=" + j.getLong(1));
+            }
+        }
     }
 
     private static final Path NO_WAL = Path.of("");
@@ -166,6 +182,9 @@ final class TransactionExecutor {
      * 호출자에게는 효력 불명이다).
      */
     private void checkpointIfWalIsLarge() {
+        if (!EXP_MODE.equals("manual")) {
+            return;
+        }
         commits++;
         boolean due = walOverLimit ? commits >= checkpointRetryAtCommit : commits % CHECKPOINT_CHECK_EVERY_COMMITS == 0;
         if (!due) {

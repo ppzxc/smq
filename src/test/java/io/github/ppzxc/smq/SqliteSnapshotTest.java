@@ -14,6 +14,9 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -140,6 +143,52 @@ class SqliteSnapshotTest {
 
             assertEquals(before, names(dir));
             assertEquals(dir.resolve("nowhere"), Files.readSymbolicLink(dangling));
+        }
+    }
+
+    @Test
+    void 스냅샷을_뜨는_동안_발행이_이어져도_스냅샷은_일관되고_모든_발행이_끝내_성공한다() throws Exception {
+        int initial = 1_000;
+        int concurrent = 300;
+        byte[] big = new byte[16 * 1024];
+        Path target = dir.resolve("snap.db");
+        AtomicInteger published = new AtomicInteger();
+        CountDownLatch warmedUp = new CountDownLatch(1);
+        try (Smq smq = open()) {
+            Queue q = smq.declare("orders", QueueOptions.defaults());
+            List<OutgoingMessage> bulk = new ArrayList<>();
+            for (int i = 0; i < initial; i++) {
+                bulk.add(OutgoingMessage.of(big));
+            }
+            q.publish(bulk);
+
+            Thread publisher = new Thread(() -> {
+                for (int i = 0; i < concurrent; i++) {
+                    q.publish(msg("p" + i));
+                    published.incrementAndGet();
+                    warmedUp.countDown();
+                }
+            });
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            publisher.setUncaughtExceptionHandler((t, e) -> failure.set(e));
+            publisher.start();
+            warmedUp.await();
+
+            int before = published.get();
+            smq.snapshot(target);
+            int after = published.get();
+            publisher.join();
+
+            assertNull(failure.get());
+            assertEquals(concurrent, published.get());
+            assertEquals(initial + concurrent, q.counts().ready());
+            try (Connection c = external(target)) {
+                assertEquals("ok", scalar(c, "PRAGMA integrity_check"));
+                int inSnapshot = Integer.parseInt(scalar(c, "SELECT count(*) FROM message"));
+                // 발행은 하나뿐이라 스냅샷이 반영한 발행 수는, 시작 전에 끝난 수 이상이고 끝난 뒤 센 수에 진행 중이던 하나를 더한 수 이하다.
+                assertTrue(inSnapshot >= initial + before, "snapshot=" + inSnapshot + " before=" + before);
+                assertTrue(inSnapshot <= initial + after + 1, "snapshot=" + inSnapshot + " after=" + after);
+            }
         }
     }
 }

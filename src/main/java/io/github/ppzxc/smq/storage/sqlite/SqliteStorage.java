@@ -646,7 +646,12 @@ public final class SqliteStorage implements Storage {
                 }
                 throw e;
             }
-            Files.delete(temp);
+            // 연결이 끝난 뒤라 대상은 이미 완전한 파일이다. 임시 파일을 못 지워도 실패로 보지 않는다.
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException ignored) {
+                // 남은 임시 파일은 스냅샷의 결과에 영향이 없다.
+            }
         } catch (IOException e) {
             throw new SmqStorageException("cannot snapshot to " + target, e);
         }

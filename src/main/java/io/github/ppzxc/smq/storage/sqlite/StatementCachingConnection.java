@@ -34,9 +34,12 @@ final class StatementCachingConnection {
      * 문장"으로 세므로, 그런 문장이 있으면 {@code VACUUM}이 거부된다. 해제한 문장은 다음에 쓸 때 다시 준비한다.
      */
     static void releaseStatements(Connection wrapped) {
-        if (Proxy.getInvocationHandler(wrapped) instanceof CacheHandler handler) {
+        if (Proxy.isProxyClass(wrapped.getClass())
+                && Proxy.getInvocationHandler(wrapped) instanceof CacheHandler handler) {
             closeAll(handler.cache);
+            return;
         }
+        throw new IllegalStateException("connection is not wrapped by StatementCachingConnection: " + wrapped);
     }
 
     private record CacheHandler(Connection connection, Map<String, PreparedStatement> cache)

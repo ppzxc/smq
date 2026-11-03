@@ -43,7 +43,8 @@ public interface Smq extends AutoCloseable {
      *       공간이 있어야 한다. 사전 검사는 하지 않는다.
      *   <li>{@code target}의 파일시스템이 하드 링크를 지원해야 한다. 지원하지 않으면 예외로 실패하고 대체 경로는 없다.
      *   <li>{@code target}이 이미 있으면 덮어쓰지 않고 예외를 던진다. 부모 디렉터리가 없어도 예외이며 만들지 않는다.
-     *   <li>실패하면 임시 파일을 지우고 {@code target}을 만들지 않는다.
+     *   <li>실패하면 임시 파일을 지우고 {@code target}을 만들지 않는다. 성공하면 {@code target}은 완전한 파일이다. 임시
+     *       파일은 지우지만 지우지 못해도 실패로 보지 않는다.
      * </ul>
      *
      * @throws IllegalArgumentException {@code target}이 실행 중인 DB, 그 {@code -wal} 파일, 락 파일과 같은 파일일 때

@@ -11,14 +11,16 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -78,6 +80,16 @@ class SqliteSnapshotTest {
         }
     }
 
+    /** 심볼릭 링크를 못 만드는 환경(권한 없는 Windows 등)에서는 테스트를 건너뛴다. */
+    private static Path symlink(Path link, Path target) {
+        try {
+            return Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | IOException | SecurityException e) {
+            Assumptions.abort("symbolic links are not available: " + e);
+            throw new AssertionError(e);
+        }
+    }
+
     private Set<String> names(Path directory) throws IOException {
         try (Stream<Path> entries = Files.list(directory)) {
             return entries.map(e -> e.getFileName().toString()).collect(Collectors.toSet());
@@ -102,7 +114,7 @@ class SqliteSnapshotTest {
 
     @Test
     void 대상이_실행_중인_DB와_WAL과_락_파일과_겹치면_어떤_경로로_가리켜도_거부한다() throws Exception {
-        Path alias = Files.createSymbolicLink(dir.resolveSibling(dir.getFileName() + "-alias"), dir);
+        Path alias = symlink(dir.resolveSibling(dir.getFileName() + "-alias"), dir);
         try (Smq smq = open()) {
             smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
             Set<String> before = names(dir);
@@ -134,7 +146,7 @@ class SqliteSnapshotTest {
     @Test
     void 임시_파일을_만든_뒤_연결에_실패하면_임시_파일을_남기지_않는다() throws Exception {
         // 끊어진 심볼릭 링크는 Files.exists가 false라 사전 검사를 통과하지만 link(2)는 EEXIST로 실패한다.
-        Path dangling = Files.createSymbolicLink(dir.resolve("snap.db"), dir.resolve("nowhere"));
+        Path dangling = symlink(dir.resolve("snap.db"), dir.resolve("nowhere"));
         try (Smq smq = open()) {
             smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
             Set<String> before = names(dir);
@@ -149,11 +161,11 @@ class SqliteSnapshotTest {
     @Test
     void 스냅샷을_뜨는_동안_발행이_이어져도_스냅샷은_일관되고_모든_발행이_끝내_성공한다() throws Exception {
         int initial = 1_000;
-        int concurrent = 300;
+        int rounds = 5;
         byte[] big = new byte[16 * 1024];
-        Path target = dir.resolve("snap.db");
         AtomicInteger published = new AtomicInteger();
-        CountDownLatch warmedUp = new CountDownLatch(1);
+        AtomicBoolean stop = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
         try (Smq smq = open()) {
             Queue q = smq.declare("orders", QueueOptions.defaults());
             List<OutgoingMessage> bulk = new ArrayList<>();
@@ -162,33 +174,63 @@ class SqliteSnapshotTest {
             }
             q.publish(bulk);
 
+            // 발행자는 멈추라고 할 때까지 돈다. 스냅샷은 항상 발행이 진행 중일 때 시작한다.
             Thread publisher = new Thread(() -> {
-                for (int i = 0; i < concurrent; i++) {
-                    q.publish(msg("p" + i));
-                    published.incrementAndGet();
-                    warmedUp.countDown();
+                try {
+                    while (!stop.get()) {
+                        q.publish(msg("p"));
+                        published.incrementAndGet();
+                    }
+                } catch (Throwable t) {
+                    failure.set(t);
                 }
             });
-            AtomicReference<Throwable> failure = new AtomicReference<>();
-            publisher.setUncaughtExceptionHandler((t, e) -> failure.set(e));
             publisher.start();
-            warmedUp.await();
+            try {
+                for (int round = 0; round < rounds; round++) {
+                    int progressed = published.get();
+                    while (published.get() == progressed && failure.get() == null) {
+                        Thread.onSpinWait();
+                    }
+                    assertNull(failure.get());
+                    Path target = dir.resolve("snap" + round + ".db");
 
-            int before = published.get();
-            smq.snapshot(target);
-            int after = published.get();
-            publisher.join();
+                    int before = published.get();
+                    smq.snapshot(target);
+                    int after = published.get();
+
+                    try (Connection c = external(target)) {
+                        assertEquals("ok", scalar(c, "PRAGMA integrity_check"));
+                        int inSnapshot = Integer.parseInt(scalar(c, "SELECT count(*) FROM message"));
+                        // 발행자는 하나뿐이라 스냅샷이 반영한 발행 수는, 시작 전에 끝난 수 이상이고 끝난 뒤 센 수에 진행 중이던
+                        // 하나를 더한 수 이하다.
+                        assertTrue(inSnapshot >= initial + before, "snapshot=" + inSnapshot + " before=" + before);
+                        assertTrue(inSnapshot <= initial + after + 1, "snapshot=" + inSnapshot + " after=" + after);
+                    }
+                }
+            } finally {
+                stop.set(true);
+                publisher.join();
+            }
 
             assertNull(failure.get());
-            assertEquals(concurrent, published.get());
-            assertEquals(initial + concurrent, q.counts().ready());
-            try (Connection c = external(target)) {
-                assertEquals("ok", scalar(c, "PRAGMA integrity_check"));
-                int inSnapshot = Integer.parseInt(scalar(c, "SELECT count(*) FROM message"));
-                // 발행은 하나뿐이라 스냅샷이 반영한 발행 수는, 시작 전에 끝난 수 이상이고 끝난 뒤 센 수에 진행 중이던 하나를 더한 수 이하다.
-                assertTrue(inSnapshot >= initial + before, "snapshot=" + inSnapshot + " before=" + before);
-                assertTrue(inSnapshot <= initial + after + 1, "snapshot=" + inSnapshot + " after=" + after);
-            }
+            assertEquals(initial + published.get(), q.counts().ready());
+        }
+    }
+
+    @Test
+    void 스냅샷을_뜬_뒤에도_같은_Smq로_발행하고_꺼내고_정산할_수_있다() throws Exception {
+        try (Smq smq = open()) {
+            Queue q = smq.declare("orders", QueueOptions.defaults());
+            q.publish(msg("a"));
+            smq.snapshot(dir.resolve("snap.db"));
+
+            q.publish(msg("b"));
+            Chunk chunk = q.pull(2, Duration.ZERO);
+
+            assertEquals(2, chunk.messages().size());
+            assertTrue(q.settle(chunk.ackAll()).allOk());
+            assertEquals(0, q.counts().ready());
         }
     }
 

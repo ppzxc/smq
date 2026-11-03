@@ -97,14 +97,6 @@ final class JvmMetricsSampler implements AutoCloseable {
         return s;
     }
 
-    /** 자식 JVM용. 프로세스 번호를 파일 이름에 반영한다. */
-    static JvmMetricsSampler startChild(Path dir, int process) {
-        Path file = dir.resolve("p" + process + "-jvm-metrics.jsonl");
-        JvmMetricsSampler s = new JvmMetricsSampler(file, DEFAULT_INTERVAL_MS);
-        s.thread.start();
-        return s;
-    }
-
     Summary summary() {
         long totalGcCount = 0;
         long totalGcTime = 0;

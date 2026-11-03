@@ -99,8 +99,7 @@ public final class RandomBenchMain {
                     jsonLines,
                     env,
                     limits,
-                    (params, dir) -> RandomRun.execute(
-                            params, dir, InvariantChecker::check, ChildSpawner.jvm(o.heapDump(), o.jfr())),
+                    (params, dir) -> RandomRun.execute(params, dir, InvariantChecker::check),
                     System.out);
             return session.run(seeds, budget);
         } finally {

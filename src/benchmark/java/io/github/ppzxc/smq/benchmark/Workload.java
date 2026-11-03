@@ -16,8 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 자식 JVM 안에서 시나리오 하나를 도는 쪽. 공개 API({@code Smq}/{@code Queue})만 쓴다.
  *
- * <p>모든 자식은 {@code startAtEpochMs}까지 같은 작업을 돌려 JIT를 데운 뒤(집계하지 않음), 그 시각부터
- * {@code durationMs} 동안 잰다. 그래서 프로세스 여러 개가 같은 구간을 겹쳐 잰다.
+ * <p>자식은 {@code startAtEpochMs}까지 같은 작업을 돌려 JIT를 데운 뒤(집계하지 않음), 그 시각부터
+ * {@code durationMs} 동안 잰다.
  */
 final class Workload {
 
@@ -93,26 +93,20 @@ final class Workload {
         AtomicReference<ChildResult> produced = new AtomicReference<>();
         AtomicReference<ChildResult> consumed = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread producer = role == Role.CONSUMER
-                ? null
-                : new Thread(() -> guard(failure, () -> produced.set(produce(q, spec, measureEnd))), "s3-producer");
-        Thread consumer = role == Role.PRODUCER
-                ? null
-                : new Thread(
-                        () -> guard(failure, () -> consumed.set(consume(q, spec, role, measureStart, consumeEnd))),
-                        "s3-consumer");
-        if (consumer != null) consumer.start();
-        if (producer != null) producer.start();
-        if (producer != null) producer.join();
-        if (consumer != null) consumer.join();
+        Thread producer =
+                new Thread(() -> guard(failure, () -> produced.set(produce(q, spec, measureEnd))), "s3-producer");
+        Thread consumer = new Thread(
+                () -> guard(failure, () -> consumed.set(consume(q, spec, role, measureStart, consumeEnd))),
+                "s3-consumer");
+        consumer.start();
+        producer.start();
+        producer.join();
+        consumer.join();
         if (failure.get() != null) throw new IllegalStateException("S3 스레드 실패", failure.get());
         ChildResult c = consumed.get();
         ChildResult p = produced.get();
         return new ChildResult(
-                role.name(),
-                p != null ? p.messages() : c.messages(),
-                Math.max(p != null ? p.elapsedNanos() : 0, c != null ? c.elapsedNanos() : 0),
-                c != null ? c.latenciesMicros() : new long[0]);
+                role.name(), p.messages(), Math.max(p.elapsedNanos(), c.elapsedNanos()), c.latenciesMicros());
     }
 
     private interface Body {

@@ -19,6 +19,7 @@ import io.github.ppzxc.smq.storage.NewMessage;
 import io.github.ppzxc.smq.storage.PullResult;
 import io.github.ppzxc.smq.storage.Result;
 import io.github.ppzxc.smq.storage.Storage;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
@@ -32,7 +33,7 @@ import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
 import org.jspecify.annotations.Nullable;
 
-/** 같은 프로세스 안에서만 쓰는 인메모리 저장소. 다중 프로세스는 지원하지 않는다. */
+/** 프로세스가 끝나면 사라지는 인메모리 저장소. */
 public final class MemoryStorage implements Storage {
 
     private static final class Entry {
@@ -374,6 +375,11 @@ public final class MemoryStorage implements Storage {
             throw new QueueNotFoundException(queue);
         }
         return options;
+    }
+
+    @Override
+    public void snapshot(Path target) {
+        throw new UnsupportedOperationException();
     }
 
     @Override

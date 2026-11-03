@@ -17,8 +17,8 @@ final class Plan {
     private Plan() {}
 
     /**
-     * 전체 측정. SQLite는 스펙 표 전체이고, 인메모리는 한 JVM에서 도는 조건(프로세스 1, 같은 프로세스)만이다. smq는 한 JVM만
-     * 열 수 있으므로(ADR-0012) 다중 프로세스 조건은 없다.
+     * 전체 측정. SQLite는 스펙 표 전체이고, 인메모리는 한 JVM에서 도는 조건만이다. smq는 한 JVM만 열 수 있으므로(ADR-0012) 다중
+     * 프로세스 조건은 없다.
      */
     static List<RunSpec> full(Storage storage) {
         return build(storage, FULL_DURATION_MS, FULL_WARMUP_MS, RunSpec.DEEP);
@@ -54,13 +54,13 @@ final class Plan {
         long d = SMOKE_DURATION_MS;
         long w = SMOKE_WARMUP_MS;
         if (storage == Storage.SQLITE) {
-            plan.add(RunSpec.s1(storage, Profile.P1, 1, Durability.POWER_LOSS, 0, d, w));
-            plan.add(RunSpec.s1(storage, Profile.P1, 1, Durability.PROCESS_CRASH, SMOKE_DEPTH, d, w));
+            plan.add(RunSpec.s1(storage, Profile.P1, Durability.POWER_LOSS, 0, d, w));
+            plan.add(RunSpec.s1(storage, Profile.P1, Durability.PROCESS_CRASH, SMOKE_DEPTH, d, w));
             plan.add(RunSpec.s2(storage, Profile.P1, d, w));
             plan.add(RunSpec.s3(storage, Profile.P1, Topology.SAME_PROCESS, d, w));
         } else {
-            plan.add(RunSpec.s1(storage, Profile.P1, 1, null, 0, d, w));
-            plan.add(RunSpec.s1(storage, Profile.P1, 1, null, SMOKE_DEPTH, d, w));
+            plan.add(RunSpec.s1(storage, Profile.P1, null, 0, d, w));
+            plan.add(RunSpec.s1(storage, Profile.P1, null, SMOKE_DEPTH, d, w));
             plan.add(RunSpec.s2(storage, Profile.P1, d, w));
             plan.add(RunSpec.s3(storage, Profile.P1, Topology.SAME_PROCESS, d, w));
         }
@@ -71,21 +71,17 @@ final class Plan {
         boolean sqlite = storage == Storage.SQLITE;
         List<Durability> durabilities =
                 sqlite ? List.of(Durability.POWER_LOSS, Durability.PROCESS_CRASH) : Collections.singletonList(null);
-        // smq는 한 JVM만 연다(ADR-0012). 프로세스 수는 1뿐이다.
-        List<Integer> processCounts = List.of(1);
         List<RunSpec> plan = new ArrayList<>();
-        // S1: P0은 1프로세스, 빈 큐만. P1~P4는 내구성 수준별.
-        for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P0, 1, dur, 0, d, w));
+        // S1: P0은 빈 큐만. P1~P4는 내구성 수준별.
+        for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P0, dur, 0, d, w));
         for (Profile p : List.of(Profile.P1, Profile.P2, Profile.P3, Profile.P4))
-            for (int n : processCounts)
-                for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, n, dur, 0, d, w));
-        // 단건(청크 1): 데이터 크기마다 S1 1프로세스 빈 큐(두 내구성)와 S2. P0은 위에서 S1을 이미 더했다.
+            for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
+        // 단건(청크 1): 데이터 크기마다 S1 빈 큐(두 내구성)와 S2. P0은 위에서 S1을 이미 더했다.
         for (Profile p : List.of(Profile.P2S, Profile.P3S, Profile.P4S))
-            for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, 1, dur, 0, d, w));
+            for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
         // 100만 건 깊이는 P1에서만.
-        for (int n : processCounts)
-            for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, n, dur, deep, d, w));
-        // S2: P1~P4와 단건 프로파일(P0, P2S, P3S, P4S), 1프로세스, 빈 큐.
+        for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, dur, deep, d, w));
+        // S2: P1~P4와 단건 프로파일(P0, P2S, P3S, P4S), 빈 큐.
         for (Profile p : List.of(
                 Profile.P1, Profile.P2, Profile.P3, Profile.P4, Profile.P0, Profile.P2S, Profile.P3S, Profile.P4S))
             plan.add(RunSpec.s2(storage, p, d, w));

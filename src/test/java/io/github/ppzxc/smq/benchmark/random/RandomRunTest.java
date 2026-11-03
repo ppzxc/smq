@@ -8,7 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -38,116 +37,6 @@ class RandomRunTest {
         assertEquals(java.util.List.of(v), r.violations());
     }
 
-    /** 같은 JVM의 스레드로 자식을 흉내 낸다. 자식 JVM 띄우기는 {@code randomBenchSmoke}가 모듈 경로에서 확인한다. */
-    private static ChildSpawner inProcess() {
-        return spec -> {
-            AtomicReference<Throwable> error = new AtomicReference<>();
-            Thread t = new Thread(() -> {
-                try {
-                    RandomRun.runChild(spec.params(), spec.process(), spec.db(), spec.outDir(), spec.startAt());
-                } catch (Throwable e) {
-                    error.set(e);
-                }
-            });
-            t.start();
-            return new ChildSpawner.Running() {
-                public void await(long timeoutMs) throws Exception {
-                    t.join(timeoutMs);
-                    if (error.get() != null) {
-                        throw new IllegalStateException(error.get());
-                    }
-                }
-
-                public void destroy() {}
-            };
-        };
-    }
-
-    /**
-     * 자식이 남기는 기록을 고정 입력으로 쓰는 스포너. 락 경합과 무관하게 부모가 프로세스별 기록을 합치는 일만 본다.
-     * {@code silent}에 든 프로세스는 부하 구간 내내 쓰기 락을 못 잡은 자식처럼 아무 기록도 남기지 않는다.
-     */
-    private static ChildSpawner fixedOutputs(java.util.Set<Integer> silent) {
-        return spec -> {
-            int n = spec.process();
-            java.util.List<Published> pub = new java.util.ArrayList<>();
-            java.util.List<Delivery> del = new java.util.ArrayList<>();
-            if (!silent.contains(n)) {
-                Tag tag = new Tag(spec.params().seed(), n, 1);
-                Content content = new Content(77, java.util.Map.of("bench-tag", tag.toString()));
-                pub.add(new Published(tag, content, 1234, 0));
-                del.add(new Delivery(
-                        QueueKind.TARGET,
-                        tag,
-                        100 + n,
-                        1,
-                        content,
-                        new Delivery.Pull(((long) n << 40) | 1, 0, 2000, 3000),
-                        Delivery.Settle.NONE));
-            }
-            ChildOutput.write(spec.outDir(), n, new ChildOutput(del.size(), 0, pub, del));
-            return new ChildSpawner.Running() {
-                public void await(long timeoutMs) {}
-
-                public void destroy() {}
-            };
-        };
-    }
-
-    @Test
-    void aChildThatNeverGotTheWriteLockLeavesTheOthersRecordsMergedAndTheRunPassing() {
-        RunParams p = RunParams.fromSeed(2, Limits.smoke(300));
-        RunResult r = RandomRun.execute(
-                p, dir, (c, pub, del, smp) -> java.util.List.of(), fixedOutputs(java.util.Set.of(1, 2, 3)));
-        assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error());
-        assertEquals(
-                java.util.Set.of(0),
-                r.records().published().stream()
-                        .map(x -> x.tag().process())
-                        .collect(java.util.stream.Collectors.toSet()));
-    }
-
-    @Test
-    void childRecordsRoundTripThroughTheirFiles() throws Exception {
-        Published pub =
-                new Published(new Tag(9, 2, 5), new Content(77, java.util.Map.of("bench-tag", "9/2/5")), 1234, 50);
-        Delivery del = new Delivery(
-                QueueKind.DEAD_LETTER,
-                new Tag(9, 2, 5),
-                31,
-                3,
-                new Content(77, java.util.Map.of("bench-tag", "9/2/5", "smq-reason", "rejected")),
-                new Delivery.Pull((2L << 40) | 7, 1, 2000, 3000),
-                Delivery.Settle.nack(2500, 100));
-        ChildOutput.write(dir, 2, new ChildOutput(11, 2222, java.util.List.of(pub), java.util.List.of(del)));
-        ChildOutput back = ChildOutput.read(dir, 2);
-        assertEquals(java.util.List.of(pub), back.published());
-        assertEquals(java.util.List.of(del), back.deliveries());
-        assertEquals(11, back.loadAckedMessages());
-        assertEquals(2222, back.loadAckedBytes());
-    }
-
-    // ---- ERROR 진단: 발생 위치, 스택 트레이스, 자식 종료 코드와 표준 오류
-
-    /** 자식 {@code failing}만 {@code body}에서 실패하고, 나머지는 바로 끝나는 스포너. 자식 JVM의 보고 경로({@link ChildReport})를 그대로 탄다. */
-    private static ChildSpawner failingChild(int failing, ChildReport.Body body) {
-        return spec -> new ChildSpawner.Running() {
-            public void await(long timeoutMs) throws Exception {
-                if (spec.process() != failing) {
-                    return;
-                }
-                try {
-                    ChildReport.guard(spec.outDir(), spec.process(), body);
-                } catch (Throwable t) {
-                    // 실제 자식 JVM은 종료 코드 1로 끝난다. 부모는 그것만 본다.
-                    throw new ChildFailure(spec.process(), 1, "", t instanceof Exception e ? e : new Exception(t));
-                }
-            }
-
-            public void destroy() {}
-        };
-    }
-
     @Test
     void anExceptionInTheHarnessJvmIsReportedAsHarness() {
         RunParams p = RunParams.fromSeed(5, Limits.smoke(300));
@@ -162,16 +51,6 @@ class RandomRunTest {
         assertTrue(d.stackTrace().contains("\tat "));
         assertNull(d.exitCode());
         assertNull(d.stderrTail());
-    }
-
-    @Test
-    void stderrTailKeepsOnlyTheLastBytes() throws Exception {
-        Path err = dir.resolve("p0.err");
-        Files.writeString(err, "a".repeat(10_000) + "끝");
-        String tail = ChildFailure.readTail(err, 100);
-        assertTrue(tail.endsWith("끝"));
-        assertTrue(tail.length() <= 100, "상한: " + tail.length());
-        assertEquals("", ChildFailure.readTail(dir.resolve("없음.err"), 100));
     }
 
     // ---- WAL 최대 크기
@@ -197,21 +76,10 @@ class RandomRunTest {
 
     // ---- 고정 속도 모드
 
-    /** 프로세스 수가 {@code processes}인 첫 시드. 시드마다 프로세스 수가 달라서 찾아 쓴다. */
-    private static RunParams paramsWithProcesses(int processes, Limits limits) {
-        for (long seed = 1; seed < 500; seed++) {
-            RunParams p = RunParams.fromSeed(seed, limits);
-            if (p.processes() == processes) {
-                return p;
-            }
-        }
-        throw new AssertionError("프로세스 수 " + processes + "인 시드가 없다");
-    }
-
     @Test
     void 고정_속도로_돌면_달성률과_백로그_보고가_붙는다() {
         Limits soak = Limits.smoke(2_000).withRate(200);
-        RunParams p = paramsWithProcesses(1, soak);
+        RunParams p = RunParams.fromSeed(1, soak);
         RunResult r = RandomRun.execute(p, dir, InvariantChecker::check);
         assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error() + " " + r.soak());
         assertNotNull(r.soak());
@@ -263,7 +131,7 @@ class RandomRunTest {
         // 청크 x 컨슈머 수(최대 2,000)보다 충분히 깊어야 한 번에 몇 청크가 빠져도 목표 근처에 머문다. 실제 설정은 10만 건이다.
         Limits standingLimits =
                 Limits.smoke(2_500).withRate(200).withDepth(20_000).withStandingQueue(true);
-        RunParams standing = paramsWithProcesses(1, standingLimits);
+        RunParams standing = RunParams.fromSeed(1, standingLimits);
         RunResult kept = RandomRun.execute(standing, subdir("standing"), InvariantChecker::check);
         assertEquals(Verdict.PASS, kept.verdict(), kept.violations() + " " + kept.error());
         assertTrue(
@@ -273,7 +141,7 @@ class RandomRunTest {
         // 대조군: 조절 없이 기본 깊이(2,000)면 컨슈머가 비운다. 깊이가 달라 직접 비교는 아니고, 조절이 없으면 비워진다는 것만 확인한다.
         // (깊이 20,000은 이 짧은 부하에서 비워지지 않아 대조군이 되지 못한다.)
         Limits drainingLimits = Limits.smoke(2_500).withRate(200);
-        RunParams draining = paramsWithProcesses(1, drainingLimits);
+        RunParams draining = RunParams.fromSeed(1, drainingLimits);
         RunResult drained = RandomRun.execute(draining, subdir("draining"), InvariantChecker::check);
         assertTrue(
                 lateLoadMedianDepth(drained) < draining.prefillDepth() * 0.5,

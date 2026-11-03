@@ -14,12 +14,11 @@ import java.util.OptionalLong;
  *   <li>{@code --master-seed <n>}: 실행 시드를 뽑을 마스터 시드. 기본은 현재 시각.
  *   <li>{@code --load <기간>}: 부하 구간 길이. 기본 10초.
  *   <li>{@code --smoke}: 고정 시드 {@link #SMOKE_SEEDS}를 실행당 2초씩 돈다(미리 채운 깊이와 리스 기한을 줄인 한도).
- *   <li>{@code --heap-dump}: 자식 JVM에 {@code -XX:+HeapDumpOnOutOfMemoryError}를 주고 덤프를 실행 디렉터리에 남긴다. 기본은 끈다(덤프가 크다).
  *   <li>{@code --rate <n>}: 고정 속도 모드. 프로듀서 전체가 초당 n개를 보내고 달성률과 백로그 추세를 판정한다. JFR이 기본으로 켜진다.
  *   <li>{@code --message-bytes <n>}: 고정 속도 모드의 메시지 크기 상한(최소는 그 절반, 균등). 기본 1,024. {@code --rate}가 있어야 한다.
  *   <li>{@code --depth <n>}: 고정 속도 모드의 미리 채울 깊이(데이터 256MB 추정 상한 안에서). 기본 100,000. {@code --rate}가 있어야 한다.
  *   <li>{@code --standing-queue}: 고정 속도 모드에서 큐 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어서 그 깊이가 유지되게 한다. {@code --rate}가 있어야 한다.
- *   <li>{@code --jfr}: 부모와 자식 JVM에 Java Flight Recorder 연속 레코딩을 켠다. 실행 디렉터리에 {@code .jfr} 파일을 남긴다.
+ *   <li>{@code --jfr}: JVM에 Java Flight Recorder 연속 레코딩을 켠다. 실행 디렉터리에 {@code .jfr} 파일을 남긴다.
  *   <li>{@code --out-dir <디렉터리>}: 산출물 위치. 기본 {@code build/random-bench}.
  * </ul>
  */
@@ -30,7 +29,6 @@ record Options(
         Duration load,
         boolean smoke,
         Path outDir,
-        boolean heapDump,
         boolean jfr,
         long rate,
         int messageBytes,
@@ -47,7 +45,6 @@ record Options(
         long master = nowMillis;
         Duration load = null;
         boolean smoke = false;
-        boolean heapDump = false;
         boolean jfr = false;
         long rate = 0;
         int messageBytes = 0;
@@ -58,10 +55,6 @@ record Options(
             String a = args[i];
             if (a.equals("--smoke")) {
                 smoke = true;
-                continue;
-            }
-            if (a.equals("--heap-dump")) {
-                heapDump = true;
                 continue;
             }
             if (a.equals("--standing-queue")) {
@@ -107,7 +100,6 @@ record Options(
                 load,
                 smoke,
                 out.toAbsolutePath(),
-                heapDump,
                 jfr || rate > 0,
                 rate,
                 messageBytes,

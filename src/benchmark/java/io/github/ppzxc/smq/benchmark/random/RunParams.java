@@ -1,12 +1,7 @@
 package io.github.ppzxc.smq.benchmark.random;
 
 import io.github.ppzxc.smq.Durability;
-import io.github.ppzxc.smq.benchmark.Json;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Base64;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.SplittableRandom;
 import java.util.function.DoubleUnaryOperator;
@@ -15,9 +10,8 @@ import java.util.stream.Collectors;
 /**
  * 실행 하나의 매개변수. 시드 하나에서 정해진 순서로 뽑으므로 같은 시드는 같은 매개변수다. 범위는 이슈 #86의 표를 따른다.
  *
- * @param processes 프로세스 수. smq는 한 JVM만 열 수 있으므로(ADR-0012) 항상 1이다. 기록 형식 호환을 위해 필드만 남겼다
- * @param producers 프로세스마다의 프로듀서 스레드 수(길이가 {@code processes}). 프로세스당 1~4이다
- * @param consumers 프로세스마다의 컨슈머 스레드 수. 같은 규칙이다
+ * @param producers 프로듀서 스레드 수. 1~4이다
+ * @param consumers 컨슈머 스레드 수. 같은 규칙이다
  * @param maxMessageBytes 메시지 크기의 상한. 메시지마다 0부터 이 값까지 로그 균등으로 뽑는다
  * @param ackRatio 정산 결정 비율. 합이 1이고 ACK가 과반이다
  * @param slowChunkRatio 처리 시간이 0이 아닌 청크의 비율. 길이는 0부터 리스 기한의 1.5배까지 균등
@@ -29,12 +23,11 @@ import java.util.stream.Collectors;
  */
 record RunParams(
         long seed,
-        int processes,
         int maxMessageBytes,
         int publishBatch,
         int chunkSize,
-        List<Integer> producers,
-        List<Integer> consumers,
+        int producers,
+        int consumers,
         Durability durability,
         int prefillDepth,
         double ackRatio,
@@ -55,11 +48,6 @@ record RunParams(
         long targetRate,
         int minMessageBytes,
         boolean consumerPaced) {
-
-    RunParams {
-        producers = List.copyOf(producers);
-        consumers = List.copyOf(consumers);
-    }
 
     static final int MAX_MESSAGE_BYTES = 64 * 1024;
     /** 미리 채우기가 만드는 데이터의 상한(바이트 추정). 큰 메시지로 수 GB를 만들지 않으려는 것이다. */
@@ -104,14 +92,6 @@ record RunParams(
         int maxDeliveries = r.nextBoolean() ? 0 : 1 + r.nextInt(5);
         boolean single = r.nextDouble() < 0.2;
         long pullWait = r.nextLong(501);
-        // smq는 한 JVM만 연다(ADR-0012). 프로세스 수는 1로 고정하고, 기록 형식 호환을 위해 필드만 남긴다.
-        int processes = 1;
-        List<Integer> producerList = List.of(producers);
-        List<Integer> consumerList = List.of(consumers);
-        if (processes > 1) {
-            producerList = perProcessThreads(r, processes);
-            consumerList = perProcessThreads(r, processes);
-        }
         long rate = limits.ratePerSecond();
         int minBytes = 0;
         boolean consumerPaced = false;
@@ -127,20 +107,18 @@ record RunParams(
             chunkSize = Math.max(chunkSize, SOAK_MIN_CHUNK_SIZE);
             publishDelay = 0;
             nackDelay = 0;
-            long perThread = perThreadRate(
-                    rate, producerList.stream().mapToInt(Integer::intValue).sum());
+            long perThread = perThreadRate(rate, producers);
             long lowest = Math.min(SOAK_MIN_PUBLISH_BATCH, perThread);
             long highest = Math.max(lowest, perThread / SOAK_BATCH_WINDOW_DIVISOR);
             publishBatch = (int) Math.max(lowest, Math.min(publishBatch, highest));
         }
         return new RunParams(
                 seed,
-                processes,
                 maxBytes,
                 publishBatch,
                 chunkSize,
-                producerList,
-                consumerList,
+                producers,
+                consumers,
                 durability,
                 depth,
                 ack,
@@ -163,18 +141,6 @@ record RunParams(
                 consumerPaced);
     }
 
-    /** 프로세스마다 0~4. 전체가 0이면 첫 프로세스에 1을 준다(전체에서 1 이상). */
-    private static List<Integer> perProcessThreads(SplittableRandom r, int processes) {
-        List<Integer> out = new ArrayList<>(processes);
-        for (int i = 0; i < processes; i++) {
-            out.add(r.nextInt(5));
-        }
-        if (out.stream().mapToInt(Integer::intValue).sum() == 0) {
-            out.set(0, 1);
-        }
-        return out;
-    }
-
     /** 메시지 크기 범위에서 어림한 평균 크기(바이트). 하한이 없으면 로그 균등으로 보고 상한의 4분의 1로 어림한다. 미리 채우기와 쌓임 상한을 바이트로 환산할 때 쓴다. */
     static long avgMessageBytes(int minMessageBytes, int maxMessageBytes) {
         return (minMessageBytes > 0 ? (minMessageBytes + maxMessageBytes) / 2 : maxMessageBytes / 4) + 64;
@@ -190,19 +156,11 @@ record RunParams(
      * 스레드 수 미만이다).
      */
     long perThreadRate() {
-        return perThreadRate(targetRate, totalProducers());
+        return perThreadRate(targetRate, producers);
     }
 
     private static long perThreadRate(long rate, int producers) {
         return Math.max(1, (rate + producers - 1) / producers);
-    }
-
-    int totalProducers() {
-        return producers.stream().mapToInt(Integer::intValue).sum();
-    }
-
-    int totalConsumers() {
-        return consumers.stream().mapToInt(Integer::intValue).sum();
     }
 
     /** 30%는 0, 나머지는 0~30% 균등. 지연이나 느린 처리가 아예 없는 실행도 탐색하려는 것이다. */
@@ -224,67 +182,9 @@ record RunParams(
         return fields(d -> Math.round(d * 10_000) / 10_000.0);
     }
 
-    /** 자식 JVM에 넘기는 인자. 비율을 반올림하지 않으므로 자식이 부모와 같은 워크로드를 만든다. */
-    String toArg() {
-        Map<String, Object> m = fields(DoubleUnaryOperator.identity());
-        // JSON 수는 double로 읽혀 2^53을 넘는 시드가 깨진다. 시드는 문자열로 보낸다.
-        m.put("seed", Long.toString(seed));
-        String json = Json.write(m);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes(StandardCharsets.UTF_8));
-    }
-
-    static RunParams fromArg(String arg) {
-        Map<?, ?> m = (Map<?, ?>) Json.parse(new String(Base64.getUrlDecoder().decode(arg), StandardCharsets.UTF_8));
-        return new RunParams(
-                Long.parseLong((String) m.get("seed")),
-                i(m, "processes"),
-                i(m, "maxMessageBytes"),
-                i(m, "publishBatch"),
-                i(m, "chunkSize"),
-                ints(m, "producers"),
-                ints(m, "consumers"),
-                Durability.valueOf((String) m.get("durability")),
-                i(m, "prefillDepth"),
-                d(m, "ackRatio"),
-                d(m, "nackRatio"),
-                d(m, "rejectRatio"),
-                d(m, "noneRatio"),
-                d(m, "slowChunkRatio"),
-                d(m, "extendRatio"),
-                l(m, "leaseMillis"),
-                d(m, "publishDelayRatio"),
-                l(m, "publishDelayMaxMillis"),
-                d(m, "nackDelayRatio"),
-                l(m, "nackDelayMaxMillis"),
-                i(m, "maxDeliveries"),
-                (Boolean) m.get("singleActiveConsumer"),
-                l(m, "pullWaitMillis"),
-                l(m, "loadMillis"),
-                l(m, "targetRate"),
-                i(m, "minMessageBytes"),
-                (Boolean) m.get("consumerPaced"));
-    }
-
-    private static double d(Map<?, ?> m, String k) {
-        return ((Double) m.get(k));
-    }
-
-    private static long l(Map<?, ?> m, String k) {
-        return ((Double) m.get(k)).longValue();
-    }
-
-    private static int i(Map<?, ?> m, String k) {
-        return ((Double) m.get(k)).intValue();
-    }
-
-    private static List<Integer> ints(Map<?, ?> m, String k) {
-        return ((List<?>) m.get(k)).stream().map(o -> ((Double) o).intValue()).toList();
-    }
-
     private Map<String, Object> fields(DoubleUnaryOperator round) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("seed", seed);
-        m.put("processes", processes);
         m.put("maxMessageBytes", maxMessageBytes);
         m.put("publishBatch", publishBatch);
         m.put("chunkSize", chunkSize);

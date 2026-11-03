@@ -25,6 +25,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -50,11 +52,10 @@ import org.sqlite.SQLiteException;
  * SQLite 파일 하나를 쓰는 저장소. 이 클래스에는 열기 순서, 큐 연산 SQL, row codec이 있다.
  * 한 JVM만 파일을 열 수 있다. 열 때 {@link StorageLock}으로 락 파일을 잡고 연결을 {@code locking_mode=EXCLUSIVE}로
  * 열며, 이미 누가 쥐고 있으면 기다리지 않고 {@code StorageLockedException}이다(ADR-0012).
- * 단일 연결, 단일 lock, 트랜잭션마다 하는 스키마 버전 확인, {@code SQLITE_BUSY} 재시도(기본 5회, 시도마다 늘어나는
- * 대기)는 {@link TransactionExecutor}가 소유한다. 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의
- * 확인하는 쓰기 트랜잭션({@code BEGIN IMMEDIATE})을 거치며 BUSY면 재시도한다.
- * 읽기 경로는 따로 있다. 꺼내기 대기용 {@link #anyReady}는 같은 실행기의 autocommit 읽기를 써서 쓰기 락과
- * 재시도 없이 보고, 확실하지 않으면 "있다"고 답해 쓰기 경로가 다시 확인하게 한다.
+ * 단일 연결과 단일 lock은 {@link TransactionExecutor}가 소유한다. 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의
+ * 쓰기 트랜잭션({@code BEGIN IMMEDIATE})을 거친다.
+ * 읽기 경로는 따로 있다. 꺼내기 대기용 {@link #anyReady}는 같은 실행기의 autocommit 읽기를 써서 쓰기 락 없이
+ * 보고, 확실하지 않으면 "있다"고 답해 쓰기 경로가 다시 확인하게 한다.
  * 열 때의 스키마 판정(생성, 거부, 업그레이드)은 상태 없는 {@link SqliteSchema}가 맡는다.
  */
 public final class SqliteStorage implements Storage {
@@ -79,16 +80,16 @@ public final class SqliteStorage implements Storage {
     static final String SELECT_EXHAUSTED = "SELECT id, payload, headers, delivery_count" + READY_FROM_WHERE
             + " AND delivery_count >= ? ORDER BY id LIMIT ?";
 
-    private static final int BUSY_TIMEOUT_MILLIS = 5000;
-    private static final int MAX_ATTEMPTS = 5;
     /** 운영 스키마: 목표 버전 1, 업그레이드 단계 없음. */
     private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
 
     private final TransactionExecutor executor;
     private final Duration lockWaitFloor;
     private final StorageLock storageLock;
+    private final Path path;
 
-    private SqliteStorage(TransactionExecutor executor, Duration lockWaitFloor, StorageLock storageLock) {
+    private SqliteStorage(Path path, TransactionExecutor executor, Duration lockWaitFloor, StorageLock storageLock) {
+        this.path = path;
         this.executor = executor;
         this.lockWaitFloor = lockWaitFloor;
         this.storageLock = storageLock;
@@ -105,21 +106,12 @@ public final class SqliteStorage implements Storage {
      *     0 이상이다. 쓰기 트랜잭션 하나가 기본값(100ms)보다 오래 걸리는 저장소에서 늘린다.
      */
     public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
-        return open(path, durability, BUSY_TIMEOUT_MILLIS, MAX_ATTEMPTS, lockWaitFloor);
-    }
-
-    static SqliteStorage open(Path path, Durability durability, int busyTimeoutMillis, int maxAttempts) {
-        return open(path, durability, busyTimeoutMillis, maxAttempts, Deadline.DEFAULT_LOCK_WAIT_FLOOR);
-    }
-
-    /** 테스트가 경합을 짧게 재현할 수 있게 busy timeout과 시도 횟수를 정한다. */
-    static SqliteStorage open(
-            Path path, Durability durability, int busyTimeoutMillis, int maxAttempts, Duration lockWaitFloor) {
         if (lockWaitFloor.isNegative()) {
             throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
         }
         SQLiteConfig config = new SQLiteConfig();
-        // 열 때는 기다리지 않는다. 락 파일을 잡은 뒤의 BUSY는 smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012).
+        // 기다리지 않는다. 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고,
+        // 난다면 smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012). 열린 뒤에도 0을 그대로 쓴다.
         config.setBusyTimeout(0);
         // 연결이 락을 놓지 않게 한다. WAL로 바꾸기 전에 켜야 -shm이 생기지 않는다.
         config.setLockingMode(SQLiteConfig.LockingMode.EXCLUSIVE);
@@ -133,22 +125,18 @@ public final class SqliteStorage implements Storage {
         try {
             connection = StatementCachingConnection.wrap(
                     DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties()));
-            TransactionExecutor executor = new TransactionExecutor(
-                    connection,
-                    new TransactionExecutor.RetryPolicy(maxAttempts, attempt -> Thread.sleep(10L * attempt)));
-            // 열기는 아직 기준 버전이 없으므로 확인 없이 판정하고, 그 결과가 기준 버전이 된다.
-            executor.executeUnverified(SCHEMA::establish);
+            TransactionExecutor executor = new TransactionExecutor(connection);
+            executor.execute(SCHEMA::establish);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
-            executor.attemptOnce(() -> {
+            executor.executeOutsideTransaction(() -> {
                 try (Statement s = executor.connection().createStatement()) {
                     s.execute("PRAGMA wal_autocheckpoint = 0");
                     s.execute("PRAGMA journal_size_limit = " + TransactionExecutor.WAL_FILE_KEEP_BYTES);
                     s.execute("PRAGMA journal_mode = WAL");
-                    s.execute("PRAGMA busy_timeout = " + busyTimeoutMillis);
                     return Boolean.TRUE;
                 }
             });
-            return new SqliteStorage(executor, lockWaitFloor, storageLock);
+            return new SqliteStorage(path, executor, lockWaitFloor, storageLock);
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
             storageLock.close();
@@ -184,8 +172,8 @@ public final class SqliteStorage implements Storage {
     }
 
     /**
-     * 모든 큐 연산이 거치는 쓰기 트랜잭션 경로. 실행기의 확인하는 쓰기 실행에 넘겨주기만 한다.
-     * 시작할 때마다 {@code user_version}을 다시 확인하고, {@code SQLITE_BUSY}면 재시도한다.
+     * 모든 큐 연산이 거치는 쓰기 트랜잭션 경로. 실행기의 쓰기 실행에 넘겨주기만 한다.
+     * 스키마 버전은 열 때 한 번 판정하므로 트랜잭션마다 다시 확인하지 않고, {@code SQLITE_BUSY}도 재시도하지 않는다.
      */
     <T> T inTransaction(TransactionExecutor.TxBody<T> body) {
         return inTransaction(body, Deadline.NONE);
@@ -359,10 +347,10 @@ public final class SqliteStorage implements Storage {
     }
 
     /**
-     * 꺼낼 메시지가 있는지 autocommit으로 본다. 실행은 {@link TransactionExecutor#anyOrUncertain}이 맡아 쓰기 락과
-     * 재시도 없이, 읽기 트랜잭션을 남기지 않고 한다. 있다고 나와도 실제 꺼내기는 쓰기 트랜잭션이 다시 확인한다.
+     * 꺼낼 메시지가 있는지 autocommit으로 본다. 실행은 {@link TransactionExecutor#anyOrUncertain}이 맡아 쓰기 락 없이,
+     * 읽기 트랜잭션을 남기지 않고 한다. 있다고 나와도 실제 꺼내기는 쓰기 트랜잭션이 다시 확인한다.
      * 확실하지 않으면 true를 돌려 쓰기 경로가 다시 확인하게 한다. 그런 경우는 큐가 없을 때(쓰기 경로가 오류를
-     * 던진다), 비어 보이는데 스키마 버전이 열 때와 달라졌거나 영구 실패 상태일 때, 읽기가 BUSY일 때다.
+     * 던진다), 읽기가 BUSY일 때다.
      * BUSY가 아닌 오류는 true가 아니라 예외다.
      */
     private boolean anyReady(String queue, Instant now, Deadline waitDeadline) {
@@ -625,6 +613,59 @@ public final class SqliteStorage implements Storage {
             }
             return new Extended(deadline, results);
         });
+    }
+
+    @Override
+    public void snapshot(Path target) {
+        try {
+            Path realTarget = realPathOf(target);
+            Path realDb = realPathOf(path);
+            if (realTarget.equals(realDb)
+                    || realTarget.equals(realDb.resolveSibling(realDb.getFileName() + "-wal"))
+                    || realTarget.equals(StorageLock.lockPathOf(realDb))) {
+                throw new IllegalArgumentException("snapshot target overlaps the live database: " + target);
+            }
+            if (Files.exists(target)) {
+                throw new FileAlreadyExistsException(target.toString());
+            }
+            Path temp = Files.createTempFile(target.toAbsolutePath().getParent(), "smq-snapshot-", ".tmp");
+            try {
+                executor.executeOutsideTransaction(() -> {
+                    StatementCachingConnection.releaseStatements(executor.connection());
+                    try (Statement s = executor.connection().createStatement()) {
+                        s.execute("VACUUM INTO '" + temp.toString().replace("'", "''") + "'");
+                        return Boolean.TRUE;
+                    }
+                });
+                Files.createLink(target, temp);
+            } catch (IOException | RuntimeException e) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException suppressed) {
+                    e.addSuppressed(suppressed);
+                }
+                throw e;
+            }
+            // 연결이 끝난 뒤라 대상은 이미 완전한 파일이다. 임시 파일을 못 지워도 실패로 보지 않는다.
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException ignored) {
+                // 남은 임시 파일은 스냅샷의 결과에 영향이 없다.
+            }
+        } catch (IOException e) {
+            throw new SmqStorageException("cannot snapshot to " + target, e);
+        }
+    }
+
+    /** 부모 디렉터리의 실제 경로에 파일명을 붙인다. 파일 자체는 없어도 된다. */
+    private static Path realPathOf(Path file) throws IOException {
+        Path absolute = file.toAbsolutePath().normalize();
+        Path parent = absolute.getParent();
+        Path name = absolute.getFileName();
+        if (parent == null || name == null) {
+            throw new IllegalArgumentException("not a file path: " + file);
+        }
+        return parent.toRealPath().resolve(name);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package io.github.ppzxc.smq;
 
 import io.github.ppzxc.smq.storage.Storage;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.InstantSource;
 import java.util.Objects;
@@ -41,6 +42,12 @@ final class DefaultSmq implements Smq {
     public boolean delete(String name) {
         Validation.queueName(name);
         return storage.delete(name);
+    }
+
+    @Override
+    public void snapshot(Path target) {
+        Objects.requireNonNull(target, "target");
+        storage.snapshot(target);
     }
 
     @Override

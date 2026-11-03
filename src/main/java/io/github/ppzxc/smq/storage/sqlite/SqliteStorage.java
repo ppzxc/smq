@@ -25,6 +25,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -84,8 +86,10 @@ public final class SqliteStorage implements Storage {
     private final TransactionExecutor executor;
     private final Duration lockWaitFloor;
     private final StorageLock storageLock;
+    private final Path path;
 
-    private SqliteStorage(TransactionExecutor executor, Duration lockWaitFloor, StorageLock storageLock) {
+    private SqliteStorage(Path path, TransactionExecutor executor, Duration lockWaitFloor, StorageLock storageLock) {
+        this.path = path;
         this.executor = executor;
         this.lockWaitFloor = lockWaitFloor;
         this.storageLock = storageLock;
@@ -132,7 +136,7 @@ public final class SqliteStorage implements Storage {
                     return Boolean.TRUE;
                 }
             });
-            return new SqliteStorage(executor, lockWaitFloor, storageLock);
+            return new SqliteStorage(path, executor, lockWaitFloor, storageLock);
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);
             storageLock.close();
@@ -609,6 +613,59 @@ public final class SqliteStorage implements Storage {
             }
             return new Extended(deadline, results);
         });
+    }
+
+    @Override
+    public void snapshot(Path target) {
+        try {
+            Path realTarget = realPathOf(target);
+            Path realDb = realPathOf(path);
+            if (realTarget.equals(realDb)
+                    || realTarget.equals(realDb.resolveSibling(realDb.getFileName() + "-wal"))
+                    || realTarget.equals(StorageLock.lockPathOf(realDb))) {
+                throw new IllegalArgumentException("snapshot target overlaps the live database: " + target);
+            }
+            if (Files.exists(target)) {
+                throw new FileAlreadyExistsException(target.toString());
+            }
+            Path temp = Files.createTempFile(target.toAbsolutePath().getParent(), "smq-snapshot-", ".tmp");
+            try {
+                executor.executeOutsideTransaction(() -> {
+                    StatementCachingConnection.releaseStatements(executor.connection());
+                    try (Statement s = executor.connection().createStatement()) {
+                        s.execute("VACUUM INTO '" + temp.toString().replace("'", "''") + "'");
+                        return Boolean.TRUE;
+                    }
+                });
+                Files.createLink(target, temp);
+            } catch (IOException | RuntimeException e) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException suppressed) {
+                    e.addSuppressed(suppressed);
+                }
+                throw e;
+            }
+            // 연결이 끝난 뒤라 대상은 이미 완전한 파일이다. 임시 파일을 못 지워도 실패로 보지 않는다.
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException ignored) {
+                // 남은 임시 파일은 스냅샷의 결과에 영향이 없다.
+            }
+        } catch (IOException e) {
+            throw new SmqStorageException("cannot snapshot to " + target, e);
+        }
+    }
+
+    /** 부모 디렉터리의 실제 경로에 파일명을 붙인다. 파일 자체는 없어도 된다. */
+    private static Path realPathOf(Path file) throws IOException {
+        Path absolute = file.toAbsolutePath().normalize();
+        Path parent = absolute.getParent();
+        Path name = absolute.getFileName();
+        if (parent == null || name == null) {
+            throw new IllegalArgumentException("not a file path: " + file);
+        }
+        return parent.toRealPath().resolve(name);
     }
 
     @Override

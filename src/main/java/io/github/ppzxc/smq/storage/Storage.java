@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage;
 import io.github.ppzxc.smq.MessageId;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
@@ -55,6 +56,12 @@ public interface Storage extends AutoCloseable {
      * 결과가 {@code STALE}이어도 같은 값이다(반영된 것은 {@code OK}인 메시지뿐이다).
      */
     Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock);
+
+    /**
+     * 저장소의 일관된 사본을 {@code target}에 만든다. 대상이 있으면 덮어쓰지 않고 실패한다. 지원하지 않는 저장소는
+     * {@link UnsupportedOperationException}이다(계약은 {@code Smq.snapshot}).
+     */
+    void snapshot(Path target);
 
     /** 변경이 있을 때 대기자를 깨우는 선택적 힌트. 없으면 코어가 폴링 간격을 늘려 가며 폴링한다. */
     default Optional<ChangeHint> changeHint() {

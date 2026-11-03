@@ -11,12 +11,16 @@
 _Avoid_: 백엔드, 드라이버, repository
 
 **락 파일(Lock file)**:
-SQLite 저장소가 열려 있는 동안 DB 옆(`<DB 파일명>.lock`)에서 OS 배타 락을 쥐어 한 JVM만 파일을 열게 하는 파일. 존재가 아니라 OS 락으로 판단하므로 닫은 뒤에 남아 있어도 된다. 이미 쥐고 있으면 `StorageLockedException`이다(ADR-0012).
+SQLite 저장소가 열려 있는 동안 DB 옆(`<DB 파일명>.lock`)에서 OS 배타 락을 쥐어 한 JVM만 파일을 열게 하는 파일. 존재가 아니라 OS 락으로 판단하므로 닫은 뒤에 남아 있어도 된다. 이미 쥐고 있으면 `StorageLockedException`이다(ADR-0012). 실행 중 외부 도구로 보려면 락 파일이 아니라 스냅샷을 쓴다(ADR-0013).
 _Avoid_: pid 파일, 잠금 표식
 
 **내구성 수준(Durability)**:
 발행이나 정산이 성공한 뒤 그 결과가 어떤 장애까지 견디고 남는지를 정하는 저장소의 성질. 전원 장애까지 견디는 수준(Power loss)과 프로세스 크래시만 견디는 수준(Process crash)이 있다.
 _Avoid_: synchronous, 영속성 모드, fsync 설정
+
+**스냅샷(Snapshot)**:
+실행 중인 SQLite 저장소의 일관되고 완전한 사본을 새 파일 하나로 만든 것. `Smq.snapshot(Path)`가 자바 락을 쥔 채 `VACUUM INTO`로 만들며, 외부 SQLite 도구로 열 수 있다. 그동안 다른 연산이 멈추고, 이미 있는 파일은 덮어쓰지 않는다(ADR-0013).
+_Avoid_: 백업, 덤프
 
 **큐(Queue)**:
 이름으로 식별되며 메시지를 FIFO 순서로 보관하는 곳.

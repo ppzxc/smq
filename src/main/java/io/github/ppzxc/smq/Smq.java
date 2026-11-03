@@ -56,7 +56,10 @@ public interface Smq extends AutoCloseable {
         }
     }
 
-    /** SQLite 저장소용 빌더. 내구성 수준은 여기에만 있다. */
+    /**
+     * SQLite 저장소용 빌더. 내구성 수준은 여기에만 있다. SQLite 파일은 한 JVM만 열 수 있다. 같은 파일을 이미 다른 곳이 쥐고
+     * 있으면 {@link #open()}이 기다리지 않고 {@link StorageLockedException}을 던진다.
+     */
     final class SqliteBuilder {
 
         private final BuilderSettings settings = new BuilderSettings();
@@ -98,6 +101,11 @@ public interface Smq extends AutoCloseable {
             return this;
         }
 
+        /**
+         * 저장소를 연다.
+         *
+         * @throws StorageLockedException 파일을 다른 프로세스, 같은 JVM의 다른 인스턴스, 외부 SQLite 도구가 쥐고 있을 때
+         */
         public Smq open() {
             return settings.open(SqliteStorage.open(path, durability, lockWaitFloor));
         }

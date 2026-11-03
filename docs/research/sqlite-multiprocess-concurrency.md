@@ -1,5 +1,7 @@
 # SQLite 다중 프로세스 동시성과 sqlite-jdbc Java 25 지원
 
+> **알림(ADR-0012)**: smq는 한 JVM만 SQLite 파일을 연다. 이 조사는 다중 프로세스 공유를 검토하던 시점의 기록이며 현재 범위가 아니다. [ADR 0012](../adr/0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)
+
 - 티켓: ppzxc/smq#4 (상위 맵: #1)
 - 조사일: 2026-10-23
 - 범위: 같은 호스트의 여러 프로세스가 SQLite 파일 하나를 큐 저장소로 공유할 때의 한계와 권장 설정, 그리고 Java 25에서 쓸 JDBC 드라이버. 다른 백엔드와의 비교는 #3에서 다루므로 여기서는 다루지 않는다.

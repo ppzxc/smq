@@ -132,47 +132,4 @@ class SqliteSmqTest extends SmqConformanceTest {
 
         assertTrue(roundsWithEmptyChunk > 0, "하한을 없앴는데도 " + attempts + "판 동안 빈 청크가 한 번도 나오지 않아 이 조건이 경합을 만들지 못했다");
     }
-
-    @Test
-    void 같은_파일을_연_두_인스턴스가_동시에_꺼내도_단일_활성_컨슈머_큐의_리스_중인_청크는_하나다() throws Exception {
-        Smq first = openDirect(Duration.ofMinutes(10));
-        Smq second = openDirect(Duration.ofMinutes(10));
-        // 두 인스턴스는 연결과 락이 따로라, 검사와 리스 부여가 한 쓰기 트랜잭션이 아니면 둘 다 통과할 수 있다.
-        for (int round = 0; round < 300; round++) {
-            QueueOptions options = QueueOptions.defaults().singleActiveConsumer(true);
-            Queue a = first.declare("sac" + round, options);
-            Queue b = second.declare("sac" + round, options);
-            a.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d")));
-
-            var got = new java.util.concurrent.atomic.AtomicInteger();
-            runConcurrently(List.of(
-                    () -> got.addAndGet(a.pull(2, Duration.ZERO).isEmpty() ? 0 : 1),
-                    () -> got.addAndGet(b.pull(2, Duration.ZERO).isEmpty() ? 0 : 1)));
-
-            assertEquals(1, got.get(), "round " + round);
-            assertEquals(new QueueCounts(2, 2, 0), a.counts(), "round " + round);
-        }
-    }
-
-    @Test
-    void 같은_파일을_연_두_인스턴스가_동시에_꺼내도_같은_메시지가_두_리스에_묶이지_않는다() throws Exception {
-        Smq first = openDirect(Duration.ofMinutes(10));
-        Smq second = openDirect(Duration.ofMinutes(10));
-        for (int round = 0; round < 300; round++) {
-            Queue a = first.declare("two" + round, QueueOptions.defaults());
-            Queue b = second.declare("two" + round, QueueOptions.defaults());
-            a.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d")));
-
-            List<Chunk> chunks = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-            runConcurrently(
-                    List.of(() -> chunks.add(a.pull(4, Duration.ZERO)), () -> chunks.add(b.pull(4, Duration.ZERO))));
-
-            List<MessageId> delivered = chunks.stream()
-                    .flatMap(c -> c.messages().stream())
-                    .map(Message::id)
-                    .toList();
-            assertEquals(4, delivered.size(), "round " + round + " " + delivered);
-            assertEquals(4, java.util.Set.copyOf(delivered).size(), "round " + round + " " + delivered);
-        }
-    }
 }

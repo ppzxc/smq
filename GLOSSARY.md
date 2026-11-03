@@ -10,6 +10,10 @@
 큐와 메시지를 보관하고 큐 연산 하나하나가 전부 반영되거나 하나도 반영되지 않도록 책임지는 교체 가능한 구성 요소. SQLite, 인메모리 등이 있다.
 _Avoid_: 백엔드, 드라이버, repository
 
+**락 파일(Lock file)**:
+SQLite 저장소가 열려 있는 동안 DB 옆(`<DB 파일명>.lock`)에서 OS 배타 락을 쥐어 한 JVM만 파일을 열게 하는 파일. 존재가 아니라 OS 락으로 판단하므로 닫은 뒤에 남아 있어도 된다. 이미 쥐고 있으면 `StorageLockedException`이다(ADR-0012).
+_Avoid_: pid 파일, 잠금 표식
+
 **내구성 수준(Durability)**:
 발행이나 정산이 성공한 뒤 그 결과가 어떤 장애까지 견디고 남는지를 정하는 저장소의 성질. 전원 장애까지 견디는 수준(Power loss)과 프로세스 크래시만 견디는 수준(Process crash)이 있다.
 _Avoid_: synchronous, 영속성 모드, fsync 설정

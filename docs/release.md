@@ -135,7 +135,7 @@ gh release create 0.0.1 --target <릴리스 커밋 SHA> --title 0.0.1 --notes-fi
 
 ## 7. 다음 SNAPSHOT으로 올리기
 
-공개 후 `build.gradle.kts`의 `version`을 `0.0.2-SNAPSHOT`으로 올리는 PR을 낸다. main은 항상 "다음 패치-SNAPSHOT"이다. 이 PR은 6단계 뒤에 병합해도 되지만, 공개 워크플로를 다시 돌릴 일이 있으면 그 전에는 병합하지 않는다(버전 확인 단계가 실패한다). 0.0.x 동안은 무엇을 바꾸든 패치 번호만 올리고, 정해진 릴리스 주기는 없다.
+공개 후 `build.gradle.kts`의 `version`을 `0.0.2-SNAPSHOT`으로 올리는 PR을 낸다. main은 항상 "다음 패치-SNAPSHOT"이다. 이 PR은 6단계 뒤에 병합해도 되지만, 공개 워크플로를 다시 돌릴 일이 있으면 그 전에는 병합하지 않는다(버전 확인 단계가 실패한다). 0.0.x 동안은 무엇을 바꾸든 패치 번호만 올리고, 정해진 릴리스 주기는 없다. 다만 호환을 깨는 변경은 마이너를 올린다. 한 JVM 전용으로 범위를 좁힌 변경([ADR 0012](adr/0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md))이 `0.1.0`이고, 릴리스 노트에 둘째 프로세스의 `open`이 `StorageLockedException`으로 실패한다는 호환 파괴를 적는다.
 
 ## 8. Deployment 기록 정리
 

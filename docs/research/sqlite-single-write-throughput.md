@@ -1,5 +1,7 @@
 # SQLite 단건 쓰기 처리량(커밋당 fsync) 향상: 업계 표준과 선도 사례
 
+> **알림(ADR-0012)**: smq는 한 JVM만 SQLite 파일을 연다. 이 문서의 다중 프로세스 관련 내용은 조사 당시의 기록이며 현재 범위가 아니다. [ADR 0012](../adr/0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)
+
 - 조사일: 2026-10-26
 - 관련 문서: [ADR 0005](../docs/adr/0005-default-durability-survives-power-loss.md), [ADR 0002](../docs/adr/0002-storage-spi-at-queue-operation-level.md), [sqlite-multiprocess-concurrency.md](sqlite-multiprocess-concurrency.md)
 - 범위: 저장소 코드는 건드리지 않는다. 이 문서는 조사 결과만 담는다. 모든 주장 옆에 1차 출처를 붙였고, 확인하지 못한 것은 "확인 못함"으로 적었다.

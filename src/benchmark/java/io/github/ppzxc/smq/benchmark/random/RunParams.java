@@ -15,9 +15,8 @@ import java.util.stream.Collectors;
 /**
  * 실행 하나의 매개변수. 시드 하나에서 정해진 순서로 뽑으므로 같은 시드는 같은 매개변수다. 범위는 이슈 #86의 표를 따른다.
  *
- * @param processes 프로세스 수(1~4). 1이면 이 JVM 하나에서 돈다. 1보다 크면 프로듀서와 컨슈머는 자식 JVM에 나뉘고 부모는 미리 채우기,
- *     {@code counts()} 표본, 소진, 판정만 맡는다
- * @param producers 프로세스마다의 프로듀서 스레드 수(길이가 {@code processes}). 프로세스당 0~4이고 전체는 1 이상이다
+ * @param processes 프로세스 수. smq는 한 JVM만 열 수 있으므로(ADR-0012) 항상 1이다. 기록 형식 호환을 위해 필드만 남겼다
+ * @param producers 프로세스마다의 프로듀서 스레드 수(길이가 {@code processes}). 프로세스당 1~4이다
  * @param consumers 프로세스마다의 컨슈머 스레드 수. 같은 규칙이다
  * @param maxMessageBytes 메시지 크기의 상한. 메시지마다 0부터 이 값까지 로그 균등으로 뽑는다
  * @param ackRatio 정산 결정 비율. 합이 1이고 ACK가 과반이다
@@ -105,8 +104,8 @@ record RunParams(
         int maxDeliveries = r.nextBoolean() ? 0 : 1 + r.nextInt(5);
         boolean single = r.nextDouble() < 0.2;
         long pullWait = r.nextLong(501);
-        // 프로세스 수는 맨 끝에서 뽑는다. 앞의 축은 프로세스 수를 넣기 전과 같은 값을 유지한다.
-        int processes = 1 + r.nextInt(4);
+        // smq는 한 JVM만 연다(ADR-0012). 프로세스 수는 1로 고정하고, 기록 형식 호환을 위해 필드만 남긴다.
+        int processes = 1;
         List<Integer> producerList = List.of(producers);
         List<Integer> consumerList = List.of(consumers);
         if (processes > 1) {

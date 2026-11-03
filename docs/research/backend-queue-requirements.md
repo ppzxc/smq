@@ -1,5 +1,7 @@
 # 백엔드별 큐 구현 요건 비교 (SQLite, PostgreSQL, 인메모리)
 
+> **알림(ADR-0012)**: smq는 한 JVM만 SQLite 파일을 연다. 이 문서의 다중 프로세스 관련 내용은 조사 당시의 기록이며 현재 범위가 아니다. [ADR 0012](../adr/0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md)
+
 - 티켓: [#3](https://github.com/ppzxc/smq/issues/3) (지도 [#1](https://github.com/ppzxc/smq/issues/1))
 - 조사일: 2026-10-23
 - 관련 티켓: SQLite 다중 프로세스 동시성과 sqlite-jdbc 드라이버의 세부 사항(`SQLITE_BUSY`, `busy_timeout`, WAL, 연결 풀 크기 등)은 [#4](https://github.com/ppzxc/smq/issues/4)에서 다룬다. 이 문서는 그 결론을 전제로 하고 반복하지 않는다.

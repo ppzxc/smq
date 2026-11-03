@@ -19,18 +19,17 @@ class PlanTest {
         List<RunSpec> plan = Plan.full(Storage.SQLITE);
         Set<String> k = keys(plan);
         assertEquals(plan.size(), k.size(), "키가 겹치면 안 된다");
-        assertEquals(38, plan.size());
-        // S1: P1~P4 x {1,4} x {POWER_LOSS, PROCESS_CRASH}
+        assertEquals(27, plan.size());
+        // S1: P1~P4 x 1프로세스 x {POWER_LOSS, PROCESS_CRASH}
         for (String p : List.of("P1", "P2", "P3", "P4"))
-            for (String n : List.of("proc1", "proc4"))
+            for (String n : List.of("proc1"))
                 for (String d : List.of("POWER_LOSS", "PROCESS_CRASH"))
                     assertTrue(k.contains("sqlite/S1/" + p + "/" + n + "/" + d + "/empty"), p + n + d);
         // P0은 1프로세스, 빈 큐만
         assertTrue(k.contains("sqlite/S1/P0/proc1/POWER_LOSS/empty"));
-        assertFalse(k.contains("sqlite/S1/P0/proc4/POWER_LOSS/empty"));
         // 100만 건 깊이는 P1에서만
         assertTrue(k.contains("sqlite/S1/P1/proc1/POWER_LOSS/1m"));
-        assertTrue(k.contains("sqlite/S1/P1/proc4/PROCESS_CRASH/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/proc1/PROCESS_CRASH/1m"));
         assertFalse(k.contains("sqlite/S1/P2/proc1/POWER_LOSS/1m"));
         // S2: P1~P4, 1프로세스, 빈 큐
         assertTrue(k.contains("sqlite/S2/P3/proc1/POWER_LOSS/empty"));
@@ -40,15 +39,13 @@ class PlanTest {
             assertTrue(k.contains("sqlite/S1/" + p + "/proc1/POWER_LOSS/empty"), p);
             assertTrue(k.contains("sqlite/S1/" + p + "/proc1/PROCESS_CRASH/empty"), p);
             assertTrue(k.contains("sqlite/S2/" + p + "/proc1/POWER_LOSS/empty"), p);
-            assertFalse(k.contains("sqlite/S1/" + p + "/proc4/POWER_LOSS/empty"), p);
         }
         // P4(4KB)는 100만 건 깊이를 재지 않는다
         assertFalse(k.contains("sqlite/S1/P4/proc1/POWER_LOSS/1m"));
-        assertFalse(k.contains("sqlite/S2/P1/proc4/POWER_LOSS/empty"));
-        // S3: P1만, 같은 프로세스와 다른 프로세스
+        // S3: P1만, 같은 프로세스
         assertTrue(k.contains("sqlite/S3/P1/same-process/POWER_LOSS/empty"));
-        assertTrue(k.contains("sqlite/S3/P1/cross-process/POWER_LOSS/empty"));
-        assertEquals(2, k.stream().filter(s -> s.contains("/S3/")).count());
+        assertFalse(k.contains("sqlite/S3/P1/cross-process/POWER_LOSS/empty"));
+        assertEquals(1, k.stream().filter(s -> s.contains("/S3/")).count());
         assertTrue(plan.stream().filter(s -> s.depth() > 0).allMatch(s -> s.depth() == 1_000_000));
     }
 
@@ -60,12 +57,12 @@ class PlanTest {
         assertEquals(plan, rounds.get(0));
         List<RunSpec> ratio = rounds.get(1);
         assertEquals(ratio, rounds.get(2));
-        assertEquals(20, ratio.size(), "비율 검사의 분자와 분모가 되는 S1 조건은 약 20개");
+        assertEquals(4, ratio.size(), "depth의 분자와 분모가 되는 S1 조건은 P1 빈 큐와 100만 건 x 두 내구성");
         assertTrue(ratio.stream().allMatch(s -> s.scenario() == Scenario.S1));
         Set<String> k = keys(ratio);
-        assertTrue(k.contains("sqlite/S1/P3/proc4/POWER_LOSS/empty"));
-        assertTrue(k.contains("sqlite/S1/P3/proc1/POWER_LOSS/empty"));
-        assertTrue(k.contains("sqlite/S1/P1/proc4/PROCESS_CRASH/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/proc1/POWER_LOSS/1m"));
+        assertTrue(k.contains("sqlite/S1/P1/proc1/POWER_LOSS/empty"));
+        assertTrue(k.contains("sqlite/S1/P1/proc1/PROCESS_CRASH/1m"));
         assertTrue(k.contains("sqlite/S1/P1/proc1/PROCESS_CRASH/empty"));
         assertFalse(k.contains("sqlite/S1/P0/proc1/POWER_LOSS/empty"));
         assertFalse(k.contains("sqlite/S1/P2S/proc1/POWER_LOSS/empty"));
@@ -103,8 +100,8 @@ class PlanTest {
         List<RunSpec> plan = Plan.smoke(Storage.SQLITE);
         assertTrue(plan.size() >= 4 && plan.size() <= 8);
         assertTrue(plan.stream().allMatch(s -> s.durationMs() <= 3000 && s.depth() <= 10_000));
-        assertTrue(plan.stream().anyMatch(s -> s.processes() > 1), "다중 JVM 경로를 지나야 한다");
-        assertTrue(plan.stream().anyMatch(s -> s.topology() == Topology.CROSS_PROCESS));
+        assertTrue(plan.stream().allMatch(s -> s.processes() == 1));
+        assertTrue(plan.stream().noneMatch(s -> s.topology() == Topology.CROSS_PROCESS));
     }
 
     @Test

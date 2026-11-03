@@ -10,17 +10,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -158,36 +148,6 @@ class SqliteSchemaTest {
         assertEquals(supported - 1, userVersion(db()));
     }
 
-    @Test
-    void 여러_스레드가_동시에_같은_새_파일을_열어도_모두_성공하고_스키마가_한_번만_만들어진다() throws Exception {
-        int threads = 8;
-        CyclicBarrier barrier = new CyclicBarrier(threads);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        try {
-            List<Future<Smq>> futures = new ArrayList<>();
-            for (int i = 0; i < threads; i++) {
-                futures.add(pool.submit(() -> {
-                    barrier.await(10, TimeUnit.SECONDS);
-                    return Smq.sqlite(db()).open();
-                }));
-            }
-            List<Smq> opened = new ArrayList<>();
-            for (Future<Smq> f : futures) {
-                opened.add(f.get(30, TimeUnit.SECONDS));
-            }
-            try {
-                opened.getFirst().declare("q", QueueOptions.defaults()).publish(msg("a"));
-                for (Smq smq : opened) {
-                    assertEquals(1, smq.queue("q").counts().ready());
-                }
-            } finally {
-                opened.forEach(Smq::close);
-            }
-        } finally {
-            pool.shutdownNow();
-        }
-    }
-
     /** 자식 JVM의 진입점. 시작 신호 파일이 생길 때까지 기다렸다가 열고, 연 인스턴스로 큐 하나를 쓴다. */
     public static final class OpenerMain {
         public static void main(String[] args) throws Exception {
@@ -199,117 +159,6 @@ class SqliteSchemaTest {
             }
             try (Smq smq = Smq.sqlite(db).open()) {
                 smq.declare("q", QueueOptions.defaults()).publish(msg(args[2]));
-            }
-        }
-    }
-
-    @Test
-    void 여러_프로세스가_동시에_같은_새_파일을_열어도_모두_성공하고_스키마가_한_번만_만들어진다() throws Exception {
-        int processes = 4;
-        Path go = dir.resolve("go");
-        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        List<Process> children = new ArrayList<>();
-        try {
-            for (int i = 0; i < processes; i++) {
-                children.add(new ProcessBuilder(
-                                java,
-                                "-cp",
-                                System.getProperty("java.class.path"),
-                                OpenerMain.class.getName(),
-                                db().toString(),
-                                go.toString(),
-                                "m" + i)
-                        .redirectErrorStream(true)
-                        .redirectOutput(dir.resolve("child" + i + ".log").toFile())
-                        .start());
-            }
-            // 모든 자식이 준비 신호 파일을 만들 때까지 기다린 뒤 한꺼번에 출발시킨다.
-            long giveUp = System.nanoTime() + Duration.ofSeconds(60).toNanos();
-            for (int i = 0; i < processes; i++) {
-                Path ready = dir.resolve("go.ready.m" + i);
-                while (!Files.exists(ready)) {
-                    assertTrue(
-                            children.get(i).isAlive(),
-                            "child " + i + " exited early: " + Files.readString(dir.resolve("child" + i + ".log")));
-                    assertTrue(System.nanoTime() < giveUp, "child " + i + " never got ready");
-                    Thread.sleep(5);
-                }
-            }
-            Files.createFile(go);
-            for (int i = 0; i < processes; i++) {
-                Process child = children.get(i);
-                assertTrue(child.waitFor(60, TimeUnit.SECONDS), "child " + i + " did not finish");
-                assertEquals(0, child.exitValue(), Files.readString(dir.resolve("child" + i + ".log")));
-            }
-        } finally {
-            children.forEach(Process::destroyForcibly);
-        }
-        try (Smq smq = Smq.sqlite(db()).open()) {
-            assertEquals(processes, smq.queue("q").counts().ready());
-        }
-    }
-
-    @Test
-    void 열린_뒤_다른_쪽에서_버전이_바뀌면_다음_호출이_실패하고_그_인스턴스는_계속_실패한다() throws Exception {
-        int supported = supportedVersion();
-        try (Smq smq = Smq.sqlite(db()).open()) {
-            Queue q = smq.declare("q", QueueOptions.defaults());
-            q.publish(msg("a"));
-
-            jdbc(db(), "PRAGMA user_version = " + (supported + 1));
-
-            IncompatibleStorageException e = assertThrows(IncompatibleStorageException.class, q::counts);
-            assertTrue(e.getMessage().contains("found " + (supported + 1)), e.getMessage());
-            assertTrue(e.getMessage().contains("supported " + supported), e.getMessage());
-
-            // 버전이 되돌아와도 그 인스턴스는 영구히 실패한 상태다.
-            jdbc(db(), "PRAGMA user_version = " + supported);
-            IncompatibleStorageException again =
-                    assertThrows(IncompatibleStorageException.class, () -> q.publish(msg("b")));
-            assertTrue(again.getMessage().contains("found " + supported), again.getMessage());
-            assertTrue(again.getMessage().contains("supported " + supported), again.getMessage());
-            assertThrows(IncompatibleStorageException.class, () -> smq.declare("other", QueueOptions.defaults()));
-            assertThrows(IncompatibleStorageException.class, () -> q.pull(1, Duration.ZERO));
-        }
-    }
-
-    @Test
-    void 버전이_바뀐_것을_본_인스턴스는_되돌아와도_빈_큐의_꺼내기에서도_계속_실패한다() throws Exception {
-        int supported = supportedVersion();
-        try (Smq smq = Smq.sqlite(db()).open()) {
-            Queue q = smq.declare("q", QueueOptions.defaults());
-
-            jdbc(db(), "PRAGMA user_version = " + (supported + 1));
-            assertThrows(IncompatibleStorageException.class, q::counts);
-            jdbc(db(), "PRAGMA user_version = " + supported);
-
-            // 큐가 비어 있어도 꺼내기가 빈 청크로 넘어가면 안 된다.
-            assertThrows(IncompatibleStorageException.class, () -> q.pull(1, Duration.ZERO));
-        }
-    }
-
-    @Test
-    void 꺼내기_대기_중에_버전이_바뀌면_예외가_pull_밖으로_전파된다() throws Exception {
-        int supported = supportedVersion();
-        try (Smq smq = Smq.sqlite(db()).open()) {
-            Queue q = smq.declare("q", QueueOptions.defaults());
-            CompletableFuture<Chunk> waiting = new CompletableFuture<>();
-            Thread puller = Thread.ofPlatform().name("waiting-puller").start(() -> {
-                try {
-                    waiting.complete(q.pull(1, Duration.ofSeconds(30)));
-                } catch (Throwable t) {
-                    waiting.completeExceptionally(t);
-                }
-            });
-            try {
-                awaitParkedInChangeHint(puller);
-
-                jdbc(db(), "PRAGMA user_version = " + (supported + 1));
-
-                ExecutionException e = assertThrows(ExecutionException.class, () -> waiting.get(3, TimeUnit.SECONDS));
-                assertInstanceOf(IncompatibleStorageException.class, e.getCause());
-            } finally {
-                puller.interrupt();
             }
         }
     }
@@ -333,31 +182,5 @@ class SqliteSchemaTest {
             Thread.sleep(1);
         }
         fail("꺼내기가 10초 안에 변경 힌트 대기에 들어가지 않았다: " + Arrays.toString(t.getStackTrace()));
-    }
-
-    @Test
-    void 멈춘_인스턴스가_쥐고_있던_리스는_다른_인스턴스에서_만료_뒤_재전달된다() throws Exception {
-        int supported = supportedVersion();
-        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
-        MessageId id;
-        try (Smq stale = Smq.sqlite(db()).clock(clock).open()) {
-            Queue q = stale.declare("q", QueueOptions.defaults());
-            id = q.publish(msg("a"));
-            Chunk lost = q.pull(1, Duration.ZERO, Duration.ofSeconds(10));
-
-            jdbc(db(), "PRAGMA user_version = " + (supported + 1));
-            assertThrows(IncompatibleStorageException.class, () -> q.settle(lost.ackAll()));
-        }
-        // 같은 스키마로 쓰는 다른 인스턴스를 버전을 되돌려 흉내 낸다.
-        jdbc(db(), "PRAGMA user_version = " + supported);
-        try (Smq other = Smq.sqlite(db()).clock(clock).open()) {
-            Queue q = other.queue("q");
-            assertTrue(q.pull(1, Duration.ZERO).isEmpty());
-            clock.advance(Duration.ofSeconds(10));
-            Chunk again = q.pull(1, Duration.ZERO);
-            assertEquals(id, again.messages().getFirst().id());
-            assertEquals(2, again.messages().getFirst().deliveryCount());
-            assertTrue(q.settle(again.ackAll()).allOk());
-        }
     }
 }

@@ -11,7 +11,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -129,14 +128,14 @@ class TransactionExecutorTest {
     @Test
     void 확인_없는_실행의_결과가_기준_버전이_되고_확인하는_실행은_그_버전이면_통과한다() {
         TransactionExecutor ex = executor(1);
-        assertEquals(0, ex.executeUnverified(c -> userVersion(c), Duration.ofSeconds(1)));
+        assertEquals(0, ex.executeUnverified(c -> userVersion(c)));
         assertEquals("ok", ex.execute(c -> "ok"));
     }
 
     @Test
     void 실패한_트랜잭션은_ROLLBACK되고_다음_트랜잭션이_정상적으로_시작된다() throws Exception {
         TransactionExecutor ex = executor(1);
-        ex.executeUnverified(c -> userVersion(c), Duration.ofSeconds(1));
+        ex.executeUnverified(c -> userVersion(c));
         assertThrows(
                 SmqStorageException.class,
                 () -> ex.execute(c -> {
@@ -158,7 +157,7 @@ class TransactionExecutorTest {
     @Test
     void 열린_뒤_스키마_버전이_바뀌면_실패하고_버전이_돌아와도_영구_실패로_남는다() throws Exception {
         TransactionExecutor ex = executor(1);
-        ex.executeUnverified(c -> userVersion(c), Duration.ofSeconds(1));
+        ex.executeUnverified(c -> userVersion(c));
         setUserVersion(7);
         int[] bodyRuns = {0};
         assertThrows(IncompatibleStorageException.class, () -> ex.execute(c -> bodyRuns[0]++));

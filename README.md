@@ -10,7 +10,7 @@
 
 - 브로커(RabbitMQ, Kafka 등)를 따로 운영하지 않고, 프로세스가 죽거나 재시작해도 메시지를 잃지 않는 작업 큐가 필요할 때
 - 처리에 실패하면 다시 시도하고, 계속 실패하는 메시지는 따로 모아 두고 싶을 때
-- 같은 호스트의 여러 프로세스가 SQLite 파일 하나를 공유해 큐를 나눠 소비하고 싶을 때
+- 한 애플리케이션(한 JVM) 안에서 SQLite 파일 하나를 저장소로 쓰는 로컬 큐가 필요할 때. 여러 프로세스가 같은 파일을 공유하는 용도는 아니다([ADR 0012](docs/adr/0012-single-jvm-only-enforced-by-lock-file-and-exclusive-mode.md))
 
 ### 특징
 
@@ -20,7 +20,7 @@
 - **재시도와 dead letter**: 지연 NACK, 최대 전달 횟수, dead letter 큐를 지원한다.
 - **지연 발행**: 메시지를 지정한 시간이 지난 뒤에야 꺼낼 수 있게 한다.
 - **FIFO 순서**: 큐 안에서 메시지 id 순서로 꺼낸다. 단일 활성 컨슈머 큐는 한 번에 한 청크만 리스된다.
-- **다중 프로세스**: SQLite 저장소는 같은 파일을 여러 프로세스가 공유할 수 있다.
+- **한 JVM 전용**: SQLite 파일은 한 JVM만 연다. 같은 파일을 두 번째로 열면(다른 프로세스, 같은 JVM의 중복 열기, 외부 SQLite 도구가 쥔 경우) 기다리지 않고 `StorageLockedException`이다.
 - **교체 가능한 저장소**: SQLite와 인메모리 저장소를 제공한다. 같은 공개 API로 쓴다.
 
 ### 하지 않는 것
@@ -85,17 +85,17 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 ## 내구성과 동시성
 
 - 기본 내구성은 `Durability.POWER_LOSS`다. 커밋마다 fsync해서 전원 장애 뒤에도 성공한 발행과 정산이 남는다. `PROCESS_CRASH`는 처리량이 높은 대신 전원 장애 때 마지막 커밋 몇 개를 잃을 수 있다([ADR 0005](docs/adr/0005-default-durability-survives-power-loss.md)).
-- 여러 프로세스가 같은 SQLite 파일을 열어 큐를 나눠 소비할 수 있다. 리스가 같은 메시지를 두 컨슈머에게 동시에 주지 않는다.
+- SQLite 파일은 한 JVM만 열 수 있다. DB 옆의 락 파일(`<DB 파일명>.lock`)과 `locking_mode=EXCLUSIVE`로 강제하며, 둘째 열기는 `StorageLockedException`이다. 같은 JVM의 여러 컨슈머에게는 리스가 같은 메시지를 동시에 주지 않는다.
 - `Smq`, `Queue`, `Chunk`, `Settlement`는 여러 스레드에서 써도 된다.
 
 상세는 [docs/usage.md](docs/usage.md#내구성과-동시성)를 본다.
 
 ## 실행 요건과 지원 플랫폼
 
-- **지원 플랫폼**: Linux와 Windows다. 둘 다 DB 파일을 로컬 파일시스템(Linux 로컬 FS, Windows 로컬 NTFS)에 둔다. Windows는 `./gradlew check`(CI)와 다중 프로세스 안전성을 검증했다.
+- **지원 플랫폼**: Linux와 Windows다. 둘 다 DB 파일을 로컬 파일시스템(Linux 로컬 FS, Windows 로컬 NTFS)에 둔다. Windows는 `./gradlew check`(CI)로 검증했고, NTFS에서도 둘째 열기가 거부된다.
 - **DB 파일 위치**: SMB 공유, 네트워크 드라이브, NFS, OneDrive 같은 동기화 폴더, ReFS, WSL의 `/mnt/c`는 지원하지 않는다.
 - **Windows 성능**: Linux 기준 환경보다 처리량이 낮다. 특히 `POWER_LOSS` 단건은 fsync 비용에 묶여 약 80~90 msg/s다. 배치로 발행하면 격차가 크게 줄어든다. 근거는 [ADR 0008](docs/adr/0008-windows-has-no-absolute-throughput-floor.md)이다.
-- **인메모리 저장소**: `Smq.inMemory()`는 한 프로세스 안에서만 쓴다. 다중 프로세스는 지원하지 않는다.
+- **인메모리 저장소**: `Smq.inMemory()`는 한 프로세스 안에서만 쓴다.
 
 ## 성능: 단건은 느리다, 배치로 쓴다
 
@@ -121,7 +121,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
 | [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
 | [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |
-| [docs/research/](docs/research) | RabbitMQ 핵심 기능, SQLite 다중 프로세스 동시성 등 조사 자료 |
+| [docs/research/](docs/research) | RabbitMQ 핵심 기능, SQLite 동시성 등 조사 자료(다중 프로세스 조사는 ADR 0012 이전의 기록) |
 
 ## 라이선스
 

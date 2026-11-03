@@ -23,10 +23,9 @@ class RunParamsTest {
         int withMax = 0;
         int withPrefill = 0;
         Set<Durability> durabilities = EnumSet.noneOf(Durability.class);
-        Set<Integer> processCounts = new java.util.HashSet<>();
         for (long seed = 0; seed < 3_000; seed++) {
             RunParams p = RunParams.fromSeed(seed, FULL);
-            assertTrue(p.processes() >= 1 && p.processes() <= 4);
+            assertEquals(1, p.processes());
             assertEquals(p.processes(), p.producers().size());
             assertEquals(p.processes(), p.consumers().size());
             assertTrue(p.maxMessageBytes() >= 0 && p.maxMessageBytes() <= 65_536, "size " + seed);
@@ -35,7 +34,6 @@ class RunParamsTest {
             assertTrue(p.producers().stream().allMatch(n -> n >= (p.processes() == 1 ? 1 : 0) && n <= 4));
             assertTrue(p.consumers().stream().allMatch(n -> n >= (p.processes() == 1 ? 1 : 0) && n <= 4));
             assertTrue(p.totalProducers() >= 1 && p.totalConsumers() >= 1, "전체에서 각각 1 이상");
-            processCounts.add(p.processes());
             assertTrue(p.prefillDepth() == 0 || p.prefillDepth() >= 1 && p.prefillDepth() <= 100_000);
             assertTrue(p.ackRatio() > 0.5, "ACK가 다수");
             assertEquals(1.0, p.ackRatio() + p.nackRatio() + p.rejectRatio() + p.noneRatio(), 1e-9);
@@ -52,7 +50,6 @@ class RunParamsTest {
             withPrefill += p.prefillDepth() > 0 ? 1 : 0;
         }
         assertEquals(EnumSet.allOf(Durability.class), durabilities);
-        assertEquals(Set.of(1, 2, 3, 4), processCounts);
         assertTrue(single > 450 && single < 750, "단일 활성 컨슈머는 약 20%: " + single);
         assertTrue(withMax > 1_200 && withMax < 1_800, "최대 전달 횟수는 약 절반: " + withMax);
         assertTrue(withPrefill > 0 && withPrefill < 3_000);
@@ -145,7 +142,6 @@ class RunParamsTest {
         boolean publishDelay = false;
         boolean nackDelay = false;
         boolean prefill = false;
-        boolean multiProcess = false;
         Set<Durability> durabilities = EnumSet.noneOf(Durability.class);
         for (long seed : Options.SMOKE_SEEDS) {
             RunParams p = RunParams.fromSeed(seed, Limits.smoke(Options.SMOKE_LOAD.toMillis()));
@@ -155,11 +151,9 @@ class RunParamsTest {
             publishDelay |= p.publishDelayRatio() > 0 && p.publishDelayMaxMillis() > 0;
             nackDelay |= p.nackDelayRatio() > 0 && p.nackDelayMaxMillis() > 0;
             prefill |= p.prefillDepth() > 0;
-            multiProcess |= p.processes() > 1;
             durabilities.add(p.durability());
         }
         assertTrue(single && max && reject && publishDelay && nackDelay && prefill);
-        assertTrue(multiProcess, "스모크 고정 시드에 다중 프로세스 실행이 하나 이상 있어야 한다");
         assertEquals(EnumSet.allOf(Durability.class), durabilities);
     }
 

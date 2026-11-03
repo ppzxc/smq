@@ -40,7 +40,7 @@ final class ChunkTable {
     }
 
     private static String key(Row row, Profile profile) {
-        return Storage.SQLITE.id() + "/" + row.scenario() + "/" + profile + "/proc1/" + row.durability() + "/empty";
+        return Storage.SQLITE.id() + "/" + row.scenario() + "/" + profile + "/" + row.durability() + "/empty";
     }
 
     private static String fmt(Double v) {

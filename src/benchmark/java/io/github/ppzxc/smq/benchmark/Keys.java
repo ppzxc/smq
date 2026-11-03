@@ -5,8 +5,8 @@ final class Keys {
 
     private Keys() {}
 
-    static String of(Storage storage, Scenario scenario, Profile profile, String shape, String durability, int depth) {
-        return storage.id() + "/" + scenario + "/" + profile + "/" + shape + "/" + durability + "/" + depthId(depth);
+    static String of(Storage storage, Scenario scenario, Profile profile, String durability, int depth) {
+        return storage.id() + "/" + scenario + "/" + profile + "/" + durability + "/" + depthId(depth);
     }
 
     static String depthId(int depth) {

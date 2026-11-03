@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 
 class ComparatorTest {
 
-    private static final String S1P1 = "sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec";
+    private static final String S1P1 = "sqlite/S1/P1/POWER_LOSS/empty:msgPerSec";
 
     private static Check find(List<Check> checks, String name) {
         return checks.stream()
@@ -28,12 +28,12 @@ class ComparatorTest {
         return Comparator.compare(samples, baseline);
     }
 
-    private static final String EMPTY_P1 = "sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec";
-    private static final String DEEP_P1 = "sqlite/S1/P1/proc1/POWER_LOSS/1m:msgPerSec";
-    private static final String DEPTH_P1 = "depth S1 P1 proc1 POWER_LOSS 1m >= 70% of empty";
+    private static final String EMPTY_P1 = "sqlite/S1/P1/POWER_LOSS/empty:msgPerSec";
+    private static final String DEEP_P1 = "sqlite/S1/P1/POWER_LOSS/1m:msgPerSec";
+    private static final String DEPTH_P1 = "depth S1 P1 POWER_LOSS 1m >= 70% of empty";
 
-    private static Check ratioCheck(List<Double> proc4, List<Double> proc1) {
-        return find(Comparator.compare(Map.of(DEEP_P1, proc4, EMPTY_P1, proc1), Map.of()), DEPTH_P1);
+    private static Check ratioCheck(List<Double> deep, List<Double> empty) {
+        return find(Comparator.compare(Map.of(DEEP_P1, deep, EMPTY_P1, empty), Map.of()), DEPTH_P1);
     }
 
     @Test
@@ -121,10 +121,8 @@ class ComparatorTest {
         Map<String, List<Double>> r = Map.of(p1, List.of(9000.0, 16000.0, 10500.0, 20000.0)); // 중앙값 13250
         List<Check> c = Comparator.compare(r, Map.of(p1, 16000.0));
         assertEquals(
-                Status.PASS,
-                find(c, "floor S1 P1 proc1 POWER_LOSS >= 10000 msg/s").status());
-        assertTrue(
-                find(c, "floor S1 P1 proc1 POWER_LOSS >= 10000 msg/s").detail().contains("13250"));
+                Status.PASS, find(c, "floor S1 P1 POWER_LOSS >= 10000 msg/s").status());
+        assertTrue(find(c, "floor S1 P1 POWER_LOSS >= 10000 msg/s").detail().contains("13250"));
         assertTrue(find(c, "regression " + p1).detail().contains("13250"));
         assertEquals(Status.PASS, find(c, "regression " + p1).status()); // -17.2%
     }
@@ -133,18 +131,15 @@ class ComparatorTest {
     void absoluteFloorsPassAndFail() {
         Map<String, Double> r = new HashMap<>();
         r.put(S1P1, 10_000.0);
-        r.put("sqlite/S1/P2/proc1/POWER_LOSS/empty:msgPerSec", 7_999.0);
-        r.put("sqlite/S1/P3/proc1/POWER_LOSS/empty:msgPerSec", 4_000.0);
+        r.put("sqlite/S1/P2/POWER_LOSS/empty:msgPerSec", 7_999.0);
+        r.put("sqlite/S1/P3/POWER_LOSS/empty:msgPerSec", 4_000.0);
         List<Check> c = compare(r, Map.of());
         assertEquals(
-                Status.PASS,
-                find(c, "floor S1 P1 proc1 POWER_LOSS >= 10000 msg/s").status());
+                Status.PASS, find(c, "floor S1 P1 POWER_LOSS >= 10000 msg/s").status());
         assertEquals(
-                Status.FAIL,
-                find(c, "floor S1 P2 proc1 POWER_LOSS >= 8000 msg/s").status());
+                Status.FAIL, find(c, "floor S1 P2 POWER_LOSS >= 8000 msg/s").status());
         assertEquals(
-                Status.PASS,
-                find(c, "floor S1 P3 proc1 POWER_LOSS >= 4000 msg/s").status());
+                Status.PASS, find(c, "floor S1 P3 POWER_LOSS >= 4000 msg/s").status());
     }
 
     @Test
@@ -157,45 +152,41 @@ class ComparatorTest {
     @Test
     void depthMustKeepSeventyPercentOfEmpty() {
         Map<String, Double> r = new HashMap<>();
-        r.put("sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec", 1000.0);
-        r.put("sqlite/S1/P1/proc1/POWER_LOSS/1m:msgPerSec", 700.0);
+        r.put("sqlite/S1/P1/POWER_LOSS/empty:msgPerSec", 1000.0);
+        r.put("sqlite/S1/P1/POWER_LOSS/1m:msgPerSec", 700.0);
         List<Check> c = compare(r, Map.of());
         assertEquals(
                 Status.PASS,
-                find(c, "depth S1 P1 proc1 POWER_LOSS 1m >= 70% of empty").status());
+                find(c, "depth S1 P1 POWER_LOSS 1m >= 70% of empty").status());
     }
 
     @Test
     void latencyCeilings() {
         Map<String, Double> r = new HashMap<>();
-        r.put("sqlite/S3/P1/same-process/POWER_LOSS/empty:p99Ms", 10.0);
+        r.put("sqlite/S3/P1/POWER_LOSS/empty:p99Ms", 10.0);
         assertEquals(
                 Status.PASS,
-                find(compare(r, Map.of()), "latency S3 P1 same-process p99 <= 10 ms")
-                        .status());
-        r.put("sqlite/S3/P1/same-process/POWER_LOSS/empty:p99Ms", 10.1);
+                find(compare(r, Map.of()), "latency S3 P1 p99 <= 10 ms").status());
+        r.put("sqlite/S3/P1/POWER_LOSS/empty:p99Ms", 10.1);
         assertEquals(
                 Status.FAIL,
-                find(compare(r, Map.of()), "latency S3 P1 same-process p99 <= 10 ms")
-                        .status());
+                find(compare(r, Map.of()), "latency S3 P1 p99 <= 10 ms").status());
     }
 
     @Test
     void regressionOverTwentyPercentFailsForThroughputAndLatency() {
-        String lat = "sqlite/S3/P1/same-process/POWER_LOSS/empty:p50Ms";
-        Map<String, Double> base =
-                Map.of(S1P1, 20_000.0, lat, 2.0, "sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec", 100.0);
+        String lat = "sqlite/S3/P1/POWER_LOSS/empty:p50Ms";
+        Map<String, Double> base = Map.of(S1P1, 20_000.0, lat, 2.0, "sqlite/S2/P1/POWER_LOSS/empty:msgPerSec", 100.0);
         Map<String, Double> r = new HashMap<>();
         r.put(S1P1, 16_000.0); // 정확히 -20%: 통과
         r.put(lat, 2.41); // +20% 초과: 실패
-        r.put("sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec", 79.0); // -21%: 실패
+        r.put("sqlite/S2/P1/POWER_LOSS/empty:msgPerSec", 79.0); // -21%: 실패
         List<Check> c = compare(r, base);
         assertEquals(Status.PASS, find(c, "regression " + S1P1).status());
         assertEquals(Status.FAIL, find(c, "regression " + lat).status());
         assertEquals(
                 Status.FAIL,
-                find(c, "regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec")
-                        .status());
+                find(c, "regression sqlite/S2/P1/POWER_LOSS/empty:msgPerSec").status());
     }
 
     @Test
@@ -208,7 +199,7 @@ class ComparatorTest {
 
     @Test
     void memoryEntriesAreNeverChecked() {
-        Map<String, Double> r = Map.of("memory/S1/P1/proc1/none/empty:msgPerSec", 1.0);
+        Map<String, Double> r = Map.of("memory/S1/P1/none/empty:msgPerSec", 1.0);
         assertTrue(compare(r, r).stream().noneMatch(c -> c.name().contains("memory")));
     }
 

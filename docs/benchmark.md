@@ -34,7 +34,7 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 
 | 옵션 | 뜻 |
 |---|---|
-| `--filter <문자열>` | 키에 이 문자열이 든 조건만 돈다. 예: `--filter S1/P1/proc1` |
+| `--filter <문자열>` | 키에 이 문자열이 든 조건만 돈다. 예: `--filter S1/P1` |
 | `--storage memory` | 인메모리로 돈다. 코어 오버헤드를 보는 진단값이고 임계값은 적용하지 않는다. 한 JVM에서 도는 조건만 있다 |
 | `--repeat <횟수>` (태스크 옵션) | 비율 검사의 S1 조건을 재는 횟수(기본 3). 1이면 단발이다. 스모크와 인메모리에는 적용되지 않는다 |
 | `--work-dir <디렉터리>` | SQLite 파일을 만들 곳. 기본은 `build/benchmark/work` |
@@ -65,8 +65,8 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 {
   "environment": {"os": "Linux 6.x", "cpus": "16", "workDirFs": "ext4", "caveat": "..."},
   "entries": {
-    "sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec": 12345.6,
-    "sqlite/S3/P1/same-process/POWER_LOSS/empty:p99Ms": 7.0
+    "sqlite/S1/P1/POWER_LOSS/empty:msgPerSec": 12345.6,
+    "sqlite/S3/P1/POWER_LOSS/empty:p99Ms": 7.0
   }
 }
 ```
@@ -74,22 +74,22 @@ smq v1 성능 목표(스펙 #23의 "성능 목표")를 재고, 기준선과 견�
 반복 측정한 항목은 항목 값에 중앙값을 두고, 바퀴별 값은 `samples` 필드에 덧붙인다(반복하지 않은 항목은 `samples`에 없다).
 
 ```json
-  "entries": {"sqlite/S1/P1/proc1/POWER_LOSS/1m:msgPerSec": 4100.0},
-  "samples": {"sqlite/S1/P1/proc1/POWER_LOSS/1m:msgPerSec": [3900.0, 4100.0, 4300.0]}
+  "entries": {"sqlite/S1/P1/POWER_LOSS/1m:msgPerSec": 4100.0},
+  "samples": {"sqlite/S1/P1/POWER_LOSS/1m:msgPerSec": [3900.0, 4100.0, 4300.0]}
 ```
 
 `samples`가 없는 파일(이전 결과 파일과 `benchmark/baseline.json`)은 항목마다 표본 하나로 읽는다. 기준선은 6회 중앙값이라 `samples` 없이 그대로 쓴다.
 
-항목 id는 `<저장소>/<시나리오>/<프로파일>/<형태>/<내구성>/<깊이>:<지표>`다. 형태는 `proc1`, `same-process`, 깊이는 `empty` 또는 `1m`이다. 지표는 `msgPerSec`(높을수록 좋음), `p50Ms`, `p99Ms`(낮을수록 좋음)다.
+항목 id는 `<저장소>/<시나리오>/<프로파일>/<내구성>/<깊이>:<지표>`다. 깊이는 `empty` 또는 `1m`이다. 지표는 `msgPerSec`(높을수록 좋음), `p50Ms`, `p99Ms`(낮을수록 좋음)다.
 
 ## 비교 보고
 
 비교기는 SQLite 항목만 검사하고 항목마다 한 줄로 보고한다.
 
 ```
-PASS  floor S1 P1 proc1 POWER_LOSS >= 10000 msg/s  [12345 msg/s]
-FAIL  depth S1 P1 proc1 PROCESS_CRASH 1m >= 70% of empty  [중앙값 66.0%, 바퀴별 1회 5200 / 9000 = 57.8%; 2회 6000 / 9100 = 65.9%; 3회 6900 / 9000 = 76.7%]
-SKIP  regression sqlite/S2/P1/proc1/POWER_LOSS/empty:msgPerSec  [기준선에 없다]
+PASS  floor S1 P1 POWER_LOSS >= 10000 msg/s  [12345 msg/s]
+FAIL  depth S1 P1 PROCESS_CRASH 1m >= 70% of empty  [중앙값 66.0%, 바퀴별 1회 5200 / 9000 = 57.8%; 2회 6000 / 9100 = 65.9%; 3회 6900 / 9000 = 76.7%]
+SKIP  regression sqlite/S2/P1/POWER_LOSS/empty:msgPerSec  [기준선에 없다]
 합계: 통과 20, 실패 1, 건너뜀 1
 ```
 

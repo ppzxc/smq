@@ -14,19 +14,19 @@ class AggregatorTest {
     void s2UsesTheSameThroughputMetric() {
         RunSpec spec = RunSpec.s2(Storage.SQLITE, Profile.P2, 1000, 0);
         Map<String, Double> m = Aggregator.aggregate(spec, List.of(new ChildResult("WORKER", 500, SEC, new long[0])));
-        assertEquals(Map.of("sqlite/S2/P2/proc1/POWER_LOSS/empty:msgPerSec", 500.0), m);
+        assertEquals(Map.of("sqlite/S2/P2/POWER_LOSS/empty:msgPerSec", 500.0), m);
     }
 
     @Test
     void s3LatencyPercentilesComeFromOneJvmInMilliseconds() {
-        RunSpec spec = RunSpec.s3(Storage.SQLITE, Profile.P1, Topology.SAME_PROCESS, 1000, 0);
+        RunSpec spec = RunSpec.s3(Storage.SQLITE, Profile.P1, 1000, 0);
         long[] samples = new long[100];
         for (int i = 0; i < 100; i++) {
             samples[i] = (i + 1) * 1000L; // 1..100 ms를 마이크로초로
         }
         Map<String, Double> m = Aggregator.aggregate(spec, List.of(new ChildResult("BOTH", 100, SEC, samples)));
-        assertEquals(50.0, m.get("sqlite/S3/P1/same-process/POWER_LOSS/empty:p50Ms"));
-        assertEquals(99.0, m.get("sqlite/S3/P1/same-process/POWER_LOSS/empty:p99Ms"));
+        assertEquals(50.0, m.get("sqlite/S3/P1/POWER_LOSS/empty:p50Ms"));
+        assertEquals(99.0, m.get("sqlite/S3/P1/POWER_LOSS/empty:p99Ms"));
     }
 
     @Test
@@ -40,7 +40,7 @@ class AggregatorTest {
 
     @Test
     void s3WithoutSamplesIsAnError() {
-        RunSpec spec = RunSpec.s3(Storage.SQLITE, Profile.P1, Topology.SAME_PROCESS, 1000, 0);
+        RunSpec spec = RunSpec.s3(Storage.SQLITE, Profile.P1, 1000, 0);
         assertThrows(
                 IllegalStateException.class,
                 () -> Aggregator.aggregate(spec, List.of(new ChildResult("BOTH", 0, SEC, new long[0]))));

@@ -11,10 +11,10 @@ class ChunkTableTest {
     @Test
     void showsSingleVersusBatchRatioPerPayloadSize() {
         Map<String, Double> r = new HashMap<>();
-        r.put("sqlite/S1/P0/proc1/POWER_LOSS/empty:msgPerSec", 500.0);
-        r.put("sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec", 15_000.0);
-        r.put("sqlite/S1/P4S/proc1/PROCESS_CRASH/empty:msgPerSec", 1_000.0);
-        r.put("sqlite/S1/P4/proc1/PROCESS_CRASH/empty:msgPerSec", 4_000.0);
+        r.put("sqlite/S1/P0/POWER_LOSS/empty:msgPerSec", 500.0);
+        r.put("sqlite/S1/P1/POWER_LOSS/empty:msgPerSec", 15_000.0);
+        r.put("sqlite/S1/P4S/PROCESS_CRASH/empty:msgPerSec", 1_000.0);
+        r.put("sqlite/S1/P4/PROCESS_CRASH/empty:msgPerSec", 4_000.0);
         String t = ChunkTable.render(r);
         assertTrue(t.contains("256B"), t);
         assertTrue(t.contains("4KB"), t);

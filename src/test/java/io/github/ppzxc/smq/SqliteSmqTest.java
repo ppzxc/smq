@@ -104,6 +104,13 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    void 기본_내구성_수준은_PROCESS_CRASH다() {
+        // ADR-0014: 기본은 애플리케이션 크래시까지 견디고, 전원·OS 장애까지 견디려면 POWER_LOSS를 명시한다.
+        assertEquals(
+                Durability.PROCESS_CRASH, Smq.sqlite(dir.resolve("default.db")).durability());
+    }
+
+    @Test
     void 두_내구성_수준_모두_발행과_꺼내기가_동작한다() throws Exception {
         for (Durability d : Durability.values()) {
             try (Smq smq = Smq.sqlite(dir.resolve(d + ".db")).durability(d).open()) {

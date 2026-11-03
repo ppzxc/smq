@@ -15,7 +15,7 @@ SQLite 저장소가 열려 있는 동안 DB 옆(`<DB 파일명>.lock`)에서 OS 
 _Avoid_: pid 파일, 잠금 표식
 
 **내구성 수준(Durability)**:
-발행이나 정산이 성공한 뒤 그 결과가 어떤 장애까지 견디고 남는지를 정하는 저장소의 성질. 전원 장애까지 견디는 수준(Power loss)과 프로세스 크래시만 견디는 수준(Process crash)이 있다.
+발행이나 정산이 성공한 뒤 그 결과가 어떤 장애까지 견디고 남는지를 정하는 저장소의 성질. 전원 장애까지 견디는 수준(Power loss)과 프로세스 크래시만 견디는 수준(Process crash)이 있다. SQLite 저장소의 기본값은 Process crash다(ADR-0014).
 _Avoid_: synchronous, 영속성 모드, fsync 설정
 
 **스냅샷(Snapshot)**:

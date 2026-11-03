@@ -14,7 +14,7 @@
 
 ### 특징
 
-- **내구성**: 발행과 정산이 성공을 반환하면 그 결과는 남는다. 기본은 전원 장애까지 견딘다(`Durability.POWER_LOSS`).
+- **내구성**: 발행과 정산이 성공을 반환하면 그 결과는 애플리케이션이 죽어도 남는다(기본 `Durability.PROCESS_CRASH`). 전원·OS 장애까지 견뎌야 하면 `Durability.POWER_LOSS`를 고른다.
 - **청크 단위 소비**: 한 번에 여러 건을 꺼내 하나의 리스(기한부 점유)로 묶고, 메시지마다 ACK/NACK/reject를 고른다. 정산은 트랜잭션 한 번으로 반영된다.
 - **at-least-once 전달**: 리스 기한 안에 정산하지 않으면 메시지를 다시 꺼낼 수 있다. 중복 전달은 일어날 수 있으니 처리는 멱등하게 만든다.
 - **재시도와 dead letter**: 지연 NACK, 최대 전달 횟수, dead letter 큐를 지원한다.
@@ -84,7 +84,8 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 
 ## 내구성과 동시성
 
-- 기본 내구성은 `Durability.POWER_LOSS`다. 커밋마다 fsync해서 전원 장애 뒤에도 성공한 발행과 정산이 남는다. `PROCESS_CRASH`는 처리량이 높은 대신 전원 장애 때 마지막 커밋 몇 개를 잃을 수 있다([ADR 0005](docs/adr/0005-default-durability-survives-power-loss.md)).
+- 기본 내구성은 `Durability.PROCESS_CRASH`다. 애플리케이션 프로세스가 죽어도 성공한 발행과 정산은 남는다. **전원 장애나 OS 크래시 때는 마지막 커밋 몇 개를 잃을 수 있다**(발행한 메시지가 사라지거나 ACK한 메시지가 되살아난다). 기본값은 smq가 스스로 지킬 수 있는 장애까지만 보장한다.
+- 전원·OS 장애까지 견뎌야 하면 `.durability(Durability.POWER_LOSS)`를 명시한다. 커밋마다 fsync하므로 처리량이 낮아지고(아래 표), 저장 장치가 fsync를 지킬 때만 보장이 성립한다([ADR 0014](docs/adr/0014-default-durability-survives-process-crash.md)).
 - SQLite 파일은 한 JVM만 열 수 있다. DB 옆의 락 파일(`<DB 파일명>.lock`)과 `locking_mode=EXCLUSIVE`로 강제하며, 둘째 열기는 `StorageLockedException`이다. 같은 JVM의 여러 컨슈머에게는 리스가 같은 메시지를 동시에 주지 않는다.
 - `Smq`, `Queue`, `Chunk`, `Settlement`는 여러 스레드에서 써도 된다.
 
@@ -97,9 +98,18 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 - **Windows 성능**: Linux 기준 환경보다 처리량이 낮다. 특히 `POWER_LOSS` 단건은 fsync 비용에 묶여 약 80~90 msg/s다. 배치로 발행하면 격차가 크게 줄어든다. 근거는 [ADR 0008](docs/adr/0008-windows-has-no-absolute-throughput-floor.md)이다.
 - **인메모리 저장소**: `Smq.inMemory()`는 한 프로세스 안에서만 쓴다.
 
-## 성능: 단건은 느리다, 배치로 쓴다
+## 성능: 내구성 수준과 배치
 
-기본 내구성(`POWER_LOSS`)은 쓰기 트랜잭션마다 fsync를 한다. 그래서 메시지를 하나씩 발행하고 청크 크기 1로 꺼내 ACK하면 느리다. 베어메탈 서버(배터리 백업 쓰기 캐시가 있는 HDD, xfs)에서 256B 메시지는 단건 648 msg/s, 100건씩 묶으면 16,836 msg/s(26배)였다. 가능하면 발행을 묶고 청크를 크게 꺼낸다. 메시지 크기별 표와 측정 환경은 [docs/benchmark.md](docs/benchmark.md#성능-참고-배치-없이-쓰면-느리다)에 있다.
+두 내구성 수준의 처리량(msg/s)이다. 발행·꺼내기·ACK를 반복하는 조건이고, "단건"은 한 건씩, "묶음"은 발행 배치와 청크를 키운 경우다(256B 100건, 2KB 300건, 4KB 400건, 6KB 500건). 베어메탈 서버(배터리 백업 쓰기 캐시가 있는 HDD, xfs)에서 1회 잰 값이다.
+
+| 메시지 크기 | `PROCESS_CRASH`(기본) 단건 | `PROCESS_CRASH`(기본) 묶음 | `POWER_LOSS` 단건 | `POWER_LOSS` 묶음 |
+|---|---|---|---|---|
+| 256B | 2,276 | 49,925 | 648 | 16,836 |
+| 2KB | 2,152 | 15,530 | 685 | 9,806 |
+| 4KB | 2,535 | 13,695 | 595 | 9,006 |
+| 6KB | 2,580 | 6,842 | 567 | 5,734 |
+
+`POWER_LOSS`는 쓰기 트랜잭션마다 fsync를 하므로 저장 장치의 fsync 속도에 묶인다. 이 서버는 쓰기 캐시 덕분에 fsync가 빠르다. 쓰기 캐시가 없는 디스크나 가상 디스크에서는 `POWER_LOSS` 단건이 수십 msg/s까지 떨어진다(WSL2에서 256B 단건 29~67 msg/s). 어느 수준이든 가능하면 발행을 묶고 청크를 크게 꺼낸다. 측정 환경은 [docs/benchmark.md](docs/benchmark.md#성능-참고-배치-없이-쓰면-느리다)에 있다.
 
 ## 빌드와 테스트
 
@@ -117,7 +127,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 |---|---|
 | [docs/usage.md](docs/usage.md) | 사용법 레퍼런스(발행, 꺼내기, 정산, 예외 등) |
 | [GLOSSARY.md](GLOSSARY.md) | 도메인 용어 정의. 코드와 문서가 이 용어를 쓴다. |
-| [docs/adr/](docs/adr) | 설계 결정 기록(0001~0008) |
+| [docs/adr/](docs/adr) | 설계 결정 기록(0001~0014) |
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
 | [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
 | [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |

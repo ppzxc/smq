@@ -25,7 +25,7 @@ public interface StorageFactory {
 
     StorageFactory MEMORY = dir -> new MemoryStorage();
 
-    StorageFactory SQLITE_NEW = dir -> SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS);
+    StorageFactory SQLITE_NEW = dir -> SqliteStorage.open(dir.resolve("smq.db"), Durability.PROCESS_CRASH);
 
     /** 파일이 아직 없을 때만 견본을 복사한다. 이미 있으면 그대로 열어 재오픈이 데이터를 보존한다. */
     StorageFactory SQLITE_V1_SAMPLE = dir -> {
@@ -33,7 +33,7 @@ public interface StorageFactory {
         if (Files.notExists(db)) {
             copyV1Sample(db);
         }
-        return SqliteStorage.open(db, Durability.POWER_LOSS);
+        return SqliteStorage.open(db, Durability.PROCESS_CRASH);
     };
 
     /** 커밋된 v1 견본 파일을 target으로 복사한다. 이미 있으면 덮어쓴다. */

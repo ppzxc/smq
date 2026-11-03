@@ -1,5 +1,7 @@
 # SQLite 저장소의 기본 내구성 수준은 전원 장애까지 견딘다
 
+> **대체됨**: [ADR 0014](0014-default-durability-survives-process-crash.md)가 기본값을 `PROCESS_CRASH`로 바꿨다.
+
 SQLite 저장소는 기본적으로 `Durability.POWER_LOSS`로 연다. 이 수준에서는 커밋할 때마다 WAL을 fsync한다(`PRAGMA synchronous=FULL`). 그래서 `publish()`나 `settle()`이 성공을 반환했다면 그 결과는 전원 장애나 OS 크래시 뒤에도 남는다. 처리량이 더 필요한 사용자는 `Smq.sqlite(path)` 빌더에서 `Durability.PROCESS_CRASH`(`synchronous=NORMAL`)를 명시적으로 고른다. 이 수준은 애플리케이션 크래시는 견디지만, 전원이나 OS 장애가 나면 마지막 커밋 몇 개가 롤백될 수 있다. 그러면 발행한 메시지가 사라지거나 ACK한 메시지가 되살아날 수 있다. smq는 스스로를 내구성 큐라고 부르므로, 성공을 반환한 뒤에 결과가 사라질 수 있는 쪽을 기본값으로 두지 않았다. v1의 성능 하한도 이 기본값을 기준으로 잡는다. 옵션 이름은 pragma 이름 대신 견디는 장애로 지어서, 저장소 세부가 공개 API에 새어 나가지 않게 했다. 인메모리 저장소에는 이 옵션이 없다.
 
 ## Considered Options

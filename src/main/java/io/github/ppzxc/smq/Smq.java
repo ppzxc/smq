@@ -88,17 +88,25 @@ public interface Smq extends AutoCloseable {
 
         private final BuilderSettings settings = new BuilderSettings();
         private final Path path;
-        private Durability durability = Durability.POWER_LOSS;
+        private Durability durability = Durability.PROCESS_CRASH;
         private Duration lockWaitFloor = Duration.ofMillis(100);
 
         SqliteBuilder(Path path) {
             this.path = path;
         }
 
-        /** 내구성 수준. 기본은 {@link Durability#POWER_LOSS}. */
+        /**
+         * 내구성 수준. 기본은 {@link Durability#PROCESS_CRASH}로, 애플리케이션 크래시까지 견딘다. 전원 장애나 OS 크래시까지 견뎌야 하면
+         * {@link Durability#POWER_LOSS}를 고른다(ADR-0014).
+         */
         public SqliteBuilder durability(Durability durability) {
             this.durability = Objects.requireNonNull(durability, "durability");
             return this;
+        }
+
+        /** 지금 고른 내구성 수준. 기본값을 확인하는 테스트용이다. */
+        Durability durability() {
+            return durability;
         }
 
         /**

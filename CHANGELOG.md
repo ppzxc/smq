@@ -11,6 +11,7 @@
 ### Changed
 
 - 벤치마크 결과와 기준선의 항목 키에서 형태 구성요소(`proc1`, `same-process`)를 뺐다. 예: `sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec`는 `sqlite/S1/P1/POWER_LOSS/empty:msgPerSec`가 된다. `--filter`에 옛 키를 쓰던 스크립트는 고쳐야 한다. (#129)
+- 벤치마크 프로파일 번호를 데이터 크기 순으로 다시 매겼다. 같은 크기에서 짝수가 단건(청크 1), 홀수가 묶음이다: P0 256B/1, P1 256B/100, P2 2KB/1, P3 2KB/300, P4 4KB/1, P5 4KB/400, P6 6KB/1, P7 6KB/500. 옛 이름과의 대응은 P2S→P2, P2→P3, P4S→P4, P4→P5, P3S→P6, P3→P7이다(P0, P1은 그대로). 결과와 기준선의 항목 키도 바뀌므로 `--filter`에 옛 이름을 쓰던 스크립트는 고쳐야 한다. (#144)
 
 ### Removed
 

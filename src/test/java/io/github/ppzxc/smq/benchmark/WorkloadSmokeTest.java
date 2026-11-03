@@ -39,7 +39,7 @@ class WorkloadSmokeTest {
 
     @Test
     void s2Publishes() throws Exception {
-        ChildResult r = run(RunSpec.s2(Storage.SQLITE, Profile.P2, 200, 50), Role.WORKER);
+        ChildResult r = run(RunSpec.s2(Storage.SQLITE, Profile.P3, 200, 50), Role.WORKER);
         assertTrue(r.messages() > 0);
     }
 

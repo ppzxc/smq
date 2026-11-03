@@ -12,9 +12,9 @@ final class ChunkTable {
 
     private static final List<Pair> PAIRS = List.of(
             new Pair("256B", Profile.P0, Profile.P1),
-            new Pair("2KB", Profile.P2S, Profile.P2),
-            new Pair("4KB", Profile.P4S, Profile.P4),
-            new Pair("6KB", Profile.P3S, Profile.P3));
+            new Pair("2KB", Profile.P2, Profile.P3),
+            new Pair("4KB", Profile.P4, Profile.P5),
+            new Pair("6KB", Profile.P6, Profile.P7));
 
     private static final List<Row> ROWS = List.of(
             new Row("S1 POWER_LOSS", "S1", "POWER_LOSS"),

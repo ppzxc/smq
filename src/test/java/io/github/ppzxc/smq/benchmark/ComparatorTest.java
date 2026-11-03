@@ -131,15 +131,15 @@ class ComparatorTest {
     void absoluteFloorsPassAndFail() {
         Map<String, Double> r = new HashMap<>();
         r.put(S1P1, 10_000.0);
-        r.put("sqlite/S1/P2/POWER_LOSS/empty:msgPerSec", 7_999.0);
-        r.put("sqlite/S1/P3/POWER_LOSS/empty:msgPerSec", 4_000.0);
+        r.put("sqlite/S1/P3/POWER_LOSS/empty:msgPerSec", 7_999.0);
+        r.put("sqlite/S1/P7/POWER_LOSS/empty:msgPerSec", 4_000.0);
         List<Check> c = compare(r, Map.of());
         assertEquals(
                 Status.PASS, find(c, "floor S1 P1 POWER_LOSS >= 10000 msg/s").status());
         assertEquals(
-                Status.FAIL, find(c, "floor S1 P2 POWER_LOSS >= 8000 msg/s").status());
+                Status.FAIL, find(c, "floor S1 P3 POWER_LOSS >= 8000 msg/s").status());
         assertEquals(
-                Status.PASS, find(c, "floor S1 P3 POWER_LOSS >= 4000 msg/s").status());
+                Status.PASS, find(c, "floor S1 P7 POWER_LOSS >= 4000 msg/s").status());
     }
 
     @Test

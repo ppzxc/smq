@@ -19,6 +19,9 @@ import org.junit.jupiter.api.io.TempDir;
 class TransactionExecutorTest {
 
     private static final int SQLITE_CONSTRAINT = 19;
+    private static final long MB = 1024L * 1024;
+    /** 커밋 하나가 쓰는 BLOB 크기. 확인 주기(커밋 8번) 동안 쓰는 양이 한도(8MB)보다 한참 작다. */
+    private static final int BLOB_BYTES = 64 * 1024;
 
     @TempDir
     Path dir;
@@ -103,10 +106,6 @@ class TransactionExecutorTest {
             assertTrue(rs.getInt(2) < 100, "WAL에 프레임이 " + rs.getInt(2) + "개 남았다. 되감지 않았다");
         }
     }
-
-    private static final long MB = 1024L * 1024;
-    /** 커밋 하나가 쓰는 BLOB 크기. 확인 주기(커밋 8번) 동안 쓰는 양이 한도(8MB)보다 한참 작다. */
-    private static final int BLOB_BYTES = 64 * 1024;
 
     /** 저장소가 열 때와 같은 WAL 설정으로 바꾸고 BLOB 테이블을 만든다. */
     private TransactionExecutor walExecutor() throws SQLException {

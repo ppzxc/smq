@@ -4,13 +4,11 @@ package io.github.ppzxc.smq;
  * 저장소 연산의 효력을 알 수 없을 때 던진다. 반영됐을 수도, 안 됐을 수도 있다.
  *
  * <p>SQLite 저장소는 한 JVM만 파일을 열 수 있으므로(ADR-0012) 정상적으로는 쓰기 경합이 없다. 이 예외는 그 밖의
- * 저장소 오류일 때 올라온다. 쓰기 경합({@code SQLITE_BUSY})이 있으면 내부에서 트랜잭션 전체 단위로 다시 시도하고,
- * 그래도 풀리지 않으면 이 예외다. 꺼내기만 {@code wait}로 한정되고 빈 청크로 돌아온다
- * ({@link Queue#pull(int, java.time.Duration)}). 파일을 이미 다른 곳이 쥔 열기 실패는 이 예외가 아니라
- * {@link StorageLockedException}이다.
+ * 저장소 오류일 때 올라온다. 쓰기 경합({@code SQLITE_BUSY})은 재시도하지 않고 바로 이 예외다. 꺼내기만 {@code wait}로
+ * 한정되고 빈 청크로 돌아온다({@link Queue#pull(int, java.time.Duration)}). 파일을 이미 다른 곳이 쥔 열기 실패는
+ * 이 예외가 아니라 {@link StorageLockedException}이다.
  *
- * <p>롤백이 확실한 실패(예: {@code SQLITE_BUSY} 재시도 소진)도 이 예외로 올라온다. 호출자는 롤백 여부를 구분할
- * 수 없지만, 아래 규칙대로 다시 해도 안전하다.
+ * <p>롤백이 확실한 실패도 이 예외로 올라온다. 호출자는 롤백 여부를 구분할 수 없지만, 아래 규칙대로 다시 해도 안전하다.
  *
  * <p>재시도 규칙:
  * <ul>

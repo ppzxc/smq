@@ -13,7 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** autocommit 읽기. 확실하지 않으면 "있다"고 답하고, 쓰기 락도 재시도도 읽기 트랜잭션도 남기지 않는다. */
+/** autocommit 읽기. 확실하지 않으면 "있다"고 답하고, 쓰기 락도 읽기 트랜잭션도 남기지 않는다. */
 class TransactionExecutorReadTest {
 
     private static final int SQLITE_BUSY_SNAPSHOT = 517;
@@ -23,7 +23,6 @@ class TransactionExecutorReadTest {
 
     private Connection connection;
     private TransactionExecutor executor;
-    private int waits;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -32,8 +31,7 @@ class TransactionExecutorReadTest {
             s.execute("PRAGMA journal_mode=WAL");
             s.execute("CREATE TABLE t (v INTEGER)");
         }
-        executor = new TransactionExecutor(connection, new TransactionExecutor.RetryPolicy(5, a -> waits++));
-        executor.executeUnverified(c -> 0); // 기준 버전 0
+        executor = new TransactionExecutor(connection);
     }
 
     @AfterEach
@@ -41,34 +39,14 @@ class TransactionExecutorReadTest {
         connection.close();
     }
 
-    private void setUserVersion(int v) throws SQLException {
-        try (Statement s = connection.createStatement()) {
-            s.execute("PRAGMA user_version = " + v);
-        }
-    }
-
     @Test
-    void 확실히_비어_있고_버전이_그대로면_없다고_답한다() {
+    void 확실히_비어_있으면_없다고_답한다() {
         assertFalse(executor.anyOrUncertain(c -> false));
     }
 
     @Test
     void 읽기가_있다고_하면_있다고_답한다() {
         assertTrue(executor.anyOrUncertain(c -> true));
-    }
-
-    @Test
-    void 비어_보여도_버전이_바뀌었으면_있다고_답한다() throws Exception {
-        setUserVersion(7);
-        assertTrue(executor.anyOrUncertain(c -> false));
-    }
-
-    @Test
-    void 영구_실패_상태면_버전이_돌아와도_있다고_답한다() throws Exception {
-        setUserVersion(7);
-        assertThrows(RuntimeException.class, () -> executor.execute(c -> null));
-        setUserVersion(0);
-        assertTrue(executor.anyOrUncertain(c -> false));
     }
 
     @Test
@@ -79,7 +57,6 @@ class TransactionExecutorReadTest {
             throw new SQLException("busy", null, SQLITE_BUSY_SNAPSHOT);
         }));
         assertEquals(1, calls[0]);
-        assertEquals(0, waits);
     }
 
     @Test

@@ -10,9 +10,9 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * 이 프로세스의 발행·전달 기록을 힙이 아니라 실행 디렉터리의 파일에 쌓는다. 기록을 힙에 두면 실행 길이에 비례해 힙이 차서
- * 수 시간짜리 실행이 {@code OutOfMemoryError}로 끝났다. 프로세스마다 {@code p<n>-published.bin}과 {@code p<n>-deliveries.bin}을
- * 쓰고, 검사는 끝난 뒤 {@link SpoolCheck}가 모든 프로세스의 파일을 읽어 한다.
+ * 발행·전달 기록을 힙이 아니라 실행 디렉터리의 파일에 쌓는다. 기록을 힙에 두면 실행 길이에 비례해 힙이 차서
+ * 수 시간짜리 실행이 {@code OutOfMemoryError}로 끝났다. {@code published.bin}과 {@code deliveries.bin}을
+ * 쓰고, 검사는 끝난 뒤 {@link SpoolCheck}가 그 파일을 읽어 한다.
  */
 final class RecordSpool implements AutoCloseable {
 

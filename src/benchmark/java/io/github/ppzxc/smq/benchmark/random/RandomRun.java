@@ -69,7 +69,6 @@ final class RandomRun {
     private final Script script;
     private final Checker checker;
     private final long drainLimitMillis;
-    /** 기록의 태그와 청크 번호에 들어가는 프로세스 번호. smq는 한 JVM만 열 수 있으므로(ADR-0012) 항상 0이다. 기록 형식 호환을 위해 남겼다. */
     private volatile Path runDir;
 
     /**
@@ -534,7 +533,7 @@ final class RandomRun {
         }
     }
 
-    /** 헤더의 태그. 읽을 수 없으면 어떤 발행 기록과도 맞지 않는 태그를 돌려줘 검사기가 유령으로 보고하게 한다. */
+    /** 헤더의 태그. 읽을 수 없으면 어떤 발행 기록과도 맞지 않는 태그를 돌려줘 검사기가 유령으로 보고하게 한다. 발행 태그의 순번은 0 이상이라, 음수 순번이면 겹치지 않는다. */
     static Tag tagOf(Message m) {
         try {
             return Tag.parse(m.headers().get(Script.TAG_HEADER));

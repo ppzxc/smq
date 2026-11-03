@@ -119,7 +119,7 @@ final class JvmMetricsSampler implements AutoCloseable {
     }
 
     /**
-     * 메트릭 파일 하나에서 요약을 다시 만든다. 자식 JVM은 요약을 부모에게 넘기지 않고 파일만 남기므로 부모가 읽는다. 파일이 없으면
+     * 메트릭 파일 하나에서 요약을 다시 만든다. 파일이 없으면
      * 표본 0개의 요약이다. GC 횟수와 시간은 마지막 표본의 누적값이다. CPU 필드가 없으면 -1이다.
      */
     static Summary summarize(Path file) {

@@ -34,9 +34,9 @@ final class TransactionExecutor {
     }
 
     /** 커밋 몇 번마다 WAL 파일 크기를 확인할지. 확인은 파일 크기 조회 한 번이다. */
-    private static final int CHECKPOINT_CHECK_EVERY_COMMITS = 8;
+    static final int CHECKPOINT_CHECK_EVERY_COMMITS = 8;
     /** WAL 파일이 이 크기를 넘으면 되감는 체크포인트를 건다. 60초 부하에서 64MB 이하라는 목표보다 한참 작다. */
-    private static final long CHECKPOINT_WAL_BYTES = 8L * 1024 * 1024;
+    static final long CHECKPOINT_WAL_BYTES = 8L * 1024 * 1024;
     /**
      * 되감은 WAL 파일을 이 크기까지만 남기고 더 큰 부분은 줄인다({@code journal_size_limit}). 한도의 1.5배이고, 파일은 이 아래에서는
      * 줄지 않는다.
@@ -47,6 +47,16 @@ final class TransactionExecutor {
      * 읽고 있으면 되감기가 막힐 수 있다.
      */
     private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
+
+    /**
+     * 저장소를 열 때 연결에 거는 WAL 설정. 자동 체크포인트를 끄고, 되감은 파일의 상한을 {@link #WAL_FILE_KEEP_BYTES}로 두고, 저널 모드를
+     * WAL로 바꾼다. 이 순서로 건다. 열 때와 테스트가 같은 것을 쓴다.
+     */
+    static void configureWal(Statement s) throws SQLException {
+        s.execute("PRAGMA wal_autocheckpoint = 0");
+        s.execute("PRAGMA journal_size_limit = " + WAL_FILE_KEEP_BYTES);
+        s.execute("PRAGMA journal_mode = WAL");
+    }
 
     private static final Path NO_WAL = Path.of("");
 

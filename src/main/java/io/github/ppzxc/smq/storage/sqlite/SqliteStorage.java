@@ -168,8 +168,8 @@ public final class SqliteStorage implements Storage {
     }
 
     /**
-     * 모든 큐 연산이 거치는 쓰기 트랜잭션 경로. 실행기의 확인하는 쓰기 실행에 넘겨주기만 한다.
-     * 시작할 때마다 {@code user_version}을 다시 확인하고, {@code SQLITE_BUSY}면 재시도한다.
+     * 모든 큐 연산이 거치는 쓰기 트랜잭션 경로. 실행기의 쓰기 실행에 넘겨주기만 한다.
+     * 스키마 버전은 열 때 한 번 판정하므로 트랜잭션마다 다시 확인하지 않고, {@code SQLITE_BUSY}도 재시도하지 않는다.
      */
     <T> T inTransaction(TransactionExecutor.TxBody<T> body) {
         return inTransaction(body, Deadline.NONE);

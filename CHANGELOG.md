@@ -10,6 +10,7 @@
 
 ### Changed
 
+- **호환 파괴**: SQLite 저장소의 기본 내구성 수준을 `Durability.POWER_LOSS`에서 `Durability.PROCESS_CRASH`로 바꿨다. 기본값은 애플리케이션 크래시까지 견디고, 전원 장애나 OS 크래시 때는 마지막 커밋 몇 개를 잃을 수 있다. 전원·OS 장애까지 견뎌야 하면 빌더에서 `.durability(Durability.POWER_LOSS)`를 명시한다. 그 보장은 저장 장치가 fsync를 지킬 때만 성립한다. v1 성능 하한은 계속 `POWER_LOSS`로 잰다. (#146, ADR-0014)
 - 벤치마크 결과와 기준선의 항목 키에서 형태 구성요소(`proc1`, `same-process`)를 뺐다. 예: `sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec`는 `sqlite/S1/P1/POWER_LOSS/empty:msgPerSec`가 된다. `--filter`에 옛 키를 쓰던 스크립트는 고쳐야 한다. (#129)
 - 벤치마크 프로파일 번호를 데이터 크기 순으로 다시 매겼다. 같은 크기에서 짝수가 단건(청크 1), 홀수가 묶음이다: P0 256B/1, P1 256B/100, P2 2KB/1, P3 2KB/300, P4 4KB/1, P5 4KB/400, P6 6KB/1, P7 6KB/500. 옛 이름과의 대응은 P2S→P2, P2→P3, P4S→P4, P4→P5, P3S→P6, P3→P7이다(P0, P1은 그대로). 결과와 기준선의 항목 키도 바뀌므로 `--filter`에 옛 이름을 쓰던 스크립트는 고쳐야 한다. (#144)
 

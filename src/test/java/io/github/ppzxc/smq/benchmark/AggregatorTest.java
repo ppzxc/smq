@@ -18,6 +18,18 @@ class AggregatorTest {
     }
 
     @Test
+    void s3LatencyPercentilesComeFromOneJvmInMilliseconds() {
+        RunSpec spec = RunSpec.s3(Storage.SQLITE, Profile.P1, Topology.SAME_PROCESS, 1000, 0);
+        long[] samples = new long[100];
+        for (int i = 0; i < 100; i++) {
+            samples[i] = (i + 1) * 1000L; // 1..100 ms를 마이크로초로
+        }
+        Map<String, Double> m = Aggregator.aggregate(spec, List.of(new ChildResult("BOTH", 100, SEC, samples)));
+        assertEquals(50.0, m.get("sqlite/S3/P1/same-process/POWER_LOSS/empty:p50Ms"));
+        assertEquals(99.0, m.get("sqlite/S3/P1/same-process/POWER_LOSS/empty:p99Ms"));
+    }
+
+    @Test
     void percentileIsNearestRank() {
         long[] sorted = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
         assertEquals(5, Aggregator.percentile(sorted, 50));

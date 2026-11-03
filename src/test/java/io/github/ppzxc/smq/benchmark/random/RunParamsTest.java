@@ -25,15 +25,11 @@ class RunParamsTest {
         Set<Durability> durabilities = EnumSet.noneOf(Durability.class);
         for (long seed = 0; seed < 3_000; seed++) {
             RunParams p = RunParams.fromSeed(seed, FULL);
-            assertEquals(1, p.processes());
-            assertEquals(p.processes(), p.producers().size());
-            assertEquals(p.processes(), p.consumers().size());
             assertTrue(p.maxMessageBytes() >= 0 && p.maxMessageBytes() <= 65_536, "size " + seed);
             assertTrue(p.publishBatch() >= 1 && p.publishBatch() <= 500);
             assertTrue(p.chunkSize() >= 1 && p.chunkSize() <= 500);
-            assertTrue(p.producers().stream().allMatch(n -> n >= (p.processes() == 1 ? 1 : 0) && n <= 4));
-            assertTrue(p.consumers().stream().allMatch(n -> n >= (p.processes() == 1 ? 1 : 0) && n <= 4));
-            assertTrue(p.totalProducers() >= 1 && p.totalConsumers() >= 1, "전체에서 각각 1 이상");
+            assertTrue(p.producers() >= 1 && p.producers() <= 4);
+            assertTrue(p.consumers() >= 1 && p.consumers() <= 4);
             assertTrue(p.prefillDepth() == 0 || p.prefillDepth() >= 1 && p.prefillDepth() <= 100_000);
             assertTrue(p.ackRatio() > 0.5, "ACK가 다수");
             assertEquals(1.0, p.ackRatio() + p.nackRatio() + p.rejectRatio() + p.noneRatio(), 1e-9);
@@ -69,13 +65,12 @@ class RunParamsTest {
                     p.chunkSize() >= RunParams.SOAK_MIN_CHUNK_SIZE, "컨슈머 스레드 하나가 500/s를 받을 만큼의 청크: " + p.chunkSize());
             assertEquals(FULL.maxDepth(), p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
             assertTrue(p.maxMessageBytes() <= 1024, "메시지 크기 상한 1KB");
-            long perThread = Math.max(1, (500 + p.totalProducers() - 1) / p.totalProducers());
+            long perThread = Math.max(1, (500 + p.producers() - 1) / p.producers());
             long lowest = Math.min(RunParams.SOAK_MIN_PUBLISH_BATCH, perThread);
             assertTrue(p.publishBatch() >= lowest, "배치는 건당에 가깝지 않게 20 이상(스레드 몫이 작으면 그 몫): " + p.publishBatch());
             assertTrue(
                     p.publishBatch() <= Math.max(lowest, perThread / RunParams.SOAK_BATCH_WINDOW_DIVISOR),
                     "배치는 스레드 몫의 0.25초 분량 이하: " + p.publishBatch());
-            assertEquals(p, RunParams.fromArg(p.toArg()), "seed " + seed);
         }
     }
 
@@ -89,23 +84,6 @@ class RunParamsTest {
     @Test
     void 같은_시드와_속도는_같은_매개변수다() {
         assertEquals(RunParams.fromSeed(7, FULL.withRate(500)), RunParams.fromSeed(7, FULL.withRate(500)));
-    }
-
-    @Test
-    void argRoundTripKeepsEveryFieldExactly() {
-        for (long seed = 0; seed < 300; seed++) {
-            RunParams p = RunParams.fromSeed(seed, FULL);
-            assertEquals(p, RunParams.fromArg(p.toArg()), "seed " + seed);
-        }
-    }
-
-    @Test
-    void argRoundTripKeepsSeedsBeyondDoublePrecision() {
-        for (long seed : new long[] {Long.MAX_VALUE, Long.MIN_VALUE + 1, 9_007_199_254_740_993L}) {
-            assertEquals(
-                    seed,
-                    RunParams.fromArg(RunParams.fromSeed(seed, FULL).toArg()).seed());
-        }
     }
 
     @Test
@@ -173,7 +151,6 @@ class RunParamsTest {
 
         RunParams standing = RunParams.fromSeed(7, FULL.withRate(500).withStandingQueue(true));
         assertTrue(standing.consumerPaced());
-        assertEquals(RunParams.fromArg(standing.toArg()), standing);
 
         RunParams random = RunParams.fromSeed(7, FULL.withStandingQueue(true).withMessageBytes(4096));
         assertFalse(random.consumerPaced(), "목표 속도가 없으면 소비를 조절하지 않는다");

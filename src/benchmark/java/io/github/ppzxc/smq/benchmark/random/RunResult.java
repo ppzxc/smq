@@ -12,7 +12,7 @@ import java.util.List;
  * @param walMaxBytes 실행 중 측정한 {@code smq.db-wal} 크기의 최댓값(바이트). 한 번도 측정하지 못했으면 null
  * @param jvmMetrics 부모 JVM의 JVM 메트릭 요약. 표본이 없으면 null
  * @param soak 고정 속도 모드의 달성률과 백로그 보고. 고정 속도가 아니면 null
- * @param childMetrics 자식 JVM마다의 메트릭 요약(프로세스 번호 순). 단일 프로세스면 빈 목록
+ * @param childMetrics 자식 JVM마다의 메트릭 요약. 자식 JVM이 없으므로 지금은 항상 빈 목록이다(기록 형식 호환용)
  */
 record RunResult(
         RunParams params,

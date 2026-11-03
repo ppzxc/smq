@@ -8,10 +8,10 @@ import java.util.Map;
 /**
  * {@link Verdict#ERROR}의 원인. 문자열 하나로 뭉개지 않고 어디서 났는지와 스택 트레이스 전체를 남긴다.
  *
- * @param location {@link #HARNESS}(하네스 JVM) 또는 {@code child-<번호>}(그 번호의 자식 JVM)
+ * @param location {@link #HARNESS}(하네스 JVM). 이전 기록과 형식을 맞추려고 문자열로 남겼다
  * @param stackTrace {@code Throwable.printStackTrace} 형식의 전체. 원인 사슬을 포함한다
- * @param exitCode 자식 JVM이 비정상 종료했을 때의 종료 코드. 알 수 없거나 자식이 아니면 null
- * @param stderrTail 자식 JVM 표준 오류의 끝부분(상한 있음). 자식이 아니면 null
+ * @param exitCode 자식 JVM이 비정상 종료했을 때의 종료 코드. 자식 JVM이 없으므로 지금은 항상 null이다(기록 형식 호환용)
+ * @param stderrTail 자식 JVM 표준 오류의 끝부분. 지금은 항상 null이다(기록 형식 호환용)
  */
 record ErrorDetail(
         String location,
@@ -22,10 +22,6 @@ record ErrorDetail(
         String stderrTail) {
 
     static final String HARNESS = "harness";
-
-    static String child(int process) {
-        return "child-" + process;
-    }
 
     static ErrorDetail of(String location, Throwable t, Integer exitCode, String stderrTail) {
         return new ErrorDetail(location, t.getClass().getName(), t.getMessage(), stackTraceOf(t), exitCode, stderrTail);

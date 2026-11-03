@@ -44,7 +44,6 @@ class PlanTest {
         assertFalse(k.contains("sqlite/S1/P4/proc1/POWER_LOSS/1m"));
         // S3: P1만, 같은 프로세스
         assertTrue(k.contains("sqlite/S3/P1/same-process/POWER_LOSS/empty"));
-        assertFalse(k.contains("sqlite/S3/P1/cross-process/POWER_LOSS/empty"));
         assertEquals(1, k.stream().filter(s -> s.contains("/S3/")).count());
         assertTrue(plan.stream().filter(s -> s.depth() > 0).allMatch(s -> s.depth() == 1_000_000));
     }
@@ -89,8 +88,7 @@ class PlanTest {
     @Test
     void fullMemoryPlanIsSingleJvmDiagnostics() {
         List<RunSpec> plan = Plan.full(Storage.MEMORY);
-        assertTrue(plan.stream().allMatch(s -> s.processes() == 1 && s.storage() == Storage.MEMORY));
-        assertTrue(plan.stream().noneMatch(s -> s.topology() == Topology.CROSS_PROCESS));
+        assertTrue(plan.stream().allMatch(s -> s.storage() == Storage.MEMORY));
         assertTrue(keys(plan).contains("memory/S1/P1/proc1/none/empty"));
         assertTrue(keys(plan).contains("memory/S3/P1/same-process/none/empty"));
     }
@@ -100,8 +98,6 @@ class PlanTest {
         List<RunSpec> plan = Plan.smoke(Storage.SQLITE);
         assertTrue(plan.size() >= 4 && plan.size() <= 8);
         assertTrue(plan.stream().allMatch(s -> s.durationMs() <= 3000 && s.depth() <= 10_000));
-        assertTrue(plan.stream().allMatch(s -> s.processes() == 1));
-        assertTrue(plan.stream().noneMatch(s -> s.topology() == Topology.CROSS_PROCESS));
     }
 
     @Test
@@ -127,7 +123,7 @@ class PlanTest {
 
     @Test
     void specTravelsToChildAsOneQuoteFreeArgument() {
-        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P4, 4, Durability.PROCESS_CRASH, 0, 5000, 700);
+        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P4, Durability.PROCESS_CRASH, 0, 5000, 700);
         String arg = s.toArg();
         // Windows의 ProcessBuilder는 인자 안의 큰따옴표를 지우므로, 따옴표와 공백이 없어야 한다.
         assertFalse(arg.contains("\"") || arg.contains(" "), arg);
@@ -136,7 +132,7 @@ class PlanTest {
 
     @Test
     void specRoundTripsThroughJson() {
-        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P3, 4, Durability.PROCESS_CRASH, 1_000_000, 5000, 700);
+        RunSpec s = RunSpec.s1(Storage.SQLITE, Profile.P3, Durability.PROCESS_CRASH, 1_000_000, 5000, 700);
         RunSpec back = RunSpec.fromJson(s.toJson());
         assertEquals(s, back);
         RunSpec m = RunSpec.s3(Storage.MEMORY, Profile.P1, Topology.SAME_PROCESS, 10, 1);

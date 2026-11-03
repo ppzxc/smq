@@ -51,12 +51,6 @@ class OptionsTest {
     }
 
     @Test
-    void heapDumpIsOffUnlessAsked() {
-        assertFalse(Options.parse(new String[] {}, 0).heapDump());
-        assertTrue(Options.parse(new String[] {"--heap-dump"}, 0).heapDump());
-    }
-
-    @Test
     void 속도_옵션은_기본이_0이고_양의_정수를_받는다() {
         assertEquals(0, Options.parse(new String[0], 0).rate());
         assertEquals(500, Options.parse(new String[] {"--rate", "500"}, 0).rate());

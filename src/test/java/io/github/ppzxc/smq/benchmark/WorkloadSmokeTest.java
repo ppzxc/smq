@@ -23,7 +23,7 @@ class WorkloadSmokeTest {
 
     @Test
     void s1CountsAckedMessagesWithPrefilledDepth() throws Exception {
-        ChildResult r = run(RunSpec.s1(Storage.MEMORY, Profile.P1, 1, null, 500, 200, 50), Role.WORKER);
+        ChildResult r = run(RunSpec.s1(Storage.MEMORY, Profile.P1, null, 500, 200, 50), Role.WORKER);
         assertTrue(r.messages() >= Profile.P1.chunk());
         assertTrue(r.elapsedNanos() > 0);
         assertEquals(0, r.messages() % Profile.P1.chunk());
@@ -32,7 +32,7 @@ class WorkloadSmokeTest {
     @Test
     void s1RunsOnSqliteForBothDurabilities() throws Exception {
         for (Durability d : Durability.values()) {
-            ChildResult r = run(RunSpec.s1(Storage.SQLITE, Profile.P1, 1, d, 0, 200, 50), Role.WORKER);
+            ChildResult r = run(RunSpec.s1(Storage.SQLITE, Profile.P1, d, 0, 200, 50), Role.WORKER);
             assertTrue(r.messages() > 0, d.name());
         }
     }

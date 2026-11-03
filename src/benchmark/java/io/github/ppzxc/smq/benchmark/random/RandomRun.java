@@ -30,9 +30,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 시드 하나의 실행: 미리 채우기, 부하 구간, 소진, 검증. 프로세스 수가 1이면 이 JVM의 스레드 여럿이 돈다. 1보다 크면 이 JVM(부모)은
- * 미리 채우기와 표본과 소진과 판정을 맡고, 프로듀서와 컨슈머는 자식 JVM이 같은 SQLite 파일에서 돈다. 공개 API({@code Smq}, {@code Queue})만 쓰고
- * 실제 시계로 돈다.
+ * 시드 하나의 실행: 미리 채우기, 부하 구간, 소진, 검증. 이 JVM의 스레드 여럿이 돈다(smq는 한 JVM만 연다, ADR-0012). 공개 API({@code Smq},
+ * {@code Queue})만 쓰고 실제 시계로 돈다.
  *
  * <p>시각 규약: 발행과 정산은 호출 직전 벽시계를, 꺼내기는 호출이 돌아온 직후 벽시계를 기록한다. 검사기의 부등식이 모두 거짓 위반을 내지
  * 않는 쪽으로 기울도록 하는 것이다(발행·정산 시각은 실제보다 이르고, 꺼낸 시각은 실제보다 늦다).
@@ -51,10 +50,7 @@ final class RandomRun {
     private static final long SAMPLE_INTERVAL_MS = 500;
     /** 소진 상한의 기본 몫. 리스 기한과 NACK 지연(최대 2초)은 따로 더한다. */
     private static final long DRAIN_BASE_MS = 30_000;
-    /** 부모가 자식을 띄우고 자식이 SQLite를 열 때까지 주는 여유. 부하 구간은 이만큼 뒤에 시작한다. */
-    private static final long CHILD_START_MARGIN_MS = 4_000;
 
-    private static final long CHILD_KILL_GRACE_MS = 60_000;
     private static final long DEPTH_REFRESH_NANOS = 100_000_000L;
     /** 깊은 큐 모드에서 깊이가 목표 이하일 때 컨슈머가 쉬는 시간. */
     private static final long STANDING_IDLE_MS = 20;
@@ -73,10 +69,9 @@ final class RandomRun {
     private final Script script;
     private final Checker checker;
     private final long drainLimitMillis;
-    /** 이 JVM의 프로세스 번호. 단일 프로세스는 0, 다중 프로세스의 부모는 자식 번호(0..n-1) 다음인 n이다. */
-    private final int process;
+    /** 기록의 태그와 청크 번호에 들어가는 프로세스 번호. smq는 한 JVM만 열 수 있으므로(ADR-0012) 항상 0이다. 기록 형식 호환을 위해 남겼다. */
+    private static final int PROCESS = 0;
 
-    private final ChildSpawner spawner;
     private volatile Path runDir;
 
     /**
@@ -109,15 +104,12 @@ final class RandomRun {
     private volatile Path walFile;
     private volatile long walMax = -1;
     private volatile JvmMetricsSampler.Summary jvmSummary;
-    private final List<JvmMetricsSampler.Summary> childSummaries = new ArrayList<>();
 
-    RandomRun(RunParams params, Checker checker, long drainLimitMillis, int process, ChildSpawner spawner) {
+    RandomRun(RunParams params, Checker checker, long drainLimitMillis) {
         this.params = params;
         this.script = new Script(params);
         this.checker = checker;
         this.drainLimitMillis = drainLimitMillis;
-        this.process = process;
-        this.spawner = spawner;
     }
 
     private record Queues(Queue target, Queue deadLetter) {}
@@ -130,12 +122,7 @@ final class RandomRun {
 
     /** {@code dir}에 SQLite 파일을 만들고 돈다. 예외는 {@link Verdict#ERROR}로 돌려준다. */
     static RunResult execute(RunParams params, Path dir, Checker checker) {
-        return execute(params, dir, checker, ChildSpawner.jvm());
-    }
-
-    static RunResult execute(RunParams params, Path dir, Checker checker, ChildSpawner spawner) {
-        RandomRun run = new RandomRun(
-                params, checker, drainLimit(params), params.processes() > 1 ? params.processes() : 0, spawner);
+        RandomRun run = new RandomRun(params, checker, drainLimit(params));
         try {
             return run.runIn(dir);
         } catch (Throwable t) {
@@ -143,24 +130,9 @@ final class RandomRun {
         }
     }
 
-    /** 예외를 발생 위치가 붙은 {@link Verdict#ERROR} 결과로 바꾼다. 자식 JVM의 실패는 그 자식이 남긴 보고를 우선한다. */
+    /** 예외를 발생 위치가 붙은 {@link Verdict#ERROR} 결과로 바꾼다. */
     private RunResult errorResult(Throwable t) {
-        ErrorDetail detail;
-        if (t instanceof ChildFailure f) {
-            ErrorDetail reported = ChildReport.read(runDir, f.process()).orElse(null);
-            String location = ErrorDetail.child(f.process());
-            detail = reported != null
-                    ? new ErrorDetail(
-                            location,
-                            reported.exceptionClass(),
-                            reported.message(),
-                            reported.stackTrace(),
-                            f.exitCode(),
-                            f.stderrTail())
-                    : ErrorDetail.of(location, f.getCause() != null ? f.getCause() : f, f.exitCode(), f.stderrTail());
-        } else {
-            detail = ErrorDetail.of(ErrorDetail.HARNESS, t, null, null);
-        }
+        ErrorDetail detail = ErrorDetail.of(ErrorDetail.HARNESS, t, null, null);
         return RunResult.error(params, detail, String.valueOf(t), walMax < 0 ? null : walMax);
     }
 
@@ -171,22 +143,13 @@ final class RandomRun {
         walFile = dir.resolve("smq.db-wal");
         try {
             if (params.isSoak()) {
-                spool = new RecordSpool(dir, process);
+                spool = new RecordSpool(dir, PROCESS);
             }
             try (JvmMetricsSampler sampler = JvmMetricsSampler.start(dir);
                     Smq smq = open(db)) {
                 Queues q = declare(smq);
                 prefill(q.target());
-                if (params.processes() > 1) {
-                    runChildren(q, db, dir);
-                } else {
-                    runLoad(
-                            q,
-                            System.currentTimeMillis(),
-                            params.producers().getFirst(),
-                            params.consumers().getFirst(),
-                            true);
-                }
+                runLoad(q, System.currentTimeMillis(), params.producers(), params.consumers());
                 drained = drain(q.target(), q.deadLetter());
                 jvmSummary = sampler.summary();
             }
@@ -204,7 +167,7 @@ final class RandomRun {
                 .open();
     }
 
-    /** 대상 큐와 dead letter 큐를 선언한다. 여러 프로세스가 같은 옵션으로 불러도 같은 큐를 얻는다. */
+    /** 대상 큐와 dead letter 큐를 선언한다. */
     private Queues declare(Smq smq) {
         Queue dlq = smq.declare(DEAD_LETTER, QueueOptions.defaults());
         QueueOptions options = QueueOptions.defaults()
@@ -214,78 +177,6 @@ final class RandomRun {
             options = options.maxDeliveries(params.maxDeliveries(), DEAD_LETTER);
         }
         return new Queues(smq.declare(TARGET, options), dlq);
-    }
-
-    /** 자식 프로세스를 띄워 부하 구간 동안 {@code counts()}만 표본하고, 끝나면 모든 자식의 기록을 합친다. */
-    private void runChildren(Queues q, Path db, Path dir) throws Exception {
-        long startAt = System.currentTimeMillis() + CHILD_START_MARGIN_MS;
-        List<ChildSpawner.Running> running = new ArrayList<>();
-        try {
-            for (int i = 0; i < params.processes(); i++) {
-                running.add(spawner.spawn(new ChildSpawner.Spec(params, i, db, dir, startAt)));
-            }
-            runLoad(q, startAt, 0, 0, true);
-            long timeout = loadEndMillis + CHILD_KILL_GRACE_MS - System.currentTimeMillis();
-            for (int i = 0; i < running.size(); i++) {
-                awaitChild(running.get(i), i, timeout);
-            }
-        } finally {
-            // 모두에게 먼저 알리고 기다린다. 하나씩 알리고 기다리면 늦게 끝나는 자식 뒤의 자식은 그동안 부하를 계속 돈다.
-            running.forEach(ChildSpawner.Running::requestStop);
-            running.forEach(ChildSpawner.Running::destroy);
-        }
-        for (int i = 0; i < params.processes(); i++) {
-            ChildOutput o = ChildOutput.read(dir, i);
-            published.addAll(o.published());
-            deliveries.addAll(o.deliveries());
-            loadAckedMessages.addAndGet(o.loadAckedMessages());
-            loadAckedBytes.addAndGet(o.loadAckedBytes());
-            childSummaries.add(JvmMetricsSampler.summarize(dir.resolve("p" + i + "-jvm-metrics.jsonl")));
-        }
-    }
-
-    /** 자식 하나를 기다린다. 실패는 어느 자식인지 붙여 {@link ChildFailure}로 올린다. */
-    private static void awaitChild(ChildSpawner.Running r, int process, long timeoutMs) throws Exception {
-        try {
-            r.await(timeoutMs);
-        } catch (ChildFailure f) {
-            throw f;
-        } catch (Exception e) {
-            throw new ChildFailure(process, null, "", e);
-        }
-    }
-
-    /**
-     * 다중 프로세스의 자식 쪽. 부모가 선언해 둔 큐에 붙어 {@code startAt}부터 부하 구간 동안 이 프로세스 몫의 스레드를 돌리고,
-     * 끝나면 기록을 {@code outDir}에 쓴다.
-     */
-    static void runChild(RunParams params, int process, Path db, Path outDir, long startAt) throws Exception {
-        ChildReport.guard(outDir, process, () -> {
-            RandomRun run = new RandomRun(params, null, 0, process, null);
-            if (params.isSoak()) {
-                run.spool = new RecordSpool(outDir, process);
-            }
-            try (JvmMetricsSampler sampler = JvmMetricsSampler.startChild(outDir, process);
-                    Smq smq = run.open(db)) {
-                run.runLoad(
-                        run.declare(smq),
-                        startAt,
-                        params.producers().get(process),
-                        params.consumers().get(process),
-                        false);
-                run.closeSpool();
-            } finally {
-                run.closeSpoolQuietly();
-            }
-            ChildOutput.write(
-                    outDir,
-                    process,
-                    new ChildOutput(
-                            run.loadAckedMessages.get(),
-                            run.loadAckedBytes.get(),
-                            List.copyOf(run.published),
-                            List.copyOf(run.deliveries)));
-        });
     }
 
     // ---- 미리 채우기
@@ -304,7 +195,7 @@ final class RandomRun {
         List<Published> records = new ArrayList<>(n);
         long bytes = 0;
         for (int i = 0; i < n; i++) {
-            Tag tag = new Tag(params.seed(), process, first + i);
+            Tag tag = new Tag(params.seed(), PROCESS, first + i);
             Script.Planned p = script.message(tag);
             batch.add(p.message());
             records.add(new Published(tag, p.content(), 0, p.delayMillis()));
@@ -324,11 +215,8 @@ final class RandomRun {
 
     /**
      * {@code startAt}부터 {@code loadMillis} 동안 부하를 건다. 스레드는 {@code startAt}까지 기다렸다가 함께 시작한다.
-     *
-     * @param sampling 부하 중 {@code counts()}를 표본한다(단일 프로세스와 다중 프로세스의 부모)
      */
-    private void runLoad(Queues q, long startAt, int producers, int consumers, boolean sampling)
-            throws InterruptedException {
+    private void runLoad(Queues q, long startAt, int producers, int consumers) throws InterruptedException {
         Queue target = q.target();
         Queue dlq = q.deadLetter();
         loadStartMillis = startAt;
@@ -350,9 +238,7 @@ final class RandomRun {
         threads.forEach(Thread::start);
         try {
             while (System.currentTimeMillis() < loadEndMillis && failure.get() == null) {
-                if (sampling) {
-                    sample(target, dlq, false);
-                }
+                sample(target, dlq, false);
                 sleepMillis(Math.min(SAMPLE_INTERVAL_MS, Math.max(1, loadEndMillis - System.currentTimeMillis())));
             }
         } finally {
@@ -413,13 +299,12 @@ final class RandomRun {
     }
 
     /**
-     * 쌓인 양이 선을 넘었는지. 무작위 모드의 단일 프로세스는 자기가 센 발행과 ACK의 차이로 보고, 다중 프로세스는 ACK가 다른
-     * 프로세스에서 일어나 이 프로세스의 수로는 알 수 없으므로 큐의 {@code counts()}를 잠깐씩 캐시해 보며 메시지 수로만 제한한다.
-     * 고정 속도 모드는 단일 프로세스도 {@code counts()}로 본다. REJECT나 dead letter로 빠진 메시지는 ACK로 세지 않아 발행과 ACK의
+     * 쌓인 양이 선을 넘었는지. 무작위 모드는 자기가 센 발행과 ACK의 차이로 보고, 고정 속도 모드는 큐의 {@code counts()}를 잠깐씩
+     * 캐시해 본다. REJECT나 dead letter로 빠진 메시지는 ACK로 세지 않아 발행과 ACK의
      * 차이가 실제 깊이보다 계속 커지므로, 오래 도는 실행에서 프로듀서가 헛되이 멈추고 판정의 포화 기준(큐 깊이)과도 어긋난다.
      */
     private boolean backlogFull(Queue target) {
-        if (params.processes() == 1 && !params.isSoak()) {
+        if (!params.isSoak()) {
             return publishedMessages.get() - ackedMessages.get() >= prefillMessages + BACKLOG_MESSAGES
                     || publishedBytes.get() - ackedBytes.get() >= prefillBytes + BACKLOG_BYTES;
         }
@@ -582,9 +467,9 @@ final class RandomRun {
         return true;
     }
 
-    /** 모든 프로세스에서 유일한 청크 번호. 위쪽 비트가 프로세스 번호다. */
+    /** 청크 번호. 위쪽 비트는 기록 형식 호환을 위해 남긴 프로세스 번호 자리이고 항상 {@code PROCESS}(0)다. */
     private long nextChunkId() {
-        return ((long) process << 40) | nextChunk.incrementAndGet();
+        return ((long) PROCESS << 40) | nextChunk.incrementAndGet();
     }
 
     private void countAck(int bytes) {
@@ -738,7 +623,7 @@ final class RandomRun {
                 walMax < 0 ? null : walMax,
                 jvmSummary,
                 soak,
-                List.copyOf(childSummaries));
+                List.of());
     }
 
     /** 소진 실패와 불변식 위반이 먼저고, 그 다음이 백로그 증가다. 달성률은 판정에 쓰지 않는다. */
@@ -775,7 +660,7 @@ final class RandomRun {
                 walMax < 0 ? null : walMax,
                 jvmSummary,
                 soak,
-                List.copyOf(childSummaries));
+                List.of());
     }
 
     private long countPublishedInLoad(List<Published> pub) {
@@ -799,7 +684,7 @@ final class RandomRun {
                 backlogCapMessages(params));
     }
 
-    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 {@code counts()} 기준(다중 프로세스와 고정 속도 모드)과 같다. */
+    /** 프로듀서가 쉬기 시작하는 큐 깊이(메시지 수). {@link #backlogFull}의 {@code counts()} 기준(고정 속도 모드)과 같다. */
     static long backlogCapMessages(RunParams params) {
         // 미리 채운 깊이가 크면 그 절반까지는 정상 변동으로 본다(깊은 큐가 유지되는 상태를 포화로 오판하지 않게).
         long headroom = Math.max(BACKLOG_MESSAGES, params.prefillDepth() / 2);

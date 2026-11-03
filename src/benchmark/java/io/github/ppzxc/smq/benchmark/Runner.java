@@ -4,13 +4,12 @@ import io.github.ppzxc.smq.Smq;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-/** 부모 JVM 쪽 러너. 조건마다 새 SQLite 파일을 만들고 자식 JVM들을 띄워 같은 파일에서 같은 구간을 재게 한다. */
+/** 부모 JVM 쪽 러너. 조건마다 새 SQLite 파일을 만들고 자식 JVM 하나를 띄워 잰다. */
 final class Runner {
 
     /** 자식 JVM이 뜨고 SQLite를 여는 데 주는 여유. */
@@ -37,36 +36,28 @@ final class Runner {
             }
             long margin = STARTUP_MARGIN_MS + (spec.storage() == Storage.MEMORY ? spec.depth() / 100 : 0);
             long startAt = System.currentTimeMillis() + margin + spec.warmupMs();
-            List<Role> roles = roles(spec);
-            List<ChildJvm> children = new ArrayList<>();
-            for (int i = 0; i < roles.size(); i++) children.add(launch(spec, roles.get(i), db, startAt, dir, i));
-            List<ChildResult> results = new ArrayList<>();
+            ChildJvm child = launch(spec, role(spec), db, startAt, dir);
             long timeout =
                     startAt + spec.durationMs() + Workload.S3_DRAIN_MS + KILL_GRACE_MS - System.currentTimeMillis();
-            for (ChildJvm c : children) {
-                c.await(timeout);
-                results.add(ChildResult.fromJson(c.lastJsonLine()));
-            }
-            return Aggregator.aggregate(spec, results);
+            child.await(timeout);
+            return Aggregator.aggregate(spec, List.of(ChildResult.fromJson(child.lastJsonLine())));
         } finally {
             deleteTree(dir);
         }
     }
 
-    static List<Role> roles(RunSpec spec) {
+    static Role role(RunSpec spec) {
         return switch (spec.scenario()) {
-            case S1, S2 -> java.util.Collections.nCopies(spec.processes(), Role.WORKER);
-            case S3 ->
-                spec.topology() == Topology.CROSS_PROCESS ? List.of(Role.PRODUCER, Role.CONSUMER) : List.of(Role.BOTH);
+            case S1, S2 -> Role.WORKER;
+            case S3 -> Role.BOTH;
         };
     }
 
-    private static ChildJvm launch(RunSpec spec, Role role, Path db, long startAt, Path dir, int index)
-            throws IOException {
+    private static ChildJvm launch(RunSpec spec, Role role, Path db, long startAt, Path dir) throws IOException {
         return ChildJvm.start(
                 ChildMain.class.getName(),
                 List.of(spec.toArg(), role.name(), db.toString(), String.valueOf(startAt)),
-                dir.resolve("child-" + index + ".out"),
+                dir.resolve("child.out"),
                 role.name());
     }
 

@@ -14,7 +14,7 @@ record Delivery(
     /**
      * 꺼내기 한 번의 정보. 같은 청크의 전달은 같은 {@code chunk}를 가진다.
      *
-     * @param chunk 모든 프로세스에서 유일한 청크 번호
+     * @param chunk 실행 안에서 유일한 청크 번호
      * @param position 청크 안에서의 위치(0부터)
      * @param atMillis 꺼낸 시각(epoch ms)
      * @param leaseDeadlineMillis 연장을 모두 반영한 최종 리스 기한(epoch ms)

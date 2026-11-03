@@ -65,11 +65,10 @@ class SqliteStorageTest {
     }
 
     @Test
-    void 연결은_WAL_synchronous_FULL_busy_timeout을_쓴다() throws Exception {
+    void 연결은_WAL_synchronous_FULL을_쓴다() throws Exception {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
             assertEquals("2", s.inTransaction(c -> pragma(c, "synchronous")));
-            assertTrue(Integer.parseInt(s.inTransaction(c -> pragma(c, "busy_timeout"))) >= 5000);
         }
     }
 

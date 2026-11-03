@@ -44,7 +44,7 @@ class WorkloadSmokeTest {
     }
 
     @Test
-    void s3SameProcessCollectsLatencySamples() throws Exception {
+    void s3CollectsLatencySamples() throws Exception {
         ChildResult r = run(RunSpec.s3(Storage.MEMORY, Profile.P1, 600, 0), Role.BOTH);
         assertTrue(r.latenciesMicros().length > 0);
         for (long l : r.latenciesMicros()) assertTrue(l >= 0, "지연은 음수일 수 없다");

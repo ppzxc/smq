@@ -24,7 +24,7 @@ final class ChunkTable {
     private ChunkTable() {}
 
     static String render(Map<String, Double> results) {
-        StringBuilder sb = new StringBuilder("청크 1 대 묶음 (1프로세스, 빈 큐, msg/s)\n");
+        StringBuilder sb = new StringBuilder("청크 1 대 묶음 (빈 큐, msg/s)\n");
         sb.append(String.format("%-18s %-6s %10s %10s %8s%n", "조건", "크기", "청크 1", "묶음", "배수"));
         for (Row row : ROWS) {
             for (Pair p : PAIRS) {

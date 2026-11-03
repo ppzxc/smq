@@ -95,7 +95,9 @@ final class Script {
 
     private SplittableRandom rng(Tag tag, long a, long purpose) {
         long h = mix(params.seed() ^ 0x9E3779B97F4A7C15L);
-        h = mix(h ^ tag.process());
+        // 예전에는 프로세스 번호(항상 0)를 섞던 자리다. 같은 시드가 같은 매개변수와 같은 워크로드를 내야 하므로
+        // 값이 0일 때와 같은 결과를 내는 mix(h)로 남긴다. 지우면 모든 시드의 생성 워크로드가 달라진다.
+        h = mix(h);
         h = mix(h ^ tag.seq());
         h = mix(h ^ a);
         h = mix(h ^ purpose);

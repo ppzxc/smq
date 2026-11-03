@@ -49,8 +49,6 @@ class RandomRunTest {
         assertEquals("java.lang.IllegalArgumentException", d.exceptionClass());
         assertEquals("검사기가 터졌다", d.message());
         assertTrue(d.stackTrace().contains("\tat "));
-        assertNull(d.exitCode());
-        assertNull(d.stderrTail());
     }
 
     // ---- WAL 최대 크기
@@ -86,7 +84,6 @@ class RandomRunTest {
         assertEquals(200, r.soak().targetRate());
         // 속도 조절이 없으면 2초에 수천 건이라 비율이 크게 넘는다. 실제 시계라 아래쪽은 느린 환경을 봐서 넉넉히, 위쪽만 조인다.
         assertTrue(r.soak().achievedRatio() > 0.2 && r.soak().achievedRatio() < 1.5, "달성률: " + r.soak());
-        assertTrue(r.childMetrics().isEmpty(), "단일 프로세스에는 자식이 없다");
 
         RunResult plain = RandomRun.execute(
                 RunParams.fromSeed(5, Limits.smoke(300)), dir.resolve("plain"), InvariantChecker::check);

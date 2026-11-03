@@ -173,7 +173,7 @@ class RunParamsTest {
         assertEquals(1, p.minMessageBytes(), "0은 '하한 없음'(무작위 모드)이라는 뜻이라 쓰면 안 된다");
         Script script = new Script(p);
         for (long seq = 0; seq < 50; seq++) {
-            assertEquals(1, script.message(new Tag(7, 0, seq)).message().payload().length);
+            assertEquals(1, script.message(new Tag(7, seq)).message().payload().length);
         }
     }
 }

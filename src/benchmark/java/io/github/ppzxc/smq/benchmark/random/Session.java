@@ -166,9 +166,6 @@ final class Session {
         m.put("walMaxBytes", r.walMaxBytes());
         m.put("jvmMetrics", r.jvmMetrics() == null ? null : r.jvmMetrics().toMap());
         m.put("soak", r.soak() == null ? null : r.soak().toMap());
-        m.put(
-                "childMetrics",
-                r.childMetrics().stream().map(JvmMetricsSampler.Summary::toMap).toList());
         m.put("workDirFs", environment.get("workDirFs"));
         m.put("caveat", environment.get("caveat"));
         Files.createDirectories(jsonLines.getParent());
@@ -245,9 +242,6 @@ final class Session {
         if (r.soak() != null) {
             out.println(soakLine(r.soak()));
         }
-        for (int i = 0; i < r.childMetrics().size(); i++) {
-            out.println("자식 " + i + " 메트릭: " + r.childMetrics().get(i).toMap());
-        }
         List<Violation> vs = r.violations();
         out.println("어긴 불변식 " + vs.size() + "개:");
         for (int i = 0; i < Math.min(vs.size(), MAX_VIOLATIONS_PRINTED); i++) {
@@ -282,11 +276,11 @@ final class Session {
         deleteSpoolFiles(dir);
     }
 
-    /** 자식의 발행·전달 기록(jsonl)과 디스크에 쌓은 기록(bin). */
+    /** 발행·전달 기록(jsonl)과 디스크에 쌓은 기록(bin). */
     private static void deleteSpoolFiles(Path dir) throws IOException {
         try (Stream<Path> s = Files.list(dir)) {
             for (Path p : (Iterable<Path>) s.filter(
-                    f -> f.getFileName().toString().matches("p\\d+-(published|deliveries)\\.(jsonl|bin)"))::iterator) {
+                    f -> f.getFileName().toString().matches("(published|deliveries)\\.(jsonl|bin)"))::iterator) {
                 Files.delete(p);
             }
         }

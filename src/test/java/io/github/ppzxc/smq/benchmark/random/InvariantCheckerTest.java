@@ -19,7 +19,7 @@ class InvariantCheckerTest {
     private static final Config SINGLE = new Config(true, 0);
 
     private static Tag tag(long n) {
-        return new Tag(7, 0, n);
+        return new Tag(7, n);
     }
 
     private static Content content(long n) {

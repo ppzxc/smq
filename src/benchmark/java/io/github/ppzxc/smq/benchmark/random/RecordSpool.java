@@ -23,11 +23,11 @@ final class RecordSpool implements AutoCloseable {
     private final DataOutputStream published;
     private final DataOutputStream deliveries;
 
-    RecordSpool(Path dir, int process) throws IOException {
-        this.published = open(publishedFile(dir, process));
+    RecordSpool(Path dir) throws IOException {
+        this.published = open(publishedFile(dir));
         DataOutputStream second;
         try {
-            second = open(deliveriesFile(dir, process));
+            second = open(deliveriesFile(dir));
         } catch (IOException | RuntimeException e) {
             published.close();
             throw e;
@@ -35,27 +35,27 @@ final class RecordSpool implements AutoCloseable {
         this.deliveries = second;
     }
 
-    static Path publishedFile(Path dir, int process) {
-        return dir.resolve("p" + process + "-published.bin");
+    static Path publishedFile(Path dir) {
+        return dir.resolve("published.bin");
     }
 
-    static Path deliveriesFile(Path dir, int process) {
-        return dir.resolve("p" + process + "-deliveries.bin");
+    static Path deliveriesFile(Path dir) {
+        return dir.resolve("deliveries.bin");
     }
 
-    /** {@code dir}의 모든 프로세스의 발행 기록 파일. */
+    /** {@code dir}의 발행 기록 파일. */
     static List<Path> publishedFiles(Path dir) throws IOException {
         return files(dir, "published");
     }
 
-    /** {@code dir}의 모든 프로세스의 전달 기록 파일. */
+    /** {@code dir}의 전달 기록 파일. */
     static List<Path> deliveriesFiles(Path dir) throws IOException {
         return files(dir, "deliveries");
     }
 
     private static List<Path> files(Path dir, String kind) throws IOException {
         try (Stream<Path> s = Files.list(dir)) {
-            return s.filter(f -> f.getFileName().toString().matches("p\\d+-" + kind + "\\.bin"))
+            return s.filter(f -> f.getFileName().toString().equals(kind + ".bin"))
                     .sorted()
                     .toList();
         }

@@ -70,8 +70,6 @@ final class RandomRun {
     private final Checker checker;
     private final long drainLimitMillis;
     /** 기록의 태그와 청크 번호에 들어가는 프로세스 번호. smq는 한 JVM만 열 수 있으므로(ADR-0012) 항상 0이다. 기록 형식 호환을 위해 남겼다. */
-    private static final int PROCESS = 0;
-
     private volatile Path runDir;
 
     /**
@@ -132,7 +130,7 @@ final class RandomRun {
 
     /** 예외를 발생 위치가 붙은 {@link Verdict#ERROR} 결과로 바꾼다. */
     private RunResult errorResult(Throwable t) {
-        ErrorDetail detail = ErrorDetail.of(ErrorDetail.HARNESS, t, null, null);
+        ErrorDetail detail = ErrorDetail.of(ErrorDetail.HARNESS, t);
         return RunResult.error(params, detail, String.valueOf(t), walMax < 0 ? null : walMax);
     }
 
@@ -143,7 +141,7 @@ final class RandomRun {
         walFile = dir.resolve("smq.db-wal");
         try {
             if (params.isSoak()) {
-                spool = new RecordSpool(dir, PROCESS);
+                spool = new RecordSpool(dir);
             }
             try (JvmMetricsSampler sampler = JvmMetricsSampler.start(dir);
                     Smq smq = open(db)) {
@@ -195,7 +193,7 @@ final class RandomRun {
         List<Published> records = new ArrayList<>(n);
         long bytes = 0;
         for (int i = 0; i < n; i++) {
-            Tag tag = new Tag(params.seed(), PROCESS, first + i);
+            Tag tag = new Tag(params.seed(), first + i);
             Script.Planned p = script.message(tag);
             batch.add(p.message());
             records.add(new Published(tag, p.content(), 0, p.delayMillis()));
@@ -467,9 +465,8 @@ final class RandomRun {
         return true;
     }
 
-    /** 청크 번호. 위쪽 비트는 기록 형식 호환을 위해 남긴 프로세스 번호 자리이고 항상 {@code PROCESS}(0)다. */
     private long nextChunkId() {
-        return ((long) PROCESS << 40) | nextChunk.incrementAndGet();
+        return nextChunk.incrementAndGet();
     }
 
     private void countAck(int bytes) {
@@ -542,7 +539,7 @@ final class RandomRun {
         try {
             return Tag.parse(m.headers().get(Script.TAG_HEADER));
         } catch (RuntimeException e) {
-            return new Tag(0, -1, m.id().value());
+            return new Tag(0, -1 - m.id().value());
         }
     }
 
@@ -622,8 +619,7 @@ final class RandomRun {
                 null,
                 walMax < 0 ? null : walMax,
                 jvmSummary,
-                soak,
-                List.of());
+                soak);
     }
 
     /** 소진 실패와 불변식 위반이 먼저고, 그 다음이 백로그 증가다. 달성률은 판정에 쓰지 않는다. */
@@ -659,8 +655,7 @@ final class RandomRun {
                 null,
                 walMax < 0 ? null : walMax,
                 jvmSummary,
-                soak,
-                List.of());
+                soak);
     }
 
     private long countPublishedInLoad(List<Published> pub) {

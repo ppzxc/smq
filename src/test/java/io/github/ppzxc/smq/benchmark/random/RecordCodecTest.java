@@ -18,13 +18,13 @@ class RecordCodecTest {
     private static final long BIG = Long.MAX_VALUE - 1;
 
     private static Published published() {
-        return new Published(new Tag(-7, 2, 41), new Content(BIG, Map.of("k", "한글")), 1_700_000_000_123L, 250);
+        return new Published(new Tag(-7, 41), new Content(BIG, Map.of("k", "한글")), 1_700_000_000_123L, 250);
     }
 
     private static Delivery delivery() {
         return new Delivery(
                 QueueKind.DEAD_LETTER,
-                new Tag(-7, 2, 41),
+                new Tag(-7, 41),
                 BIG - 1,
                 3,
                 new Content(-BIG, Map.of("smq-reason", "rejected")),
@@ -56,7 +56,7 @@ class RecordCodecTest {
     @Test
     void 정산하지_않은_전달도_그대로_돌아온다() throws Exception {
         Delivery d = new Delivery(
-                QueueKind.TARGET, new Tag(1, 0, 1), 9, 1, new Content(0, Map.of()), new Pull(1, 0, 5, 6), Settle.NONE);
+                QueueKind.TARGET, new Tag(1, 1), 9, 1, new Content(0, Map.of()), new Pull(1, 0, 5, 6), Settle.NONE);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         RecordCodec.write(new DataOutputStream(bytes), d);
         assertEquals(d, RecordCodec.readDelivery(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));

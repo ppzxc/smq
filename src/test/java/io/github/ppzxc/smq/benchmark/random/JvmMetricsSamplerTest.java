@@ -36,7 +36,7 @@ class JvmMetricsSamplerTest {
 
     @Test
     void 메트릭_파일에서_요약을_다시_만든다() throws IOException {
-        Path f = dir.resolve("p0-jvm-metrics.jsonl");
+        Path f = dir.resolve("jvm-metrics.jsonl");
         Files.writeString(f, """
                 {"heapUsedMB":10,"nonHeapUsedMB":5,"gcCount":1,"gcTimeMs":10,"liveThreads":4,"openFds":8,"maxFds":100,"processCpuLoad":0.2}
                 {"heapUsedMB":30,"nonHeapUsedMB":7,"gcCount":3,"gcTimeMs":40,"liveThreads":6,"openFds":12,"maxFds":100,"processCpuLoad":0.6}

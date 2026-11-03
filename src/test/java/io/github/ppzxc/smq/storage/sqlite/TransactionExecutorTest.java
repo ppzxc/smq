@@ -77,8 +77,7 @@ class TransactionExecutorTest {
     @Test
     void WAL이_한도를_넘으면_되감겨_WAL이_계속_자라지_않는다() throws Exception {
         try (Statement s = connection.createStatement()) {
-            s.execute("PRAGMA journal_mode = WAL");
-            s.execute("PRAGMA wal_autocheckpoint = 0");
+            TransactionExecutor.configureWal(s);
         }
         TransactionExecutor executor = executor();
         executor.execute(c -> {
@@ -110,9 +109,7 @@ class TransactionExecutorTest {
     /** 저장소가 열 때와 같은 WAL 설정으로 바꾸고 BLOB 테이블을 만든다. */
     private TransactionExecutor walExecutor() throws SQLException {
         try (Statement s = connection.createStatement()) {
-            s.execute("PRAGMA wal_autocheckpoint = 0");
-            s.execute("PRAGMA journal_size_limit = " + TransactionExecutor.WAL_FILE_KEEP_BYTES);
-            s.execute("PRAGMA journal_mode = WAL");
+            TransactionExecutor.configureWal(s);
             s.execute("PRAGMA synchronous = NORMAL");
             s.execute("CREATE TABLE big (b BLOB)");
         }
@@ -121,10 +118,14 @@ class TransactionExecutorTest {
 
     /** {@link #BLOB_BYTES} 크기 BLOB 하나를 넣는 커밋을 {@code commits}번 한다. */
     private static void commitBlobs(TransactionExecutor executor, int commits) {
+        commitBlobs(executor, commits, BLOB_BYTES);
+    }
+
+    private static void commitBlobs(TransactionExecutor executor, int commits, int blobBytes) {
         for (int i = 0; i < commits; i++) {
             executor.execute(c -> {
                 try (Statement s = c.createStatement()) {
-                    s.execute("INSERT INTO big VALUES (zeroblob(" + BLOB_BYTES + "))");
+                    s.execute("INSERT INTO big VALUES (zeroblob(" + blobBytes + "))");
                 }
                 return null;
             });
@@ -147,19 +148,32 @@ class TransactionExecutorTest {
 
         long size = walFileSize();
         assertTrue(size >= 5 * MB, "WAL 파일이 " + size + "바이트다. 5MB를 썼으니 그보다 커야 한다. 한도 아래에서 되감았다");
-        assertTrue(size < 8 * MB, "WAL 파일이 " + size + "바이트다. 한도 아래까지만 쓰려 했다");
+        assertTrue(size < TransactionExecutor.CHECKPOINT_WAL_BYTES, "WAL 파일이 " + size + "바이트다. 한도 아래까지만 쓰려 했다");
     }
 
-    /** 한도를 한참 넘게 써도 되감은 뒤의 쓰기는 파일 앞에서 다시 시작하므로 파일은 상한(12MB)을 넘지 않는다(ADR-0010). */
+    /**
+     * 한도를 한참 넘게 써도 WAL 파일은 한도에서 크게 벗어나지 않는다(ADR-0010). 되감은 직후 크기를 기억하므로 되감을 때마다 파일은 확인 주기
+     * 동안 쓴 양 이하로 조금씩 늘 수 있다. 그래서 상한은 "한도 + 되감기 횟수 × 확인 주기 동안 쓴 양"이다. 한도를 넘고도 늦게 되감거나 되감은
+     * 직후 크기를 잘못 기억하면 이보다 커진다. 커밋이 작아야 이 여유가 한도보다 한참 작다. 커밋 하나의 증가량은 측정하므로 페이지 크기나 레코드
+     * 형식에 기대지 않는다.
+     */
     @Test
-    void 한도를_한참_넘게_써도_WAL_파일이_상한을_넘지_않는다() throws Exception {
+    void 한도를_한참_넘게_써도_WAL_파일이_한도와_확인_주기_분량을_넘지_않는다() throws Exception {
+        int blobBytes = 16 * 1024;
         TransactionExecutor executor = walExecutor();
+        commitBlobs(executor, 1, blobBytes);
+        long afterOne = walFileSize();
+        commitBlobs(executor, 1, blobBytes);
+        long perCommit = walFileSize() - afterOne;
+        assertTrue(perCommit >= blobBytes, "커밋 하나가 WAL을 " + perCommit + "바이트 늘렸다");
+        long limit = TransactionExecutor.CHECKPOINT_WAL_BYTES;
+        long writeBytes = 3 * limit;
+        long rewinds = writeBytes / limit + 1;
+        long bound = limit + rewinds * TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS * perCommit;
 
-        commitBlobs(executor, 640); // 40MB
+        commitBlobs(executor, (int) (writeBytes / perCommit), blobBytes);
 
         long size = walFileSize();
-        assertTrue(
-                size <= TransactionExecutor.WAL_FILE_KEEP_BYTES,
-                "WAL 파일이 " + size + "바이트다. 40MB를 썼지만 상한 12MB를 넘으면 안 된다. 되감지 않았다");
+        assertTrue(size <= bound, "WAL 파일이 " + size + "바이트다. 한도와 확인 주기 분량(" + bound + ")을 넘었다. 한도를 넘고도 늦게 되감았다");
     }
 }

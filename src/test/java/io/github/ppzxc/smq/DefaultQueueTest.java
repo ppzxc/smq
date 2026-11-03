@@ -11,6 +11,7 @@ import io.github.ppzxc.smq.storage.NewMessage;
 import io.github.ppzxc.smq.storage.PullResult;
 import io.github.ppzxc.smq.storage.Result;
 import io.github.ppzxc.smq.storage.Storage;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
@@ -48,6 +49,11 @@ class DefaultQueueTest {
             }
             PullResult next = script.poll();
             return next != null ? next : PullResult.empty();
+        }
+
+        @Override
+        public void snapshot(Path target) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

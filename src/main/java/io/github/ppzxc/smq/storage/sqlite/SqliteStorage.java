@@ -25,6 +25,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -609,6 +610,24 @@ public final class SqliteStorage implements Storage {
             }
             return new Extended(deadline, results);
         });
+    }
+
+    @Override
+    public void snapshot(Path target) {
+        try {
+            Path temp = Files.createTempFile(target.toAbsolutePath().getParent(), "smq-snapshot-", ".tmp");
+            executor.executeOutsideTransaction(() -> {
+                StatementCachingConnection.releaseStatements(executor.connection());
+                try (Statement s = executor.connection().createStatement()) {
+                    s.execute("VACUUM INTO '" + temp + "'");
+                    return Boolean.TRUE;
+                }
+            });
+            Files.createLink(target, temp);
+            Files.delete(temp);
+        } catch (IOException e) {
+            throw new SmqStorageException("cannot snapshot to " + target, e);
+        }
     }
 
     @Override

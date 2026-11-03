@@ -24,16 +24,34 @@ final class StatementCachingConnection {
 
     static Connection wrap(Connection connection) {
         Map<String, PreparedStatement> cache = new HashMap<>();
-        InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
-            case "prepareStatement" -> prepare(connection, cache, method, args);
-            case "close" -> {
-                closeAll(cache);
-                yield invoke(connection, method, args);
-            }
-            default -> invoke(connection, method, args);
-        };
+        InvocationHandler handler = new CacheHandler(connection, cache);
         return (Connection)
                 Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, handler);
+    }
+
+    /**
+     * 붙들어 둔 문장을 모두 해제한다. {@code executeUpdate}가 끝난 문장은 다시 실행하기 전까지 리셋되지 않아 SQLite가 "실행 중인
+     * 문장"으로 세므로, 그런 문장이 있으면 {@code VACUUM}이 거부된다. 해제한 문장은 다음에 쓸 때 다시 준비한다.
+     */
+    static void releaseStatements(Connection wrapped) {
+        if (Proxy.getInvocationHandler(wrapped) instanceof CacheHandler handler) {
+            closeAll(handler.cache);
+        }
+    }
+
+    private record CacheHandler(Connection connection, Map<String, PreparedStatement> cache)
+            implements InvocationHandler {
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            return switch (method.getName()) {
+                case "prepareStatement" -> prepare(connection, cache, method, args);
+                case "close" -> {
+                    closeAll(cache);
+                    yield StatementCachingConnection.invoke(connection, method, args);
+                }
+                default -> StatementCachingConnection.invoke(connection, method, args);
+            };
+        }
     }
 
     /** 캐시하는 것은 {@code prepareStatement(sql)}과 {@code prepareStatement(sql, keys)}뿐이다. 나머지 형태는 그대로 넘긴다. */

@@ -31,6 +31,9 @@ public interface Smq extends AutoCloseable {
     /** 큐를 메시지째 지운다. 지웠으면 true, 없었으면 false. */
     boolean delete(String name);
 
+    /** 실행 중인 저장소의 일관된 사본을 {@code target}에 만든다. */
+    void snapshot(Path target);
+
     @Override
     void close();
 

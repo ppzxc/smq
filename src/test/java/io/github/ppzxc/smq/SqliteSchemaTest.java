@@ -148,21 +148,6 @@ class SqliteSchemaTest {
         assertEquals(supported - 1, userVersion(db()));
     }
 
-    /** 자식 JVM의 진입점. 시작 신호 파일이 생길 때까지 기다렸다가 열고, 연 인스턴스로 큐 하나를 쓴다. */
-    public static final class OpenerMain {
-        public static void main(String[] args) throws Exception {
-            Path db = Path.of(args[0]);
-            Path go = Path.of(args[1]);
-            Files.createFile(Path.of(args[1] + ".ready." + args[2])); // 준비됐음을 부모에게 알린다.
-            while (!Files.exists(go)) {
-                Thread.sleep(1);
-            }
-            try (Smq smq = Smq.sqlite(db).open()) {
-                smq.declare("q", QueueOptions.defaults()).publish(msg(args[2]));
-            }
-        }
-    }
-
     /**
      * 꺼내기가 빈 결과를 한 번 받고 변경 힌트를 기다리는 자리에 멈출 때까지 기다린다. 고정 시간을 재지 않고
      * 스레드가 힌트의 {@code await}에 있는지를 본다. 그 자리는 한 번 꺼내 본 뒤에만 닿으므로, 이후의 변경은 대기 중에 일어난 것이다.

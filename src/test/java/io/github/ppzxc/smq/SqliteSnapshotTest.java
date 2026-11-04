@@ -248,4 +248,85 @@ class SqliteSnapshotTest {
             assertEquals(List.of("a"), payloads(c));
         }
     }
+
+    @Test
+    void 스냅샷_도중_다른_스레드가_close를_불러도_스냅샷은_완전한_파일로_끝나고_close는_그_뒤에_돌아온다() throws Exception {
+        int rows = 2_000;
+        byte[] big = new byte[16 * 1024];
+        Path target = dir.resolve("snap.db");
+        AtomicBoolean snapshotReturned = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Smq smq = open();
+        try {
+            List<OutgoingMessage> bulk = new ArrayList<>();
+            for (int i = 0; i < rows; i++) {
+                bulk.add(OutgoingMessage.of(big));
+            }
+            smq.declare("orders", QueueOptions.defaults()).publish(bulk);
+
+            Thread snapshotter = new Thread(() -> {
+                try {
+                    smq.snapshot(target);
+                    snapshotReturned.set(true);
+                } catch (Throwable t) {
+                    failure.set(t);
+                }
+            });
+            snapshotter.start();
+            // 임시 파일에 쓰기가 시작됐으면 스냅샷이 저장소의 lock을 쥔 채 도는 중이다.
+            long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
+            while (!snapshotInProgress()) {
+                assertFalse(Files.exists(target), "스냅샷이 close보다 먼저 끝나 경합을 만들지 못했다");
+                assertNull(failure.get());
+                assertTrue(System.nanoTime() < deadline, "스냅샷이 시작되지 않았다");
+                Thread.onSpinWait();
+            }
+
+            smq.close();
+            boolean returnedBeforeClose = snapshotReturned.get();
+            snapshotter.join();
+
+            assertNull(failure.get());
+            assertTrue(returnedBeforeClose, "close()가 스냅샷이 돌아오기 전에 돌아왔다");
+        } finally {
+            smq.close();
+        }
+
+        try (Connection c = external(target)) {
+            assertEquals("ok", scalar(c, "PRAGMA integrity_check"));
+            assertEquals(String.valueOf(rows), scalar(c, "SELECT count(*) FROM message"));
+        }
+        assertEquals(Set.of("smq.db", "smq.db.lock", "snap.db"), withoutWal(names(dir)));
+    }
+
+    private boolean snapshotInProgress() throws IOException {
+        try (Stream<Path> entries = Files.list(dir)) {
+            return entries.anyMatch(e -> {
+                String name = e.getFileName().toString();
+                try {
+                    return name.startsWith("smq-snapshot-") && Files.size(e) > 0;
+                } catch (IOException gone) {
+                    return false;
+                }
+            });
+        }
+    }
+
+    private static Set<String> withoutWal(Set<String> names) {
+        return names.stream().filter(n -> !n.endsWith("-wal")).collect(Collectors.toSet());
+    }
+
+    @Test
+    void 닫힌_뒤_스냅샷은_예외가_나고_대상_파일도_임시_파일도_남지_않는다() throws Exception {
+        Path target = dir.resolve("snap.db");
+        Smq smq = open();
+        smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
+        smq.close();
+        Set<String> before = names(dir);
+
+        assertThrows(Exception.class, () -> smq.snapshot(target));
+
+        assertFalse(Files.exists(target));
+        assertEquals(before, names(dir));
+    }
 }

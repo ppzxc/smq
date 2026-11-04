@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage.sqlite;
 import io.github.ppzxc.smq.SmqStorageException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -68,7 +69,7 @@ final class TransactionExecutor {
     private boolean walFileLocated;
     /** 마지막으로 되감은 직후의 WAL 파일 크기(최대 {@link #WAL_FILE_KEEP_BYTES}). 파일이 이보다 커져야 다시 되감는다. */
     private long walSizeAtRestart;
-    /** 체크포인트가 연속으로 실패한 횟수. 연속 실패 로그를 줄이려고 둔다. 로그용이며 재시도에는 쓰지 않는다. */
+    /** 체크포인트 확인 실패(되감기 실패, 크기 읽기 실패) 연속 횟수. 연속 실패 로그를 줄이려고 둔다. 로그용이며 재시도에는 쓰지 않는다. */
     private long consecutiveCheckpointFailures;
 
     private final WalSizeReader walSizeReader;
@@ -195,9 +196,12 @@ final class TransactionExecutor {
             } else {
                 try {
                     size = walSizeReader.size(walFile);
+                } catch (NoSuchFileException e) {
+                    // -wal이 아직 없거나 지워졌다. 오류가 아니라 크기 0(한도 아래)이다.
+                    size = 0;
                 } catch (IOException e) {
                     // 크기를 모르면 "한도 아래"로 볼 수 없다. 연속 실패 상태를 지우지 않고 다음 확인에 맡긴다.
-                    checkpointCheckFailed(
+                    checkpointFailed(
                             "sqlite WAL size could not be read, so the checkpoint check was skipped;"
                                     + " the next check will retry",
                             e);
@@ -209,6 +213,7 @@ final class TransactionExecutor {
                 return;
             }
             if (size <= walSizeAtRestart) {
+                consecutiveCheckpointFailures = 0;
                 return;
             }
             try (Statement s = connection.createStatement();
@@ -218,11 +223,11 @@ final class TransactionExecutor {
                     consecutiveCheckpointFailures = 0;
                     rememberSizeAfterRestart();
                 } else {
-                    checkpointFailed(null);
+                    checkpointFailed(CHECKPOINT_INCOMPLETE, null);
                 }
             }
         } catch (SQLException | RuntimeException e) {
-            checkpointFailed(e);
+            checkpointFailed(CHECKPOINT_INCOMPLETE, e);
         }
     }
 
@@ -239,16 +244,14 @@ final class TransactionExecutor {
         }
     }
 
-    /** 연속 실패 중 첫 번째와 {@link #CHECKPOINT_FAILURE_LOG_EVERY}번째마다 WARNING으로 남긴다. */
-    private void checkpointFailed(@Nullable Exception cause) {
-        checkpointCheckFailed("sqlite checkpoint did not complete after commit; the next check will retry", cause);
-    }
+    private static final String CHECKPOINT_INCOMPLETE =
+            "sqlite checkpoint did not complete after commit; the next check will retry";
 
     /**
-     * 확인이 끝까지 가지 못한 실패(체크포인트 실패, 크기 읽기 실패)를 센다. 둘은 메시지만 다르고 같은 연속 실패 횟수와 같은 간격
-     * 억제를 쓴다.
+     * 확인이 끝까지 가지 못한 실패(되감기 실패, 크기 읽기 실패)를 센다. 연속 실패 중 첫 번째와
+     * {@link #CHECKPOINT_FAILURE_LOG_EVERY}번째마다 WARNING으로 남긴다. 둘은 메시지만 다르다.
      */
-    private void checkpointCheckFailed(String what, @Nullable Exception cause) {
+    private void checkpointFailed(String what, @Nullable Exception cause) {
         long failures = ++consecutiveCheckpointFailures;
         if (failures != 1 && failures % CHECKPOINT_FAILURE_LOG_EVERY != 0) {
             return;

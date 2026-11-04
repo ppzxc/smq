@@ -2,12 +2,12 @@ package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,15 +35,16 @@ class SqliteSigkillTest {
         Path out = dir.resolve("child.out");
         Process child = startWriter(db, out);
         long deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos();
-        while (lineCount(out) < RECEIVED_BEFORE_KILL + 1) { // 첫 줄은 READY다.
+        LineCounter counter = new LineCounter(out);
+        while (counter.count() < RECEIVED_BEFORE_KILL + 1) { // 첫 줄은 READY다.
             assertTrue(child.isAlive(), "자식이 발행 중에 끝났다");
             assertTrue(System.nanoTime() < deadline, "자식이 제때 발행하지 못했다");
-            Thread.sleep(1);
+            Thread.sleep(5);
         }
         child.destroyForcibly();
         assertTrue(child.waitFor(30, TimeUnit.SECONDS));
         // 죽기 전에 쓴 id는 모두 publish가 돌아온 뒤에 찍힌 것이다. 잘린 마지막 줄도 한 건으로 센다.
-        long received = lineCount(out) - 1;
+        long received = new LineCounter(out).count() - 1;
         assertTrue(received >= RECEIVED_BEFORE_KILL);
 
         assertTrue(Files.exists(wal) && Files.size(wal) > 0, "죽은 뒤 복구할 -wal이 남아 있어야 이 테스트가 복구를 본다");
@@ -62,9 +63,36 @@ class SqliteSigkillTest {
         assertFalse(Files.exists(shm));
     }
 
-    private static long lineCount(Path file) throws Exception {
-        try (Stream<String> lines = Files.lines(file, StandardCharsets.UTF_8)) {
-            return lines.count();
+    /** 마지막으로 읽은 위치부터 이어서 줄 수를 센다. 개행 없이 잘린 마지막 줄도 한 줄로 센다. */
+    private static final class LineCounter {
+        private final Path file;
+        private long offset;
+        private long lines;
+        private boolean partial;
+
+        LineCounter(Path file) {
+            this.file = file;
+        }
+
+        long count() throws Exception {
+            try (SeekableByteChannel ch = Files.newByteChannel(file)) {
+                ch.position(offset);
+                ByteBuffer buf = ByteBuffer.allocate(8192);
+                int n;
+                while ((n = ch.read(buf)) > 0) {
+                    for (int i = 0; i < n; i++) {
+                        if (buf.get(i) == '\n') {
+                            lines++;
+                            partial = false;
+                        } else {
+                            partial = true;
+                        }
+                    }
+                    offset += n;
+                    buf.clear();
+                }
+            }
+            return lines + (partial ? 1 : 0);
         }
     }
 

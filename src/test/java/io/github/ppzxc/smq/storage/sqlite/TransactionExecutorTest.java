@@ -317,6 +317,30 @@ class TransactionExecutorTest {
         });
     }
 
+    /** -wal 파일이 없는 것(NoSuchFileException)은 오류가 아니라 크기 0이다. 경고도 실패 횟수 증가도 없다. */
+    @Test
+    void WAL_파일이_없으면_크기_0으로_보고_경고도_실패_횟수_증가도_없다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            AtomicBoolean missing = new AtomicBoolean(true);
+            TransactionExecutor ex = new TransactionExecutor(
+                    failingCheckpoint(connection, () -> new IllegalStateException("injected")), path -> {
+                        if (missing.get()) {
+                            throw new java.nio.file.NoSuchFileException(path.toString());
+                        }
+                        return Files.size(path);
+                    });
+            commitBlobs(ex, every * 3);
+            assertEquals(0, warnings.size(), "파일 없음은 경고가 아니다");
+            missing.set(false);
+            commitBlobs(ex, 1, (int) (9 * MB));
+            commitBlobs(ex, every - 1); // 체크포인트 실패. 횟수가 늘었다면 첫 실패가 아니라 로그가 없다.
+            assertEquals(1, warnings.size(), "파일 없음이 횟수를 올리지 않았으므로 첫 실패로 WARNING");
+        });
+    }
+
     /** 파일 없는 데이터베이스(WAL 없음)에서는 WAL 위치를 한 번만 확인한다. */
     @Test
     void 파일_없는_데이터베이스에서는_WAL_위치를_한_번만_확인한다() throws Exception {

@@ -164,6 +164,7 @@ class SqliteStorageTest {
             assertFalse(Files.exists(shm), "다시 열어도 -shm이 생기면 안 된다");
             String expected = durability == Durability.POWER_LOSS ? "2" : "1";
             assertEquals(expected, s.inTransaction(c -> pragma(c, "synchronous")));
+            assertEquals("exclusive", s.inTransaction(c -> pragma(c, "locking_mode")));
         }
     }
 

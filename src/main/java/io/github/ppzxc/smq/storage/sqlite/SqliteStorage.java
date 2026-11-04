@@ -140,7 +140,7 @@ public final class SqliteStorage implements Storage {
     }
 
     /**
-     * 연결을 열고 연결 설정을 건다. `open`이 쓰고, 저장소 내부 테스트 픽스처는 이 함수를 거쳐 실제 열기 경로와 같은 설정을 쓰게 한다(#152 T4).
+     * 연결을 열고 연결 설정을 건다. 설정 순서를 이 함수 하나에 모은다.
      *
      * <p>설정에는 {@code busy_timeout}만 넣고, {@code locking_mode}와 {@code synchronous}는 연결 직후 이 순서로 직접
      * 실행한다. 기다리지 않는다: 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고, 난다면

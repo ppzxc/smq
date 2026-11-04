@@ -136,7 +136,7 @@ SKIP  regression sqlite/S2/P1/POWER_LOSS/empty:msgPerSec  [기준선에 없다]
 
 매개변수는 시드에서 정해진다(이슈 #86의 표): 메시지 크기 0~64KB(로그 균등), 발행 배치와 청크 크기 1~500, 프로듀서·컨슈머 스레드 각 1~4, 내구성 수준, 미리 채운 깊이(0 또는 1천~10만, 데이터 256MB 추정 상한), 정산 비율(ACK 과반), 처리 시간(0~리스 기한의 1.5배, 길면 연장), 리스 기한 200ms~10s, 발행 지연·NACK 지연(비율 0~30%, 0~2s), 최대 전달 횟수(없음 또는 1~5), 단일 활성 컨슈머 20%, 꺼내기 대기 0~500ms.
 
-`ERROR` 결과에는 발생 위치(`harness`), 예외 클래스와 메시지, 스택 트레이스 전체가 남는다. jsonl 기록에는 `errorDetail`과 `walMaxBytes`가, `violations.txt` 끝에는 같은 내용이 덧붙는다. `walMaxBytes`는 모든 실행(통과 포함)에서 `counts()` 표본 주기로 잰 `smq.db-wal` 크기의 최댓값이다(ADR-0010).
+`ERROR` 결과에는 발생 위치(`harness`), 예외 클래스와 메시지, 스택 트레이스 전체가 남는다. jsonl 기록에는 `errorDetail`과 `walMaxBytes`가, `violations.txt` 끝에는 같은 내용이 덧붙는다. `walMaxBytes`는 모든 실행(통과 포함)에서 `counts()` 표본 주기로 잰 `smq.db-wal` 크기의 최댓값이다(ADR-0017).
 
 산출물은 `build/random-bench/`에 쌓인다.
 

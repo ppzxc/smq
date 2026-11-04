@@ -109,22 +109,10 @@ public final class SqliteStorage implements Storage {
         if (lockWaitFloor.isNegative()) {
             throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
         }
-        SQLiteConfig config = new SQLiteConfig();
-        // 기다리지 않는다. 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고,
-        // 난다면 smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012). 열린 뒤에도 0을 그대로 쓴다.
-        config.setBusyTimeout(0);
-        // 연결이 락을 놓지 않게 한다. WAL로 바꾸기 전에 켜야 -shm이 생기지 않는다.
-        config.setLockingMode(SQLiteConfig.LockingMode.EXCLUSIVE);
-        // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
-        config.setSynchronous(
-                durability == Durability.POWER_LOSS
-                        ? SQLiteConfig.SynchronousMode.FULL
-                        : SQLiteConfig.SynchronousMode.NORMAL);
         StorageLock storageLock = StorageLock.acquire(path);
         @Nullable Connection connection = null;
         try {
-            connection = StatementCachingConnection.wrap(
-                    DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties()));
+            connection = StatementCachingConnection.wrap(connect(path, durability));
             TransactionExecutor executor = new TransactionExecutor(connection);
             executor.execute(SCHEMA::establish);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
@@ -149,6 +137,34 @@ public final class SqliteStorage implements Storage {
             }
             throw new SmqStorageException("cannot open " + path, e);
         }
+    }
+
+    /**
+     * 연결을 열고 연결 설정을 건다. 저장소 내부 테스트 픽스처도 같은 함수를 거쳐 실제 열기 경로와 같은 설정을 쓴다.
+     *
+     * <p>설정에는 {@code busy_timeout}만 넣고, {@code locking_mode}와 {@code synchronous}는 연결 직후 이 순서로 직접
+     * 실행한다. 기다리지 않는다: 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고, 난다면
+     * smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012). 열린 뒤에도 0을 그대로 쓴다.
+     */
+    static Connection connect(Path path, Durability durability) throws SQLException {
+        SQLiteConfig config = new SQLiteConfig();
+        config.setBusyTimeout(0);
+        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
+        try (Statement s = connection.createStatement()) {
+            // sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않으므로, EXCLUSIVE를 첫 문장으로 직접 건다.
+            // 이미 WAL인 파일을 다시 열 때도 WAL로 들어가기 전에 켜야 -shm 대신 heap memory wal-index를 쓴다.
+            s.execute("PRAGMA locking_mode = EXCLUSIVE");
+            // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
+            s.execute("PRAGMA synchronous = " + (durability == Durability.POWER_LOSS ? "FULL" : "NORMAL"));
+        } catch (SQLException | RuntimeException e) {
+            try {
+                connection.close();
+            } catch (SQLException suppressed) {
+                e.addSuppressed(suppressed);
+            }
+            throw e;
+        }
+        return connection;
     }
 
     private static boolean isBusyCause(Throwable t) {

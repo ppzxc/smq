@@ -14,7 +14,7 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** SQLite 파일의 스키마 판정과 트랜잭션마다 하는 버전 확인(ADR 0004). 공개 API로 열고, 파일 조작만 JDBC로 한다. */
+/** SQLite 파일의 스키마 판정과 트랜잭션마다 하는 버전 확인(ADR-0015). 공개 API로 열고, 파일 조작만 JDBC로 한다. */
 class SqliteSchemaTest {
 
     @TempDir

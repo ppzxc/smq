@@ -102,7 +102,7 @@ public final class SqliteStorage implements Storage {
     /**
      * 연산 lock 대기 하한을 정해 저장소 경합 중 빈 청크를 피한다.
      *
-     * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0009).
+     * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0016).
      *     0 이상이다. 쓰기 트랜잭션 하나가 기본값(100ms)보다 오래 걸리는 저장소에서 늘린다.
      */
     public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
@@ -396,7 +396,7 @@ public final class SqliteStorage implements Storage {
         return pull(queue, max, lease, now, Deadline.NONE);
     }
 
-    /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0009). */
+    /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0016). */
     @Override
     public PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
         try {

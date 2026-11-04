@@ -2,7 +2,7 @@ package io.github.ppzxc.smq.storage.sqlite;
 
 import java.time.Duration;
 
-/** {@link System#nanoTime()} 기준의 마감. 꺼내기의 {@code wait}를 lock 대기에 적용하는 데 쓴다(ADR-0009). */
+/** {@link System#nanoTime()} 기준의 마감. 꺼내기의 {@code wait}를 lock 대기에 적용하는 데 쓴다(ADR-0016). */
 final class Deadline {
 
     /** 마감이 없다. lock을 끝까지 기다린다. */

@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * SQLite 저장소의 쓰기 경로. 단일 연결과 단일 lock, 그 lock 대기의 마감을 한 곳에서 소유한다(ADR-0007, ADR-0009).
+ * SQLite 저장소의 쓰기 경로. 단일 연결과 단일 lock, 그 lock 대기의 마감을 한 곳에서 소유한다(ADR-0007, ADR-0016).
  * 꺼내기 대기용 autocommit 읽기 {@link #anyOrUncertain}도 이 모듈을 거친다. 한 JVM만 파일을 열므로(ADR-0012)
  * 쓰기 경합을 재시도하지 않고, 트랜잭션마다 스키마 버전을 다시 확인하지도 않는다. 스키마는 열 때 한 번 판정한다.
  *
@@ -142,7 +142,7 @@ final class TransactionExecutor {
     }
 
     /**
-     * SQLite의 자동 체크포인트는 WAL이 정산량과 무관하게 자라는 것을 막지 못한다(ADR-0010).
+     * SQLite의 자동 체크포인트는 WAL이 정산량과 무관하게 자라는 것을 막지 못한다(ADR-0017).
      * 그래서 자동 체크포인트를 끄고(열 때 {@code wal_autocheckpoint = 0}), 커밋 몇 번마다 WAL 파일 크기를 보다가 한도를 넘으면
      * {@code RESTART} 체크포인트로 되감는다. 파일은 줄이지 않는다. 줄이면 이후 쓰기마다 파일이 다시 늘면서
      * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시

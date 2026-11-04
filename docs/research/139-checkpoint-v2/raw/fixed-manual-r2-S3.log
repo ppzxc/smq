@@ -1,0 +1,55 @@
+[module] 부모 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[1/1] 바퀴 1/1 sqlite/S3/P1/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=24.2ms p99<=47.5ms p99.9<=47.5ms max=47.45ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=9.7ms p99<=18.7ms p99.9<=18.7ms max=18.64ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=1005 p50<=5.6ms p99<=11.5ms p99.9<=36.8ms max=43.31ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=1005 p50<=5.1ms p99<=10.0ms p99.9<=31.3ms max=42.25ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=5 p50<=5.7ms p99<=6.4ms p99.9<=6.4ms max=6.38ms over50ms=0 over100ms=0
+        sqlite/S3/P1/POWER_LOSS/empty:p50Ms = 11.43
+        sqlite/S3/P1/POWER_LOSS/empty:p99Ms = 20.82
+결과 파일: /tmp/claude-1000/-home-ppzxc-orca-workspaces-smq-elephantfish/cc87d7ed-5f6c-41d6-a6d3-99f555a16c09/scratchpad/run/fixed-manual-r2-S3.json
+
+SKIP  floor S1 P1 POWER_LOSS >= 10000 msg/s  [측정하지 않았다]
+SKIP  floor S1 P3 POWER_LOSS >= 8000 msg/s  [측정하지 않았다]
+SKIP  floor S1 P7 POWER_LOSS >= 4000 msg/s  [측정하지 않았다]
+SKIP  depth S1 P1 POWER_LOSS 1m >= 70% of empty  [측정하지 않았다]
+SKIP  depth S1 P1 PROCESS_CRASH 1m >= 70% of empty  [측정하지 않았다]
+FAIL  latency S3 P1 p99 <= 10 ms  [20.82 ms]
+FAIL  regression sqlite/S3/P1/POWER_LOSS/empty:p50Ms  [11.43 vs 기준선 5.73 (+99.3%)]
+FAIL  regression sqlite/S3/P1/POWER_LOSS/empty:p99Ms  [20.82 vs 기준선 7.03 (+196.2%)]
+합계: 통과 0, 실패 3, 건너뜀 5
+
+청크 1 대 묶음 (빈 큐, msg/s)
+조건                 크기           청크 1         묶음       배수
+S1 POWER_LOSS      256B            -          -        -
+S1 POWER_LOSS      2KB             -          -        -
+S1 POWER_LOSS      4KB             -          -        -
+S1 POWER_LOSS      6KB             -          -        -
+S1 PROCESS_CRASH   256B            -          -        -
+S1 PROCESS_CRASH   2KB             -          -        -
+S1 PROCESS_CRASH   4KB             -          -        -
+S1 PROCESS_CRASH   6KB             -          -        -
+S2 POWER_LOSS      256B            -          -        -
+S2 POWER_LOSS      2KB             -          -        -
+S2 POWER_LOSS      4KB             -          -        -
+S2 POWER_LOSS      6KB             -          -        -
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':benchmark' (registered in build file 'build.gradle.kts').
+> Process 'command '/home/ppzxc/.sdkman/candidates/java/25.0.3-amzn/bin/java'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 19s

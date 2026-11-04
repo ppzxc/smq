@@ -1,0 +1,23 @@
+[module] 부모 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+환경: {date=2026-11-04T02:02:05.302258857Z, mode=random, storage=sqlite, os=Linux 6.18.54.1-microsoft-standard-WSL2, arch=amd64, cpus=32, java=25.0.3, workDirFs=ext4, caveat=WSL2에서 잰 값이다. fsync 비용을 과소평가할 수 있다.}
+기록: /home/ppzxc/orca/workspaces/smq/exp139v2/build/random-bench/runs-20261104-110205.jsonl
+JFR 레코딩 시작: /home/ppzxc/orca/workspaces/smq/exp139v2/build/random-bench/parent.jfr
+[1] seed=2 POWER_LOSS 실행
+[exp] mode=auto, autocheckpoint=1000, journal_size_limit=-1
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=auto tx n=13066 p50<=5.2ms p99<=17.2ms p99.9<=37.2ms max=66.66ms over50ms=2 over100ms=0
+[exp-hold] mode=auto commit n=13066 p50<=4.9ms p99<=12.2ms p99.9<=20.0ms max=61.74ms over50ms=1 over100ms=0
+[exp-hold] mode=auto restart n=0
+    PASS  1056 msg/s, 0.81 MB/s, p50 19ms, p99 17632ms
+    목표 500 msg/s, 달성률 100%, ACK 1056 msg/s, 백로그 기울기 -182.1개/초, 최대 깊이 100000
+
+처리량이 낮은 순
+  seed                      msg/s     MB/s       p50       p99  판정
+  2                          1056     0.81      19ms   17632ms  PASS
+
+p99가 높은 순
+  seed                      msg/s     MB/s       p50       p99  판정
+  2                          1056     0.81      19ms   17632ms  PASS
+
+합계: 1회 실행, 위반 없음
+JFR 레코딩 종료

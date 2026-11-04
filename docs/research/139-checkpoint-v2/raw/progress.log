@@ -1,0 +1,33 @@
+2026-11-04 10:01:04 START fixed-manual-r1 load: 1.39 1.27 1.01
+2026-11-04 10:09:36 END fixed-manual-r1 load: 1.71 2.02 1.58
+2026-11-04 10:09:36 START fixed-auto-r1 load: 1.71 2.02 1.58
+2026-11-04 10:18:19 END fixed-auto-r1 load: 1.85 2.44 2.14
+2026-11-04 10:18:19 START fixed-manual-r2 load: 1.85 2.44 2.14
+2026-11-04 10:26:50 END fixed-manual-r2 load: 2.60 2.63 2.39
+2026-11-04 10:26:50 START fixed-auto-r2 load: 2.60 2.63 2.39
+2026-11-04 10:35:28 END fixed-auto-r2 load: 2.79 2.82 2.60
+2026-11-04 10:35:28 START fixed-manual-r3 load: 2.79 2.82 2.60
+2026-11-04 10:44:03 END fixed-manual-r3 load: 2.32 2.73 2.68
+2026-11-04 10:44:03 START fixed-auto-r3 load: 2.32 2.73 2.68
+2026-11-04 10:52:41 END fixed-auto-r3 load: 1.83 2.37 2.59
+2026-11-04 10:52:41 START rate-manual-s1 load: 1.83 2.37 2.59
+2026-11-04 10:55:49 END rate-manual-s1 rc=0 load: 0.20 1.39 2.16
+2026-11-04 10:55:49 START rate-auto-s1 load: 0.20 1.39 2.16
+2026-11-04 10:58:57 END rate-auto-s1 rc=0 load: 0.12 0.89 1.83
+2026-11-04 10:58:57 START rate-manual-s2 load: 0.12 0.89 1.83
+2026-11-04 11:02:04 END rate-manual-s2 rc=0 load: 0.72 0.84 1.64
+2026-11-04 11:02:04 START rate-auto-s2 load: 0.72 0.84 1.64
+2026-11-04 11:05:11 END rate-auto-s2 rc=0 load: 0.49 0.76 1.47
+2026-11-04 11:05:11 START random-manual-s1 load: 0.49 0.76 1.47
+2026-11-04 11:06:16 END random-manual-s1 load: 0.20 0.62 1.37
+2026-11-04 11:06:16 START random-auto-s1 load: 0.20 0.62 1.37
+2026-11-04 11:07:23 END random-auto-s1 load: 1.54 1.14 1.51
+2026-11-04 11:07:23 START random-manual-s2 load: 1.54 1.14 1.51
+2026-11-04 11:08:26 END random-manual-s2 load: 1.04 1.10 1.47
+2026-11-04 11:08:26 START random-auto-s2 load: 1.04 1.10 1.47
+2026-11-04 11:09:30 END random-auto-s2 load: 1.60 1.25 1.50
+2026-11-04 11:09:30 START random-manual-s3 load: 1.60 1.25 1.50
+2026-11-04 11:10:37 END random-manual-s3 load: 0.91 1.12 1.44
+2026-11-04 11:10:37 START random-auto-s3 load: 0.91 1.12 1.44
+2026-11-04 11:11:44 END random-auto-s3 load: 0.75 1.06 1.39
+2026-11-04 11:11:44 DONE

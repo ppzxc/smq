@@ -1,0 +1,39 @@
+{
+  "environment": {
+    "date": "2026-11-04T01:52:22.229889436Z",
+    "mode": "full",
+    "storage": "sqlite",
+    "os": "Linux 6.18.54.1-microsoft-standard-WSL2",
+    "arch": "amd64",
+    "cpus": "32",
+    "java": "25.0.3",
+    "workDirFs": "ext4",
+    "caveat": "WSL2에서 잰 값이다. fsync 비용을 과소평가할 수 있다."
+  },
+  "entries": {
+    "sqlite/S1/P0/POWER_LOSS/empty:msgPerSec": 68.29174957129666,
+    "sqlite/S1/P0/PROCESS_CRASH/empty:msgPerSec": 5066.693037749471,
+    "sqlite/S1/P1/POWER_LOSS/empty:msgPerSec": 6218.265403672767,
+    "sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec": 64979.91546801091,
+    "sqlite/S1/P3/POWER_LOSS/empty:msgPerSec": 11055.72101116733,
+    "sqlite/S1/P3/PROCESS_CRASH/empty:msgPerSec": 21027.528308799978,
+    "sqlite/S1/P5/POWER_LOSS/empty:msgPerSec": 12238.08376030267,
+    "sqlite/S1/P5/PROCESS_CRASH/empty:msgPerSec": 19352.66900577759,
+    "sqlite/S1/P7/POWER_LOSS/empty:msgPerSec": 7630.891588154229,
+    "sqlite/S1/P7/PROCESS_CRASH/empty:msgPerSec": 8077.802033608921,
+    "sqlite/S1/P2/POWER_LOSS/empty:msgPerSec": 67.32895848234956,
+    "sqlite/S1/P2/PROCESS_CRASH/empty:msgPerSec": 4764.900122446154,
+    "sqlite/S1/P4/POWER_LOSS/empty:msgPerSec": 66.59150380978087,
+    "sqlite/S1/P4/PROCESS_CRASH/empty:msgPerSec": 2674.1723566724886,
+    "sqlite/S1/P6/POWER_LOSS/empty:msgPerSec": 70.08737705313061,
+    "sqlite/S1/P6/PROCESS_CRASH/empty:msgPerSec": 2642.75808263447,
+    "sqlite/S1/P1/POWER_LOSS/1m:msgPerSec": 6232.952801669313,
+    "sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec": 60957.50905673291
+  },
+  "samples": {
+    "sqlite/S1/P1/POWER_LOSS/empty:msgPerSec": [6218.265403672767,6020.939807787661,6283.693324695339],
+    "sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec": [61823.456679533185,64979.91546801091,68763.84479557263],
+    "sqlite/S1/P1/POWER_LOSS/1m:msgPerSec": [6460.55947129344,6169.058334577917,6232.952801669313],
+    "sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec": [60586.38890581388,60957.50905673291,62425.273533775995]
+  }
+}

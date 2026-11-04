@@ -1,0 +1,395 @@
+[module] 부모 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[1/26] 바퀴 1/3 sqlite/S1/P0/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=25.8ms p99<=56.0ms p99.9<=56.0ms max=55.94ms over50ms=1 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=10.8ms p99<=19.6ms p99.9<=19.6ms max=19.53ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3294 p50<=4.8ms p99<=8.6ms p99.9<=18.6ms max=56.36ms over50ms=1 over100ms=0
+[exp-hold] mode=manual commit n=3294 p50<=4.6ms p99<=8.1ms p99.9<=16.6ms max=55.87ms over50ms=1 over100ms=0
+[exp-hold] mode=manual restart n=3 p50<=4.9ms p99<=6.2ms p99.9<=6.2ms max=6.15ms over50ms=0 over100ms=0
+        sqlite/S1/P0/POWER_LOSS/empty:msgPerSec = 68.33
+[2/26] 바퀴 1/3 sqlite/S1/P0/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.4ms p99<=19.2ms p99.9<=19.2ms max=19.16ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.1ms p99<=18.5ms p99.9<=18.5ms max=18.50ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=391785 p50<=0.1ms p99<=0.2ms p99.9<=5.3ms max=37.14ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=391785 p50<=0.1ms p99<=0.1ms p99.9<=0.2ms max=12.01ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=308 p50<=14.2ms p99<=20.5ms p99.9<=33.1ms max=33.04ms over50ms=0 over100ms=0
+        sqlite/S1/P0/PROCESS_CRASH/empty:msgPerSec = 8258.13
+[3/26] 바퀴 1/3 sqlite/S1/P1/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=9.3ms p99<=17.9ms p99.9<=17.9ms max=17.89ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=9.0ms p99<=17.4ms p99.9<=17.4ms max=17.38ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3108 p50<=5.1ms p99<=9.7ms p99.9<=14.7ms max=40.19ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3108 p50<=4.7ms p99<=7.9ms p99.9<=10.6ms max=14.33ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=13 p50<=5.5ms p99<=13.9ms p99.9<=13.9ms max=13.85ms over50ms=0 over100ms=0
+        sqlite/S1/P1/POWER_LOSS/empty:msgPerSec = 6185.91
+[4/26] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.4ms p99<=15.1ms p99.9<=15.1ms max=15.01ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.0ms p99<=14.5ms p99.9<=14.5ms max=14.42ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=41457 p50<=0.3ms p99<=1.4ms p99.9<=15.5ms max=35.13ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=41457 p50<=0.1ms p99<=0.1ms p99.9<=5.1ms max=6.86ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=159 p50<=14.6ms p99<=20.8ms p99.9<=24.7ms max=24.64ms over50ms=0 over100ms=0
+        sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec = 87927.15
+[5/26] 바퀴 1/3 sqlite/S1/P3/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=11.2ms p99<=16.6ms p99.9<=16.6ms max=16.53ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=11.1ms p99<=15.7ms p99.9<=15.7ms max=15.62ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=2028 p50<=7.7ms p99<=17.2ms p99.9<=28.8ms max=60.48ms over50ms=1 over100ms=0
+[exp-hold] mode=manual commit n=2028 p50<=5.8ms p99<=12.5ms p99.9<=15.2ms max=27.00ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=126 p50<=6.7ms p99<=9.8ms p99.9<=10.3ms max=10.29ms over50ms=0 over100ms=0
+        sqlite/S1/P3/POWER_LOSS/empty:msgPerSec = 12169.49
+[6/26] 바퀴 1/3 sqlite/S1/P3/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=4.9ms p99<=14.6ms p99.9<=14.6ms max=14.54ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=4.6ms p99<=13.9ms p99.9<=13.9ms max=13.81ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=5010 p50<=1.9ms p99<=22.2ms p99.9<=29.0ms max=64.47ms over50ms=2 over100ms=0
+[exp-hold] mode=manual commit n=5010 p50<=0.5ms p99<=6.5ms p99.9<=9.3ms max=17.79ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=313 p50<=16.9ms p99<=26.4ms p99.9<=61.5ms max=61.49ms over50ms=1 over100ms=0
+        sqlite/S1/P3/PROCESS_CRASH/empty:msgPerSec = 34034.41
+[7/26] 바퀴 1/3 sqlite/S1/P5/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=10.1ms p99<=25.1ms p99.9<=25.1ms max=25.09ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=9.8ms p99<=24.5ms p99.9<=24.5ms max=24.40ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=1779 p50<=8.9ms p99<=19.6ms p99.9<=35.1ms max=64.22ms over50ms=1 over100ms=0
+[exp-hold] mode=manual commit n=1779 p50<=6.5ms p99<=13.8ms p99.9<=22.3ms max=33.37ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=111 p50<=7.4ms p99<=12.4ms p99.9<=14.6ms max=14.52ms over50ms=0 over100ms=0
+        sqlite/S1/P5/POWER_LOSS/empty:msgPerSec = 14154.77
+[8/26] 바퀴 1/3 sqlite/S1/P5/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.7ms p99<=17.7ms p99.9<=17.7ms max=17.63ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.4ms p99<=17.1ms p99.9<=17.1ms max=17.03ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=2706 p50<=4.3ms p99<=32.2ms p99.9<=59.5ms max=82.39ms over50ms=8 over100ms=0
+[exp-hold] mode=manual commit n=2706 p50<=1.1ms p99<=9.2ms p99.9<=18.7ms max=28.19ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=169 p50<=22.1ms p99<=49.6ms p99.9<=79.2ms max=79.10ms over50ms=1 over100ms=0
+        sqlite/S1/P5/PROCESS_CRASH/empty:msgPerSec = 22366.55
+[9/26] 바퀴 1/3 sqlite/S1/P7/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=10.3ms p99<=18.5ms p99.9<=18.5ms max=18.48ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=10.0ms p99<=18.0ms p99.9<=18.0ms max=17.91ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=1149 p50<=13.6ms p99<=32.1ms p99.9<=73.5ms max=77.90ms over50ms=3 over100ms=0
+[exp-hold] mode=manual commit n=1149 p50<=7.8ms p99<=12.3ms p99.9<=23.1ms max=50.40ms over50ms=1 over100ms=0
+[exp-hold] mode=manual restart n=143 p50<=9.6ms p99<=15.7ms p99.9<=57.3ms max=57.29ms over50ms=1 over100ms=0
+        sqlite/S1/P7/POWER_LOSS/empty:msgPerSec = 11834.67
+[10/26] 바퀴 1/3 sqlite/S1/P7/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.6ms p99<=17.5ms p99.9<=17.5ms max=17.44ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.3ms p99<=16.7ms p99.9<=16.7ms max=16.66ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=1518 p50<=8.2ms p99<=42.7ms p99.9<=55.9ms max=67.10ms over50ms=5 over100ms=0
+[exp-hold] mode=manual commit n=1518 p50<=1.0ms p99<=6.5ms p99.9<=8.6ms max=9.59ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=189 p50<=23.8ms p99<=36.7ms p99.9<=42.0ms max=41.99ms over50ms=0 over100ms=0
+        sqlite/S1/P7/PROCESS_CRASH/empty:msgPerSec = 14892.15
+[11/26] 바퀴 1/3 sqlite/S1/P2/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=10.8ms p99<=27.6ms p99.9<=27.6ms max=27.52ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=10.4ms p99<=27.0ms p99.9<=27.0ms max=26.97ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3063 p50<=5.1ms p99<=9.1ms p99.9<=35.0ms max=55.70ms over50ms=2 over100ms=0
+[exp-hold] mode=manual commit n=3063 p50<=4.9ms p99<=8.4ms p99.9<=19.8ms max=52.48ms over50ms=1 over100ms=0
+[exp-hold] mode=manual restart n=3 p50<=5.4ms p99<=5.4ms p99.9<=5.4ms max=5.40ms over50ms=0 over100ms=0
+        sqlite/S1/P2/POWER_LOSS/empty:msgPerSec = 64.36
+[12/26] 바퀴 1/3 sqlite/S1/P2/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.6ms p99<=16.5ms p99.9<=16.5ms max=16.43ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.4ms p99<=16.1ms p99.9<=16.1ms max=16.05ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=358986 p50<=0.1ms p99<=0.2ms p99.9<=5.4ms max=33.52ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=358986 p50<=0.1ms p99<=0.1ms p99.9<=0.2ms max=8.81ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=283 p50<=15.3ms p99<=22.1ms p99.9<=26.9ms max=26.80ms over50ms=0 over100ms=0
+        sqlite/S1/P2/PROCESS_CRASH/empty:msgPerSec = 7829.35
+[13/26] 바퀴 1/3 sqlite/S1/P4/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=10.4ms p99<=23.3ms p99.9<=23.3ms max=23.21ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=10.1ms p99<=22.9ms p99.9<=22.9ms max=22.83ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3207 p50<=5.0ms p99<=9.2ms p99.9<=15.7ms max=43.23ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3207 p50<=4.8ms p99<=8.2ms p99.9<=12.7ms max=19.42ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=7 p50<=5.4ms p99<=6.5ms p99.9<=6.5ms max=6.45ms over50ms=0 over100ms=0
+        sqlite/S1/P4/POWER_LOSS/empty:msgPerSec = 65.12
+[14/26] 바퀴 1/3 sqlite/S1/P4/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.4ms p99<=16.7ms p99.9<=16.7ms max=16.66ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.1ms p99<=16.3ms p99.9<=16.3ms max=16.29ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=222657 p50<=0.1ms p99<=0.3ms p99.9<=15.0ms max=50.41ms over50ms=1 over100ms=0
+[exp-hold] mode=manual commit n=222657 p50<=0.1ms p99<=0.1ms p99.9<=4.9ms max=11.99ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=366 p50<=15.3ms p99<=23.8ms p99.9<=37.1ms max=37.03ms over50ms=0 over100ms=0
+        sqlite/S1/P4/PROCESS_CRASH/empty:msgPerSec = 5096.74
+[15/26] 바퀴 1/3 sqlite/S1/P6/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=10.2ms p99<=23.4ms p99.9<=23.4ms max=23.35ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=10.0ms p99<=22.9ms p99.9<=22.9ms max=22.86ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3336 p50<=4.8ms p99<=8.3ms p99.9<=19.0ms max=41.06ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3336 p50<=4.7ms p99<=7.1ms p99.9<=13.2ms max=29.97ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=7 p50<=5.3ms p99<=6.9ms p99.9<=6.9ms max=6.90ms over50ms=0 over100ms=0
+        sqlite/S1/P6/POWER_LOSS/empty:msgPerSec = 67.79
+[16/26] 바퀴 1/3 sqlite/S1/P6/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=4.9ms p99<=15.8ms p99.9<=15.8ms max=15.79ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=4.6ms p99<=15.4ms p99.9<=15.4ms max=15.39ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=220809 p50<=0.1ms p99<=0.3ms p99.9<=15.3ms max=33.16ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=220809 p50<=0.1ms p99<=0.1ms p99.9<=4.9ms max=8.18ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=363 p50<=15.5ms p99<=22.7ms p99.9<=26.7ms max=26.60ms over50ms=0 over100ms=0
+        sqlite/S1/P6/PROCESS_CRASH/empty:msgPerSec = 5000.37
+[17/26] 바퀴 1/3 sqlite/S1/P1/POWER_LOSS/1m
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=1003 p50<=9.3ms p99<=34.5ms p99.9<=50.9ms max=62.05ms over50ms=2 over100ms=0
+[exp-hold] mode=manual commit n=1003 p50<=5.3ms p99<=10.8ms p99.9<=22.3ms max=40.04ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=25 p50<=21.8ms p99<=38.7ms p99.9<=38.7ms max=38.60ms over50ms=0 over100ms=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3087 p50<=5.1ms p99<=10.8ms p99.9<=19.5ms max=39.61ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3087 p50<=4.7ms p99<=8.7ms p99.9<=13.7ms max=21.63ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=17 p50<=7.4ms p99<=9.2ms p99.9<=9.2ms max=9.14ms over50ms=0 over100ms=0
+        sqlite/S1/P1/POWER_LOSS/1m:msgPerSec = 6274.51
+[18/26] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/1m
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=1003 p50<=4.3ms p99<=37.0ms p99.9<=42.8ms max=43.74ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=1003 p50<=0.2ms p99<=5.5ms p99.9<=7.1ms max=16.52ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=25 p50<=30.9ms p99<=38.7ms p99.9<=38.7ms max=38.63ms over50ms=0 over100ms=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=32517 p50<=0.4ms p99<=2.4ms p99.9<=18.8ms max=44.64ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=32517 p50<=0.1ms p99<=0.2ms p99.9<=5.4ms max=8.67ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=149 p50<=17.0ms p99<=21.4ms p99.9<=22.3ms max=22.27ms over50ms=0 over100ms=0
+        sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec = 70303.20
+[19/26] 바퀴 2/3 sqlite/S1/P1/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=9.2ms p99<=21.8ms p99.9<=21.8ms max=21.74ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=9.1ms p99<=21.5ms p99.9<=21.5ms max=21.49ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3108 p50<=5.1ms p99<=9.8ms p99.9<=28.4ms max=47.56ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3108 p50<=4.7ms p99<=7.7ms p99.9<=15.1ms max=34.05ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=13 p50<=5.4ms p99<=8.6ms p99.9<=8.6ms max=8.54ms over50ms=0 over100ms=0
+        sqlite/S1/P1/POWER_LOSS/empty:msgPerSec = 6417.09
+[20/26] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.6ms p99<=18.4ms p99.9<=18.4ms max=18.39ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.5ms p99<=18.2ms p99.9<=18.2ms max=18.12ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=48378 p50<=0.3ms p99<=1.0ms p99.9<=16.4ms max=41.28ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=48378 p50<=0.1ms p99<=0.1ms p99.9<=5.2ms max=8.48ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=185 p50<=15.2ms p99<=23.0ms p99.9<=24.6ms max=24.52ms over50ms=0 over100ms=0
+        sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec = 101262.37
+[21/26] 바퀴 2/3 sqlite/S1/P1/POWER_LOSS/1m
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=1003 p50<=10.3ms p99<=32.1ms p99.9<=41.8ms max=44.37ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=1003 p50<=5.2ms p99<=10.3ms p99.9<=24.1ms max=25.18ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=25 p50<=21.2ms p99<=34.2ms p99.9<=34.2ms max=34.17ms over50ms=0 over100ms=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3009 p50<=5.2ms p99<=11.9ms p99.9<=19.0ms max=54.54ms over50ms=1 over100ms=0
+[exp-hold] mode=manual commit n=3009 p50<=4.7ms p99<=9.1ms p99.9<=15.9ms max=27.85ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=16 p50<=7.4ms p99<=11.2ms p99.9<=11.2ms max=11.17ms over50ms=0 over100ms=0
+        sqlite/S1/P1/POWER_LOSS/1m:msgPerSec = 6250.11
+[22/26] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/1m
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=1003 p50<=4.6ms p99<=35.4ms p99.9<=45.2ms max=46.98ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=1003 p50<=0.2ms p99<=5.4ms p99.9<=7.1ms max=16.60ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=25 p50<=29.8ms p99<=41.9ms p99.9<=41.9ms max=41.85ms over50ms=0 over100ms=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=34530 p50<=0.4ms p99<=2.1ms p99.9<=19.4ms max=35.79ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=34530 p50<=0.1ms p99<=0.2ms p99.9<=5.4ms max=27.28ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=158 p50<=17.0ms p99<=28.0ms p99.9<=28.2ms max=28.13ms over50ms=0 over100ms=0
+        sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec = 67630.38
+[23/26] 바퀴 3/3 sqlite/S1/P1/POWER_LOSS/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3 p50<=10.1ms p99<=20.4ms p99.9<=20.4ms max=20.39ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=9.9ms p99<=20.1ms p99.9<=20.1ms max=20.08ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3072 p50<=5.1ms p99<=10.1ms p99.9<=26.4ms max=45.32ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3072 p50<=4.7ms p99<=8.6ms p99.9<=16.3ms max=28.62ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=13 p50<=5.2ms p99<=6.9ms p99.9<=6.9ms max=6.87ms over50ms=0 over100ms=0
+        sqlite/S1/P1/POWER_LOSS/empty:msgPerSec = 6162.44
+[24/26] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/empty
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=3 p50<=5.9ms p99<=19.2ms p99.9<=19.2ms max=19.17ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3 p50<=5.7ms p99<=19.0ms p99.9<=19.0ms max=18.95ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=48024 p50<=0.3ms p99<=1.0ms p99.9<=16.7ms max=28.35ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=48024 p50<=0.1ms p99<=0.1ms p99.9<=5.3ms max=8.75ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=183 p50<=15.6ms p99<=20.8ms p99.9<=22.5ms max=22.42ms over50ms=0 over100ms=0
+        sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec = 99325.80
+[25/26] 바퀴 3/3 sqlite/S1/P1/POWER_LOSS/1m
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=1003 p50<=9.4ms p99<=29.1ms p99.9<=33.2ms max=35.41ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=1003 p50<=5.2ms p99<=11.6ms p99.9<=23.5ms max=28.77ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=25 p50<=19.0ms p99<=23.0ms p99.9<=23.0ms max=22.91ms over50ms=0 over100ms=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=POWER_LOSS
+[exp-hold] mode=manual tx n=3051 p50<=5.2ms p99<=10.9ms p99.9<=15.8ms max=37.40ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=3051 p50<=4.8ms p99<=8.7ms p99.9<=11.4ms max=12.75ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=17 p50<=7.8ms p99<=9.5ms p99.9<=9.5ms max=9.45ms over50ms=0 over100ms=0
+        sqlite/S1/P1/POWER_LOSS/1m:msgPerSec = 6130.43
+[26/26] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/1m
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=1003 p50<=4.0ms p99<=36.1ms p99.9<=40.7ms max=41.90ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=1003 p50<=0.2ms p99<=5.5ms p99.9<=7.2ms max=17.19ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=25 p50<=31.4ms p99<=37.3ms p99.9<=37.3ms max=37.29ms over50ms=0 over100ms=0
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=41304 p50<=0.3ms p99<=1.6ms p99.9<=18.3ms max=33.57ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=41304 p50<=0.1ms p99<=0.1ms p99.9<=5.4ms max=15.85ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=188 p50<=17.1ms p99<=23.7ms p99.9<=23.8ms max=23.71ms over50ms=0 over100ms=0
+        sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec = 86025.77
+결과 파일: /tmp/claude-1000/-home-ppzxc-orca-workspaces-smq-elephantfish/cc87d7ed-5f6c-41d6-a6d3-99f555a16c09/scratchpad/run/fixed-manual-r1-S1.json
+
+FAIL  floor S1 P1 POWER_LOSS >= 10000 msg/s  [6186 msg/s]
+PASS  floor S1 P3 POWER_LOSS >= 8000 msg/s  [12169 msg/s]
+PASS  floor S1 P7 POWER_LOSS >= 4000 msg/s  [11835 msg/s]
+PASS  depth S1 P1 POWER_LOSS 1m >= 70% of empty  [중앙값 99.5%, 바퀴별 1회 6275 / 6186 = 101.4%; 2회 6250 / 6417 = 97.4%; 3회 6130 / 6162 = 99.5%]
+PASS  depth S1 P1 PROCESS_CRASH 1m >= 70% of empty  [중앙값 80.0%, 바퀴별 1회 70303 / 87927 = 80.0%; 2회 67630 / 101262 = 66.8%; 3회 86026 / 99326 = 86.6%]
+SKIP  latency S3 P1 p99 <= 10 ms  [측정하지 않았다]
+FAIL  regression sqlite/S1/P0/POWER_LOSS/empty:msgPerSec  [68.33 vs 기준선 722 (-90.5%)]
+PASS  regression sqlite/S1/P0/PROCESS_CRASH/empty:msgPerSec  [8258 vs 기준선 1805 (+357.4%)]
+FAIL  regression sqlite/S1/P1/POWER_LOSS/1m:msgPerSec  [6250 vs 기준선 15051 (-58.5%)]
+FAIL  regression sqlite/S1/P1/POWER_LOSS/empty:msgPerSec  [6186 vs 기준선 16612 (-62.8%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec  [70303 vs 기준선 41846 (+68.0%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec  [99326 vs 기준선 36789 (+170.0%)]
+FAIL  regression sqlite/S1/P2/POWER_LOSS/empty:msgPerSec  [64.36 vs 기준선 719 (-91.0%)]
+PASS  regression sqlite/S1/P2/PROCESS_CRASH/empty:msgPerSec  [7829 vs 기준선 1886 (+315.0%)]
+PASS  regression sqlite/S1/P3/POWER_LOSS/empty:msgPerSec  [12169 vs 기준선 9797 (+24.2%)]
+PASS  regression sqlite/S1/P3/PROCESS_CRASH/empty:msgPerSec  [34034 vs 기준선 11099 (+206.6%)]
+FAIL  regression sqlite/S1/P4/POWER_LOSS/empty:msgPerSec  [65.12 vs 기준선 632 (-89.7%)]
+PASS  regression sqlite/S1/P4/PROCESS_CRASH/empty:msgPerSec  [5097 vs 기준선 1322 (+285.6%)]
+PASS  regression sqlite/S1/P5/POWER_LOSS/empty:msgPerSec  [14155 vs 기준선 10521 (+34.5%)]
+PASS  regression sqlite/S1/P5/PROCESS_CRASH/empty:msgPerSec  [22367 vs 기준선 10535 (+112.3%)]
+FAIL  regression sqlite/S1/P6/POWER_LOSS/empty:msgPerSec  [67.79 vs 기준선 632 (-89.3%)]
+PASS  regression sqlite/S1/P6/PROCESS_CRASH/empty:msgPerSec  [5000 vs 기준선 1327 (+276.8%)]
+PASS  regression sqlite/S1/P7/POWER_LOSS/empty:msgPerSec  [11835 vs 기준선 5583 (+112.0%)]
+PASS  regression sqlite/S1/P7/PROCESS_CRASH/empty:msgPerSec  [14892 vs 기준선 5282 (+181.9%)]
+합계: 통과 16, 실패 7, 건너뜀 1
+
+청크 1 대 묶음 (빈 큐, msg/s)
+조건                 크기           청크 1         묶음       배수
+S1 POWER_LOSS      256B           68      6,186    90.5x
+S1 POWER_LOSS      2KB            64     12,169   189.1x
+S1 POWER_LOSS      4KB            65     14,155   217.4x
+S1 POWER_LOSS      6KB            68     11,835   174.6x
+S1 PROCESS_CRASH   256B        8,258     99,326    12.0x
+S1 PROCESS_CRASH   2KB         7,829     34,034     4.3x
+S1 PROCESS_CRASH   4KB         5,097     22,367     4.4x
+S1 PROCESS_CRASH   6KB         5,000     14,892     3.0x
+S2 POWER_LOSS      256B            -          -        -
+S2 POWER_LOSS      2KB             -          -        -
+S2 POWER_LOSS      4KB             -          -        -
+S2 POWER_LOSS      6KB             -          -        -
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':benchmark' (registered in build file 'build.gradle.kts').
+> Process 'command '/home/ppzxc/.sdkman/candidates/java/25.0.3-amzn/bin/java'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 8m 13s

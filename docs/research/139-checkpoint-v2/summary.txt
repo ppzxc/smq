@@ -1,0 +1,33 @@
+== S1  key | manual r1/r2/r3 (med) | auto r1/r2/r3 (med) | auto/manual
+S1/P0/POWER_LOSS/empty:msgPerSec              | 68.33/63.86/65.47 (65.47) | 65.58/64.13/68.29 (65.58) | 1.00
+S1/P0/PROCESS_CRASH/empty:msgPerSec           | 8258/7911/7969 (7969) | 5100/5170/5067 (5100) | 0.64
+S1/P1/POWER_LOSS/1m:msgPerSec                 | 6250/6229/6385 (6250) | 5998/5939/6233 (5998) | 0.96
+S1/P1/POWER_LOSS/empty:msgPerSec              | 6186/6414/6407 (6407) | 5974/6078/6218 (6078) | 0.95
+S1/P1/PROCESS_CRASH/1m:msgPerSec              | 70303/79395/75894 (7.589e+04) | 52777/59305/60958 (5.93e+04) | 0.78
+S1/P1/PROCESS_CRASH/empty:msgPerSec           | 99326/94196/86403 (9.42e+04) | 63381/70366/64980 (6.498e+04) | 0.69
+S1/P2/POWER_LOSS/empty:msgPerSec              | 64.36/65.50/66.85 (65.5) | 46.09/66.26/67.33 (66.26) | 1.01
+S1/P2/PROCESS_CRASH/empty:msgPerSec           | 7829/7624/7519 (7624) | 4266/5133/4765 (4765) | 0.63
+S1/P3/POWER_LOSS/empty:msgPerSec              | 12169/10227/13133 (1.217e+04) | 9981/11151/11056 (1.106e+04) | 0.91
+S1/P3/PROCESS_CRASH/empty:msgPerSec           | 34034/31644/34125 (3.403e+04) | 20189/21292/21028 (2.103e+04) | 0.62
+S1/P4/POWER_LOSS/empty:msgPerSec              | 65.12/65.28/65.05 (65.12) | 66.09/66.06/66.59 (66.09) | 1.01
+S1/P4/PROCESS_CRASH/empty:msgPerSec           | 5097/5007/4489 (5007) | 2668/2843/2674 (2674) | 0.53
+S1/P5/POWER_LOSS/empty:msgPerSec              | 14155/13560/15140 (1.415e+04) | 9692/12343/12238 (1.224e+04) | 0.86
+S1/P5/PROCESS_CRASH/empty:msgPerSec           | 22367/31100/33240 (3.11e+04) | 14599/19996/19353 (1.935e+04) | 0.62
+S1/P6/POWER_LOSS/empty:msgPerSec              | 67.79/65.58/65.93 (65.93) | 68.26/69.39/70.09 (69.39) | 1.05
+S1/P6/PROCESS_CRASH/empty:msgPerSec           | 5000/4983/4677 (4983) | 2744/2915/2643 (2744) | 0.55
+S1/P7/POWER_LOSS/empty:msgPerSec              | 11835/10884/11541 (1.154e+04) | 6909/7567/7631 (7567) | 0.66
+S1/P7/PROCESS_CRASH/empty:msgPerSec           | 14892/17086/17472 (1.709e+04) | 6669/8383/8078 (8078) | 0.47
+== S3  key | manual r1/r2/r3 (med) | auto r1/r2/r3 (med) | auto/manual
+S3/P1/POWER_LOSS/empty:p50Ms                  | 11.29/11.43/10.95 (11.29) | 13.03/11.70/11.13 (11.7) | 1.04
+S3/P1/POWER_LOSS/empty:p99Ms                  | 23.33/20.82/16.87 (20.82) | 43.62/23.79/21.13 (23.79) | 1.14
+== randomBench
+random-auto-s1     dur=PROCESS_CRASH rate=0 msg/s=150 p50=29777 p99=57641 walMax=4.2MB verdict=PASS pullWait=427 batch=122
+random-auto-s2     dur=POWER_LOSS    rate=0 msg/s=883 p50=25184 p99=55565 walMax=4.2MB verdict=PASS pullWait=346 batch=124
+random-auto-s3     dur=POWER_LOSS    rate=0 msg/s=259 p50=None p99=None walMax=4.3MB verdict=PASS pullWait=50 batch=95
+random-manual-s1   dur=PROCESS_CRASH rate=0 msg/s=156 p50=29974 p99=57828 walMax=9.4MB verdict=PASS pullWait=427 batch=122
+random-manual-s2   dur=POWER_LOSS    rate=0 msg/s=915 p50=26287 p99=53280 walMax=11.6MB verdict=PASS pullWait=346 batch=124
+random-manual-s3   dur=POWER_LOSS    rate=0 msg/s=262 p50=None p99=None walMax=11.3MB verdict=PASS pullWait=50 batch=95
+rate-auto-s1       dur=PROCESS_CRASH rate=500 msg/s=1055 p50=1 p99=6768 walMax=5.1MB verdict=PASS pullWait=427 batch=31
+rate-auto-s2       dur=POWER_LOSS    rate=500 msg/s=1056 p50=19 p99=17632 walMax=5.1MB verdict=PASS pullWait=346 batch=62
+rate-manual-s1     dur=PROCESS_CRASH rate=500 msg/s=1055 p50=2 p99=6973 walMax=14.6MB verdict=PASS pullWait=427 batch=31
+rate-manual-s2     dur=POWER_LOSS    rate=500 msg/s=1056 p50=18 p99=17092 walMax=13.0MB verdict=PASS pullWait=346 batch=62

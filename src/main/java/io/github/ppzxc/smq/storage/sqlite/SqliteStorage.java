@@ -113,18 +113,16 @@ public final class SqliteStorage implements Storage {
         // 기다리지 않는다. 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고,
         // 난다면 smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012). 열린 뒤에도 0을 그대로 쓴다.
         config.setBusyTimeout(0);
-        // 연결이 락을 놓지 않게 한다. WAL로 바꾸기 전에 켜야 -shm이 생기지 않는다.
-        config.setLockingMode(SQLiteConfig.LockingMode.EXCLUSIVE);
-        // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
-        config.setSynchronous(
-                durability == Durability.POWER_LOSS
-                        ? SQLiteConfig.SynchronousMode.FULL
-                        : SQLiteConfig.SynchronousMode.NORMAL);
+        // 실험(#139): #148 결정대로 locking_mode와 synchronous는 연결 직후 직접 건다.
         StorageLock storageLock = StorageLock.acquire(path);
         @Nullable Connection connection = null;
         try {
             connection = StatementCachingConnection.wrap(
                     DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties()));
+            try (Statement s = connection.createStatement()) {
+                s.execute("PRAGMA locking_mode = EXCLUSIVE");
+                s.execute("PRAGMA synchronous = " + (durability == Durability.POWER_LOSS ? "FULL" : "NORMAL"));
+            }
             TransactionExecutor executor = new TransactionExecutor(connection);
             executor.execute(SCHEMA::establish);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
@@ -134,6 +132,18 @@ public final class SqliteStorage implements Storage {
                     return Boolean.TRUE;
                 }
             });
+            executor.execute(c -> {
+                try (Statement s = c.createStatement()) {
+                    s.executeQuery("SELECT count(*) FROM sqlite_master").close();
+                }
+                return Boolean.TRUE;
+            });
+            try (Statement s = executor.connection().createStatement();
+                    java.sql.ResultSet lm = s.executeQuery("PRAGMA locking_mode")) {
+                lm.next();
+                System.err.println("[exp-open] locking_mode=" + lm.getString(1) + " shm="
+                        + java.nio.file.Files.exists(Path.of(path + "-shm")) + " durability=" + durability);
+            }
             return new SqliteStorage(path, executor, lockWaitFloor, storageLock);
         } catch (SQLException | RuntimeException e) {
             closeQuietly(connection);

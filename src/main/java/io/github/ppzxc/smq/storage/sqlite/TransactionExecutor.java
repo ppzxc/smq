@@ -76,6 +76,54 @@ final class TransactionExecutor {
 
     private static final Path NO_WAL = Path.of("");
 
+    // 실험(#139): lock을 쥔 시간의 히스토그램. 0.1ms 칸, 1초 이상은 마지막 칸.
+    private final ExpHist EXP_TX = new ExpHist();
+    private final ExpHist EXP_COMMIT = new ExpHist();
+    private final ExpHist EXP_RESTART = new ExpHist();
+
+    static final class ExpHist {
+        private final long[] buckets = new long[10_001];
+        private long count;
+        private long max;
+
+        void add(long nanos) {
+            int b = (int) Math.min(nanos / 100_000L, 10_000L);
+            buckets[b]++;
+            count++;
+            max = Math.max(max, nanos);
+        }
+
+        private double pct(double q) {
+            long target = (long) Math.ceil(count * q);
+            long seen = 0;
+            for (int i = 0; i < buckets.length; i++) {
+                seen += buckets[i];
+                if (seen >= target) {
+                    return (i + 1) / 10.0;
+                }
+            }
+            return max / 1e6;
+        }
+
+        String summary() {
+            if (count == 0) {
+                return "n=0";
+            }
+            long over100 = 0;
+            long over50 = 0;
+            for (int i = 500; i < buckets.length; i++) {
+                if (i >= 1000) {
+                    over100 += buckets[i];
+                }
+                over50 += buckets[i];
+            }
+            return String.format(
+                    java.util.Locale.ROOT,
+                    "n=%d p50<=%.1fms p99<=%.1fms p99.9<=%.1fms max=%.2fms over50ms=%d over100ms=%d",
+                    count, pct(0.5), pct(0.99), pct(0.999), max / 1e6, over50, over100);
+        }
+    }
+
     private final Connection connection;
     /** 커밋 횟수. lock 아래에서만 바뀐다. */
     private long commits;
@@ -146,6 +194,9 @@ final class TransactionExecutor {
     void close() {
         lock.lock();
         try {
+            System.err.println("[exp-hold] mode=" + EXP_MODE + " tx " + EXP_TX.summary());
+            System.err.println("[exp-hold] mode=" + EXP_MODE + " commit " + EXP_COMMIT.summary());
+            System.err.println("[exp-hold] mode=" + EXP_MODE + " restart " + EXP_RESTART.summary());
             connection.close();
         } catch (SQLException ignored) {
             // 닫기 실패는 무시한다.
@@ -155,15 +206,20 @@ final class TransactionExecutor {
     }
 
     private <T> T runOnce(TxBody<T> body) throws SQLException {
+        long txStart = System.nanoTime();
         try (Statement s = connection.createStatement()) {
             s.execute("BEGIN IMMEDIATE");
         }
         try {
             T result = body.apply(connection);
+            long commitStart = System.nanoTime();
             try (Statement s = connection.createStatement()) {
                 s.execute("COMMIT");
             }
+            long commitEnd = System.nanoTime();
+            EXP_COMMIT.add(commitEnd - commitStart);
             checkpointIfWalIsLarge();
+            EXP_TX.add(System.nanoTime() - txStart);
             return result;
         } catch (Throwable t) {
             rollbackQuietly();
@@ -200,10 +256,12 @@ final class TransactionExecutor {
                 return;
             }
             try (Statement s = connection.createStatement()) {
+                long restartStart = System.nanoTime();
                 try (ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
                     // 첫 열이 0이면 WAL을 끝까지 되감았다.
                     walOverLimit = !rs.next() || rs.getInt(1) != 0;
                 }
+                EXP_RESTART.add(System.nanoTime() - restartStart);
             }
             if (walOverLimit) {
                 checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;

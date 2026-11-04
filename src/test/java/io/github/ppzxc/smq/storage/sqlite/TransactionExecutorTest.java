@@ -201,6 +201,107 @@ class TransactionExecutorTest {
         }
     }
 
+    /** 연속 실패가 길어져도 운영자가 알 수 있게 64번째(CHECKPOINT_FAILURE_LOG_EVERY) 연속 실패마다 횟수와 함께 WARNING을 다시 남긴다. */
+    @Test
+    void 연속_실패는_N번째마다_횟수와_함께_WARNING으로_다시_남는다() throws Exception {
+        int n = TransactionExecutor.CHECKPOINT_FAILURE_LOG_EVERY;
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            TransactionExecutor ex =
+                    new TransactionExecutor(failingCheckpoint(connection, () -> new IllegalStateException("injected")));
+            commitBlobs(ex, 1, (int) (9 * MB));
+            commitBlobs(ex, every - 1 + every * (n - 2)); // 연속 실패 n-1번
+            assertEquals(1, warnings.size(), "n번째 전에는 첫 실패만");
+            commitBlobs(ex, every); // n번째 연속 실패
+            assertEquals(2, warnings.size());
+            assertTrue(warnings.get(1).getMessage().contains(String.valueOf(n)), "실패 횟수가 메시지에 있다");
+            commitBlobs(ex, every); // n+1번째
+            assertEquals(2, warnings.size());
+        });
+    }
+
+    /** WAL이 한도 아래로 돌아와 확인이 통과하면 연속 실패 상태가 지워져 다음 실패가 다시 첫 실패로 WARNING이 된다. */
+    @Test
+    void WAL이_한도_아래로_돌아오면_연속_실패_상태가_리셋된다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            TransactionExecutor ex =
+                    new TransactionExecutor(failingCheckpoint(connection, () -> new IllegalStateException("injected")));
+            commitBlobs(ex, 1, (int) (9 * MB));
+            commitBlobs(ex, every - 1); // 첫 확인에서 실패
+            assertEquals(1, warnings.size());
+            try (Statement s = connection.createStatement()) {
+                s.execute("PRAGMA wal_checkpoint(TRUNCATE)"); // 바깥에서 WAL을 비운다.
+            }
+            commitBlobs(ex, every); // 한도 아래라 확인이 통과하고 상태를 지운다.
+            commitBlobs(ex, 1, (int) (9 * MB));
+            commitBlobs(ex, every - 1); // 다시 실패
+            assertEquals(2, warnings.size(), "리셋 뒤 첫 실패는 다시 WARNING");
+        });
+    }
+
+    /** 되감기에 성공한 뒤 WAL 크기를 못 읽어도 되감기는 실패가 아니다. 기억값은 0(다음 확인에서 다시 걸 수 있는 쪽)이고 따로 로그한다. */
+    @Test
+    void 되감기_성공_뒤_크기_읽기_실패는_체크포인트_실패로_기록되지_않는다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            java.util.concurrent.atomic.AtomicInteger reads = new java.util.concurrent.atomic.AtomicInteger();
+            AtomicBoolean failing = new AtomicBoolean(false);
+            TransactionExecutor ex = new TransactionExecutor(
+                    failingCheckpoint(connection, () -> failing.get() ? new IllegalStateException("injected") : null),
+                    path -> {
+                        if (reads.incrementAndGet() == 2) { // 되감기 직후의 읽기
+                            throw new SecurityException("injected");
+                        }
+                        return Files.size(path);
+                    });
+            commitBlobs(ex, 1, (int) (9 * MB));
+            commitBlobs(ex, every - 1);
+            assertEquals(1, warnings.size(), "크기 읽기 실패는 따로 한 번 로그한다");
+            assertFalse(warnings.get(0).getMessage().contains("checkpoint did not complete"), "체크포인트 실패 메시지가 아니다");
+            // 연속 실패 상태가 켜지지 않았으므로 이어지는 실패가 첫 실패로 WARNING이 된다.
+            failing.set(true);
+            commitBlobs(ex, every); // 기억값이 0이므로 WAL이 여전히 한도 위라 다시 시도하고 실패한다.
+            assertEquals(2, warnings.size());
+            assertTrue(warnings.get(1).getMessage().contains("checkpoint did not complete"));
+        });
+    }
+
+    private static void withWarnings(List<LogRecord> warnings, ThrowingRunnable body) throws Exception {
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord r) {
+                if (r.getLevel().intValue() >= Level.WARNING.intValue()) {
+                    warnings.add(r);
+                }
+            }
+
+            @Override
+            public void flush() {}
+
+            @Override
+            public void close() {}
+        };
+        Logger logger = Logger.getLogger(TransactionExecutor.class.getName());
+        logger.addHandler(handler);
+        try {
+            body.run();
+        } finally {
+            logger.removeHandler(handler);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
     /** {@code wal_checkpoint}를 실행하면 주어진 코드의 {@link SQLException}을 던지는 연결. 나머지는 실제 연결에 맡긴다. */
     private static Connection failingCheckpoint(Connection real, int errorCode) {
         return failingCheckpoint(real, () -> new SQLException("injected", null, errorCode));

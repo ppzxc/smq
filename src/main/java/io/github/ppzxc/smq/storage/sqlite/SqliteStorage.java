@@ -153,7 +153,8 @@ public final class SqliteStorage implements Storage {
         boolean ok = false;
         try (Statement s = connection.createStatement()) {
             // sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않으므로, EXCLUSIVE를 첫 문장으로 직접 건다.
-            // 두 문장의 순서가 곧 설정이다. 순서를 바꾸거나 SQLiteConfig로 되돌리면 같은 고장이 다시 난다.
+            // 두 문장의 순서가 곧 설정이다. 아래 결과 확인은 pragma가 무시된 경우만 잡고, 락을 실제로 잡았는지는 -shm 부재 테스트가 확인한다. 순서를 바꾸거나 SQLiteConfig로
+            // 되돌리면 같은 고장이 다시 난다.
             // 이미 WAL인 파일을 다시 열 때도 WAL로 들어가기 전에 켜야 -shm 대신 heap memory wal-index를 쓴다.
             try (ResultSet rs = s.executeQuery("PRAGMA locking_mode = EXCLUSIVE")) {
                 requireExclusive(rs.next() ? rs.getString(1) : null);
@@ -173,7 +174,13 @@ public final class SqliteStorage implements Storage {
         return connection;
     }
 
-    /** {@code PRAGMA locking_mode = EXCLUSIVE}가 돌려준 모드가 exclusive가 아니면 단일 JVM 보증이 깨지므로 연결을 쓰지 않는다. */
+    /**
+     * {@code PRAGMA locking_mode = EXCLUSIVE}가 돌려준 모드가 exclusive가 아니면 연결을 쓰지 않는다.
+     *
+     * <p>이 검사가 잡는 것은 pragma가 무시되거나 인식되지 않아 모드가 바뀌지 않은 경우뿐이다. pragma는 파일 락을 실제로
+     * 잡기 전에도 'exclusive'를 돌려주므로, 락이 실제로 잡혔는지, WAL에서 {@code -shm} 없이 동작하는지는 이 검사로 알 수 없다.
+     * 그 보증은 {@code -shm} 파일이 생기지 않음을 확인하는 테스트가 진다.
+     */
     static void requireExclusive(@Nullable String mode) throws SQLException {
         if (!"exclusive".equalsIgnoreCase(mode)) {
             throw new SQLException("locking_mode=EXCLUSIVE was not applied: " + mode);

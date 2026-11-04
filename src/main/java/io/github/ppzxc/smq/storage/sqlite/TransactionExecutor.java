@@ -38,6 +38,8 @@ final class TransactionExecutor {
 
     /** 커밋 몇 번마다 WAL 파일 크기를 확인할지. 확인은 파일 크기 조회 한 번이다. */
     static final int CHECKPOINT_CHECK_EVERY_COMMITS = 8;
+    /** 연속 실패 중 첫 번째와 이 횟수의 배수번째 실패마다 WARNING을 남긴다. */
+    static final int CHECKPOINT_FAILURE_LOG_EVERY = 64;
     /** WAL 파일이 이 크기를 넘으면 되감는 체크포인트를 건다. 60초 부하에서 64MB 이하라는 목표보다 한참 작다. */
     static final long CHECKPOINT_WAL_BYTES = 8L * 1024 * 1024;
     /**
@@ -64,13 +66,26 @@ final class TransactionExecutor {
     private Path walFile = NO_WAL;
     /** 마지막으로 되감은 직후의 WAL 파일 크기(최대 {@link #WAL_FILE_KEEP_BYTES}). 파일이 이보다 커져야 다시 되감는다. */
     private long walSizeAtRestart;
-    /** 직전 체크포인트 시도가 실패했는지. 연속 실패 중에는 첫 실패만 WARNING으로 남기려고 둔다. 로그용이며 재시도에는 쓰지 않는다. */
-    private boolean checkpointFailing;
+    /** 체크포인트가 연속으로 실패한 횟수. 연속 실패 로그를 줄이려고 둔다. 로그용이며 재시도에는 쓰지 않는다. */
+    private long consecutiveCheckpointFailures;
+
+    private final WalSizeReader walSizeReader;
 
     private final ReentrantLock lock = new ReentrantLock();
 
+    /** WAL 파일 크기 읽기. 테스트가 실패를 주입할 수 있게 갈라 둔다. */
+    @FunctionalInterface
+    interface WalSizeReader {
+        long size(Path walFile) throws IOException;
+    }
+
     TransactionExecutor(Connection connection) {
+        this(connection, Files::size);
+    }
+
+    TransactionExecutor(Connection connection, WalSizeReader walSizeReader) {
         this.connection = connection;
+        this.walSizeReader = walSizeReader;
     }
 
     /** 연결. 같은 lock 아래에서만 쓴다. */
@@ -155,10 +170,12 @@ final class TransactionExecutor {
      * {@code RESTART} 체크포인트로 되감는다. 파일은 줄이지 않는다. 줄이면 이후 쓰기마다 파일이 다시 늘면서
      * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시
      * 되감을 필요가 없을 때도 계속 건다. 그래서 되감은 직후의 크기를 기억해 파일이 그보다 더 커졌을 때(되감은 구간을 다 채웠을 때)만 다시 건다.
-     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 크기는 기억하지 않고 다음 정규 확인에 맡긴다. SQL 오류든 런타임 예외든
+     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 크기는 기억하지 않고 다음 정규 확인에 맡긴다. 되감기에 성공한 뒤 크기를 못 읽으면
+     * 되감기는 실패가 아니다. 기억값을 0(다음 확인에서 다시 걸 수 있는 쪽)으로 두고 따로 로그한다. SQL 오류든 런타임 예외든
      * (예: {@code InvalidPathException}) 삼키고 로그만 남긴다. 이미 커밋된 연산을 실패로 올리면 호출자가 재시도해 중복이 생기기
      * 때문이다. 재시도 상태는 두지 않고 다음 정규 확인(커밋 8번 뒤)이 다시 시도한다. 계속 실패해도 로그가 쏟아지지 않게, 실패(예외와
-     * 되감지 못함)가 이어지는 동안은 첫 번째만 WARNING으로 남기고, 되감기에 성공하면 이 상태를 지운다.
+     * 되감지 못함)가 이어지는 동안은 첫 번째와 {@value #CHECKPOINT_FAILURE_LOG_EVERY}번째마다(연속 실패 횟수 포함) WARNING으로
+     * 남기고, 되감기에 성공하거나 WAL이 한도 아래라 확인이 통과하면 횟수를 지운다.
      */
     private void checkpointIfWalIsLarge() {
         commits++;
@@ -170,15 +187,19 @@ final class TransactionExecutor {
                 walFile = locateWalFile();
             }
             long size = walFile.equals(NO_WAL) ? 0 : walSize();
-            if (size < CHECKPOINT_WAL_BYTES || size <= walSizeAtRestart) {
+            if (size < CHECKPOINT_WAL_BYTES) {
+                consecutiveCheckpointFailures = 0;
+                return;
+            }
+            if (size <= walSizeAtRestart) {
                 return;
             }
             try (Statement s = connection.createStatement();
                     ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
                 // 첫 열이 0이면 WAL을 끝까지 되감았다.
                 if (rs.next() && rs.getInt(1) == 0) {
-                    walSizeAtRestart = Math.min(walSize(), WAL_FILE_KEEP_BYTES);
-                    checkpointFailing = false;
+                    consecutiveCheckpointFailures = 0;
+                    rememberSizeAfterRestart();
                 } else {
                     checkpointFailed(null);
                 }
@@ -188,14 +209,27 @@ final class TransactionExecutor {
         }
     }
 
-    /** 연속 실패 중 첫 실패만 WARNING으로 남긴다. 이후 연속 실패는 로그하지 않는다. */
+    /** 되감기에 성공한 직후의 크기를 기억한다. 못 읽으면 0으로 두어(다음 확인에서 다시 걸 수 있는 쪽) 낡은 값이 남지 않게 한다. */
+    private void rememberSizeAfterRestart() {
+        try {
+            walSizeAtRestart = Math.min(walSizeReader.size(walFile), WAL_FILE_KEEP_BYTES);
+        } catch (IOException | RuntimeException e) {
+            walSizeAtRestart = 0;
+            LOG.log(
+                    System.Logger.Level.WARNING,
+                    "sqlite checkpoint rewound the WAL but its size could not be read; the next check may rewind again",
+                    e);
+        }
+    }
+
+    /** 연속 실패 중 첫 번째와 {@link #CHECKPOINT_FAILURE_LOG_EVERY}번째마다 WARNING으로 남긴다. */
     private void checkpointFailed(@Nullable Exception cause) {
-        if (checkpointFailing) {
+        long failures = ++consecutiveCheckpointFailures;
+        if (failures != 1 && failures % CHECKPOINT_FAILURE_LOG_EVERY != 0) {
             return;
         }
-        checkpointFailing = true;
         String message = "sqlite checkpoint did not complete after commit; the next check will retry"
-                + " (further consecutive failures are not logged)";
+                + " (consecutive failures: " + failures + ", the WAL may be growing)";
         if (cause == null) {
             LOG.log(System.Logger.Level.WARNING, message);
         } else {
@@ -219,7 +253,7 @@ final class TransactionExecutor {
 
     private long walSize() {
         try {
-            return Files.size(walFile);
+            return walSizeReader.size(walFile);
         } catch (IOException e) {
             return 0;
         }

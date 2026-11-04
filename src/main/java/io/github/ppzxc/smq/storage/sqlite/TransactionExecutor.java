@@ -48,7 +48,8 @@ final class TransactionExecutor {
      */
     private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
 
-    // 실험(#139): manual(현재), auto(자동 체크포인트, journal_size_limit 없음), auto-jsl(자동 + journal_size_limit).
+    // 실험(#139/#149): manual(현재), auto(자동 체크포인트, journal_size_limit 없음), auto-jsl(자동 + journal_size_limit),
+    // auto-<N>(wal_autocheckpoint=N + journal_size_limit).
     static final String EXP_MODE = System.getenv().getOrDefault("SMQ_EXP_CHECKPOINT", "manual");
 
     /**
@@ -58,6 +59,9 @@ final class TransactionExecutor {
     static void configureWal(Statement s) throws SQLException {
         if (EXP_MODE.equals("manual")) {
             s.execute("PRAGMA wal_autocheckpoint = 0");
+        } else if (EXP_MODE.startsWith("auto-") && !EXP_MODE.equals("auto-jsl")) {
+            // 실험(#149): auto-<N>은 wal_autocheckpoint=N + journal_size_limit.
+            s.execute("PRAGMA wal_autocheckpoint = " + Integer.parseInt(EXP_MODE.substring(5)));
         }
         if (!EXP_MODE.equals("auto")) {
             s.execute("PRAGMA journal_size_limit = " + WAL_FILE_KEEP_BYTES);

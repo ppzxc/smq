@@ -150,6 +150,7 @@ public final class SqliteStorage implements Storage {
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(0);
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
+        boolean ok = false;
         try (Statement s = connection.createStatement()) {
             // sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않으므로, EXCLUSIVE를 첫 문장으로 직접 건다.
             // 두 문장의 순서가 곧 설정이다. 순서를 바꾸거나 SQLiteConfig로 되돌리면 같은 고장이 다시 난다.
@@ -161,13 +162,11 @@ public final class SqliteStorage implements Storage {
                         case POWER_LOSS -> "FULL";
                         case PROCESS_CRASH -> "NORMAL";
                     });
-        } catch (SQLException | RuntimeException e) {
-            try {
-                connection.close();
-            } catch (SQLException suppressed) {
-                e.addSuppressed(suppressed);
+            ok = true;
+        } finally {
+            if (!ok) {
+                closeQuietly(connection);
             }
-            throw e;
         }
         return connection;
     }

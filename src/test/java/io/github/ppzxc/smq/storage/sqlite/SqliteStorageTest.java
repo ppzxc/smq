@@ -158,6 +158,7 @@ class SqliteStorageTest {
         Path shm = Path.of(db + "-shm");
         try (SqliteStorage s = SqliteStorage.open(db, durability)) {
             s.declare("q", QueueOptions.defaults());
+            assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
         }
         try (SqliteStorage s = SqliteStorage.open(db, durability)) {
             s.publish("q", List.of(message()), Instant.EPOCH);

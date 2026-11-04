@@ -16,7 +16,7 @@
 
 ### Fixed
 
-- 다시 열 때도 `-shm` 없이 `locking_mode=EXCLUSIVE`로 연다. sqlite-jdbc가 설정 pragma를 해시 순서로 실행해 `synchronous`가 EXCLUSIVE보다 먼저 돌았고, 이미 WAL인 파일을 다시 열면 `-shm`이 생겼다. 이제 연결 직후 `locking_mode`, `synchronous` 순서로 직접 실행한다. (#153, #148)
+- 다시 열 때도 `-shm` 없이 `locking_mode=EXCLUSIVE`로 연다. sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않아 `synchronous`가 EXCLUSIVE보다 먼저 돌았고, 이미 WAL인 파일을 다시 열면 `-shm`이 생겼다. 이제 연결 직후 `locking_mode`, `synchronous` 순서로 직접 실행한다. (#153, #148)
 
 ### Removed
 

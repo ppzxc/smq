@@ -273,6 +273,88 @@ class TransactionExecutorTest {
         });
     }
 
+    /** WAL 크기를 못 읽는 것은 "한도 아래"가 아니다. 체크포인트 실패와 다른 메시지로 한 번 WARNING을 남기고, 계속돼도 간격 억제를 따른다. */
+    @Test
+    void WAL_크기_읽기_실패는_구분된_메시지로_한_번만_WARNING으로_남는다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            TransactionExecutor ex = new TransactionExecutor(connection, path -> {
+                throw new java.io.IOException("injected");
+            });
+            commitBlobs(ex, every * 5);
+            assertEquals(1, warnings.size(), "연속 읽기 실패에는 WARNING이 한 번만");
+            String message = warnings.get(0).getMessage();
+            assertTrue(message.contains("size could not be read"), message);
+            assertFalse(message.contains("checkpoint did not complete"), "체크포인트 실패 메시지가 아니다");
+        });
+    }
+
+    /** 크기 읽기 실패는 연속 실패 상태를 지우지 않는다. 사이에 끼어도 이어지는 체크포인트 실패는 첫 실패로 다시 WARNING이 되지 않는다. */
+    @Test
+    void WAL_크기_읽기_실패는_연속_실패_횟수를_리셋하지_않는다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            AtomicBoolean sizeReadFails = new AtomicBoolean(false);
+            TransactionExecutor ex = new TransactionExecutor(
+                    failingCheckpoint(connection, () -> new IllegalStateException("injected")), path -> {
+                        if (sizeReadFails.get()) {
+                            throw new java.io.IOException("injected");
+                        }
+                        return Files.size(path);
+                    });
+            commitBlobs(ex, 1, (int) (9 * MB));
+            commitBlobs(ex, every - 1); // 첫 확인에서 체크포인트 실패: 1번째
+            assertEquals(1, warnings.size());
+            sizeReadFails.set(true);
+            commitBlobs(ex, every); // 크기 읽기 실패: 2번째라 로그 없음
+            sizeReadFails.set(false);
+            commitBlobs(ex, every); // 체크포인트 실패: 3번째라 로그 없음
+            assertEquals(1, warnings.size(), "읽기 실패가 횟수를 지웠다면 여기서 다시 WARNING이 난다");
+        });
+    }
+
+    /** 파일 없는 데이터베이스(WAL 없음)에서는 WAL 위치를 한 번만 확인한다. */
+    @Test
+    void 파일_없는_데이터베이스에서는_WAL_위치를_한_번만_확인한다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        try (Connection memory = java.sql.DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            java.util.concurrent.atomic.AtomicInteger lookups = new java.util.concurrent.atomic.AtomicInteger();
+            Connection counting = (Connection) Proxy.newProxyInstance(
+                    Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (proxy, method, args) -> {
+                        Object result = invoke(method, memory, args);
+                        if (!method.getName().equals("createStatement")) {
+                            return result;
+                        }
+                        Statement st = (Statement) result;
+                        return Proxy.newProxyInstance(
+                                Statement.class.getClassLoader(), new Class<?>[] {Statement.class}, (p, m, a) -> {
+                                    if (m.getName().equals("executeQuery")
+                                            && ((String) a[0]).contains("database_list")) {
+                                        lookups.incrementAndGet();
+                                    }
+                                    return invoke(m, st, a);
+                                });
+                    });
+            try (Statement s = memory.createStatement()) {
+                s.execute("CREATE TABLE t (v INTEGER)");
+            }
+            TransactionExecutor ex = new TransactionExecutor(counting);
+            for (int i = 0; i < every * 5; i++) {
+                ex.execute(c -> {
+                    try (Statement s = c.createStatement()) {
+                        s.execute("INSERT INTO t VALUES (1)");
+                    }
+                    return null;
+                });
+            }
+            assertEquals(1, lookups.get());
+        }
+    }
+
     private static void withWarnings(List<LogRecord> warnings, ThrowingRunnable body) throws Exception {
         Handler handler = new Handler() {
             @Override

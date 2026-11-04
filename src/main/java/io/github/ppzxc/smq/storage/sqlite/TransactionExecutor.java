@@ -62,8 +62,10 @@ final class TransactionExecutor {
     private final Connection connection;
     /** 커밋 횟수. lock 아래에서만 바뀐다. */
     private long commits;
-    /** 처음 확인할 때 찾는다. */
+    /** 처음 확인할 때 찾는다. 파일 없는 데이터베이스면 {@link #NO_WAL}로 남는다. */
     private Path walFile = NO_WAL;
+    /** WAL 위치를 확인했는지. {@link #NO_WAL}도 확인한 결과이므로 다시 묻지 않는다. */
+    private boolean walFileLocated;
     /** 마지막으로 되감은 직후의 WAL 파일 크기(최대 {@link #WAL_FILE_KEEP_BYTES}). 파일이 이보다 커져야 다시 되감는다. */
     private long walSizeAtRestart;
     /** 체크포인트가 연속으로 실패한 횟수. 연속 실패 로그를 줄이려고 둔다. 로그용이며 재시도에는 쓰지 않는다. */
@@ -183,10 +185,25 @@ final class TransactionExecutor {
             return;
         }
         try {
-            if (walFile.equals(NO_WAL)) {
+            if (!walFileLocated) {
                 walFile = locateWalFile();
+                walFileLocated = true;
             }
-            long size = walFile.equals(NO_WAL) ? 0 : walSize();
+            long size;
+            if (walFile.equals(NO_WAL)) {
+                size = 0;
+            } else {
+                try {
+                    size = walSizeReader.size(walFile);
+                } catch (IOException e) {
+                    // 크기를 모르면 "한도 아래"로 볼 수 없다. 연속 실패 상태를 지우지 않고 다음 확인에 맡긴다.
+                    checkpointCheckFailed(
+                            "sqlite WAL size could not be read, so the checkpoint check was skipped;"
+                                    + " the next check will retry",
+                            e);
+                    return;
+                }
+            }
             if (size < CHECKPOINT_WAL_BYTES) {
                 consecutiveCheckpointFailures = 0;
                 return;
@@ -224,12 +241,19 @@ final class TransactionExecutor {
 
     /** 연속 실패 중 첫 번째와 {@link #CHECKPOINT_FAILURE_LOG_EVERY}번째마다 WARNING으로 남긴다. */
     private void checkpointFailed(@Nullable Exception cause) {
+        checkpointCheckFailed("sqlite checkpoint did not complete after commit; the next check will retry", cause);
+    }
+
+    /**
+     * 확인이 끝까지 가지 못한 실패(체크포인트 실패, 크기 읽기 실패)를 센다. 둘은 메시지만 다르고 같은 연속 실패 횟수와 같은 간격
+     * 억제를 쓴다.
+     */
+    private void checkpointCheckFailed(String what, @Nullable Exception cause) {
         long failures = ++consecutiveCheckpointFailures;
         if (failures != 1 && failures % CHECKPOINT_FAILURE_LOG_EVERY != 0) {
             return;
         }
-        String message = "sqlite checkpoint did not complete after commit; the next check will retry"
-                + " (consecutive failures: " + failures + ", the WAL may be growing)";
+        String message = what + " (consecutive failures: " + failures + ", the WAL may be growing)";
         if (cause == null) {
             LOG.log(System.Logger.Level.WARNING, message);
         } else {
@@ -249,14 +273,6 @@ final class TransactionExecutor {
             }
         }
         return NO_WAL;
-    }
-
-    private long walSize() {
-        try {
-            return walSizeReader.size(walFile);
-        } catch (IOException e) {
-            return 0;
-        }
     }
 
     private void rollbackQuietly() {

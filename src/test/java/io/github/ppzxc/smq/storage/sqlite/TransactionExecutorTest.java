@@ -2,13 +2,13 @@ package io.github.ppzxc.smq.storage.sqlite;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.SmqStorageException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -34,7 +34,7 @@ class TransactionExecutorTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        connection = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("t.db"));
+        connection = SqliteStorage.connect(dir.resolve("t.db"), Durability.POWER_LOSS);
         try (Statement s = connection.createStatement()) {
             s.execute("CREATE TABLE t (v INTEGER)");
         }

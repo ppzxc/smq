@@ -156,4 +156,26 @@ class SqliteStorageTest {
     private static NewMessage message() {
         return new NewMessage(new byte[] {1}, Map.of());
     }
+
+    /**
+     * SQLite가 EXCLUSIVE를 거부하는 상황은 실제 연결로 만들 수 없어(메모리·파일 모두 "exclusive"로 답한다) 판정 함수만 직접
+     * 시험한다. 결과가 exclusive가 아니면 SQLException이고 대소문자는 가리지 않는다.
+     */
+    @Test
+    void locking_mode_결과가_exclusive가_아니면_SQLException이다() {
+        assertDoesNotThrow(() -> SqliteStorage.requireExclusive("exclusive"));
+        assertDoesNotThrow(() -> SqliteStorage.requireExclusive("EXCLUSIVE"));
+        assertThrows(SQLException.class, () -> SqliteStorage.requireExclusive("normal"));
+        assertThrows(SQLException.class, () -> SqliteStorage.requireExclusive(null));
+    }
+
+    @Test
+    void 연결을_열면_locking_mode가_exclusive다() throws Exception {
+        try (Connection c = SqliteStorage.connect(dir.resolve("x.db"), Durability.POWER_LOSS);
+                Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("PRAGMA locking_mode")) {
+            assertTrue(rs.next());
+            assertEquals("exclusive", rs.getString(1));
+        }
+    }
 }

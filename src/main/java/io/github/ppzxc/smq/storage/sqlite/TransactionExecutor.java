@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import org.jspecify.annotations.Nullable;
 
 /**
  * SQLite 저장소의 쓰기 경로. 단일 연결과 단일 lock, 그 lock 대기의 마감을 한 곳에서 소유한다(ADR-0007, ADR-0016).
@@ -63,6 +64,8 @@ final class TransactionExecutor {
     private Path walFile = NO_WAL;
     /** 마지막으로 되감은 직후의 WAL 파일 크기(최대 {@link #WAL_FILE_KEEP_BYTES}). 파일이 이보다 커져야 다시 되감는다. */
     private long walSizeAtRestart;
+    /** 직전 체크포인트 시도가 실패했는지. 연속 실패 중에는 첫 실패만 WARNING으로 남기려고 둔다. 로그용이며 재시도에는 쓰지 않는다. */
+    private boolean checkpointFailing;
 
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -152,9 +155,10 @@ final class TransactionExecutor {
      * {@code RESTART} 체크포인트로 되감는다. 파일은 줄이지 않는다. 줄이면 이후 쓰기마다 파일이 다시 늘면서
      * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시
      * 되감을 필요가 없을 때도 계속 건다. 그래서 되감은 직후의 크기를 기억해 파일이 그보다 더 커졌을 때(되감은 구간을 다 채웠을 때)만 다시 건다.
-     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 아무것도 기억하지 않고 다음 정규 확인에 맡긴다. SQL 오류는 BUSY든 아니든 삼키고
-     * 로그만 남긴다. 이미 커밋된 연산을 실패로 올리면 호출자가 재시도해 중복이 생기기 때문이다. 재시도 상태는 두지 않고
-     * 다음 정규 확인(커밋 8번 뒤)이 다시 시도한다.
+     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 크기는 기억하지 않고 다음 정규 확인에 맡긴다. SQL 오류든 런타임 예외든
+     * (예: {@code InvalidPathException}) 삼키고 로그만 남긴다. 이미 커밋된 연산을 실패로 올리면 호출자가 재시도해 중복이 생기기
+     * 때문이다. 재시도 상태는 두지 않고 다음 정규 확인(커밋 8번 뒤)이 다시 시도한다. 계속 실패해도 로그가 쏟아지지 않게, 실패(예외와
+     * 되감지 못함)가 이어지는 동안은 첫 번째만 WARNING으로 남기고, 되감기에 성공하면 이 상태를 지운다.
      */
     private void checkpointIfWalIsLarge() {
         commits++;
@@ -174,10 +178,28 @@ final class TransactionExecutor {
                 // 첫 열이 0이면 WAL을 끝까지 되감았다.
                 if (rs.next() && rs.getInt(1) == 0) {
                     walSizeAtRestart = Math.min(walSize(), WAL_FILE_KEEP_BYTES);
+                    checkpointFailing = false;
+                } else {
+                    checkpointFailed(null);
                 }
             }
-        } catch (SQLException e) {
-            LOG.log(System.Logger.Level.WARNING, "sqlite checkpoint failed after commit; the next check will retry", e);
+        } catch (SQLException | RuntimeException e) {
+            checkpointFailed(e);
+        }
+    }
+
+    /** 연속 실패 중 첫 실패만 WARNING으로 남긴다. 이후 연속 실패는 로그하지 않는다. */
+    private void checkpointFailed(@Nullable Exception cause) {
+        if (checkpointFailing) {
+            return;
+        }
+        checkpointFailing = true;
+        String message = "sqlite checkpoint did not complete after commit; the next check will retry"
+                + " (further consecutive failures are not logged)";
+        if (cause == null) {
+            LOG.log(System.Logger.Level.WARNING, message);
+        } else {
+            LOG.log(System.Logger.Level.WARNING, message, cause);
         }
     }
 

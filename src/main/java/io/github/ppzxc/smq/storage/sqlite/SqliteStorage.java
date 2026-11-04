@@ -155,7 +155,9 @@ public final class SqliteStorage implements Storage {
             // sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않으므로, EXCLUSIVE를 첫 문장으로 직접 건다.
             // 두 문장의 순서가 곧 설정이다. 순서를 바꾸거나 SQLiteConfig로 되돌리면 같은 고장이 다시 난다.
             // 이미 WAL인 파일을 다시 열 때도 WAL로 들어가기 전에 켜야 -shm 대신 heap memory wal-index를 쓴다.
-            s.execute("PRAGMA locking_mode = EXCLUSIVE");
+            try (ResultSet rs = s.executeQuery("PRAGMA locking_mode = EXCLUSIVE")) {
+                requireExclusive(rs.next() ? rs.getString(1) : null);
+            }
             // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
             s.execute("PRAGMA synchronous = "
                     + switch (durability) {
@@ -169,6 +171,13 @@ public final class SqliteStorage implements Storage {
             }
         }
         return connection;
+    }
+
+    /** {@code PRAGMA locking_mode = EXCLUSIVE}가 돌려준 모드가 exclusive가 아니면 단일 JVM 보증이 깨지므로 연결을 쓰지 않는다. */
+    static void requireExclusive(@Nullable String mode) throws SQLException {
+        if (!"exclusive".equalsIgnoreCase(mode)) {
+            throw new SQLException("locking_mode=EXCLUSIVE was not applied: " + mode);
+        }
     }
 
     private static boolean isBusyCause(Throwable t) {

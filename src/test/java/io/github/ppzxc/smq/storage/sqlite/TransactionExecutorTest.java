@@ -12,6 +12,14 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -133,8 +141,73 @@ class TransactionExecutorTest {
         }
     }
 
+    /** 체크포인트의 RuntimeException(예: InvalidPathException)도 커밋을 실패로 올리지 않는다. */
+    @Test
+    void 커밋_뒤_체크포인트의_런타임_예외도_삼키고_커밋은_정상_반환된다() throws Exception {
+        walExecutor();
+        TransactionExecutor ex = new TransactionExecutor(
+                failingCheckpoint(connection, () -> new java.nio.file.InvalidPathException("x", "injected")));
+        ex.execute(c -> {
+            try (Statement s = c.createStatement()) {
+                s.execute("INSERT INTO big VALUES (zeroblob(" + (9 * MB) + "))");
+            }
+            return null;
+        });
+        assertDoesNotThrow(() -> commitBlobs(ex, TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS));
+        try (Statement s = connection.createStatement();
+                ResultSet rs = s.executeQuery("SELECT count(*) FROM big")) {
+            assertTrue(rs.getInt(1) >= 2);
+        }
+    }
+
+    /** 연속 실패 중에는 첫 실패만 WARNING이고, 체크포인트가 성공하면 상태가 리셋돼 다음 실패가 다시 WARNING이다. */
+    @Test
+    void 체크포인트가_연속_실패해도_WARNING은_첫_실패에만_남고_성공하면_다시_남는다() throws Exception {
+        List<LogRecord> warnings = new ArrayList<>();
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord r) {
+                if (r.getLevel().intValue() >= Level.WARNING.intValue()) {
+                    warnings.add(r);
+                }
+            }
+
+            @Override
+            public void flush() {}
+
+            @Override
+            public void close() {}
+        };
+        Logger logger = Logger.getLogger(TransactionExecutor.class.getName());
+        logger.addHandler(handler);
+        try {
+            walExecutor();
+            AtomicBoolean failing = new AtomicBoolean(true);
+            TransactionExecutor ex = new TransactionExecutor(
+                    failingCheckpoint(connection, () -> failing.get() ? new IllegalStateException("injected") : null));
+            int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+            commitBlobs(ex, 1, (int) (9 * MB));
+            commitBlobs(ex, every * 5);
+            assertEquals(1, warnings.size(), "연속 실패에는 WARNING이 한 번만");
+
+            failing.set(false);
+            commitBlobs(ex, every); // 성공해 되감고 상태를 리셋한다.
+            commitBlobs(ex, 1, (int) (11 * MB)); // 되감은 구간을 다시 넘게 채운다.
+            failing.set(true);
+            commitBlobs(ex, every * 3);
+            assertEquals(2, warnings.size(), "성공 뒤 첫 실패는 다시 WARNING");
+        } finally {
+            logger.removeHandler(handler);
+        }
+    }
+
     /** {@code wal_checkpoint}를 실행하면 주어진 코드의 {@link SQLException}을 던지는 연결. 나머지는 실제 연결에 맡긴다. */
     private static Connection failingCheckpoint(Connection real, int errorCode) {
+        return failingCheckpoint(real, () -> new SQLException("injected", null, errorCode));
+    }
+
+    /** {@code wal_checkpoint}를 실행할 때마다 {@code failure}가 돌려주는 예외를 던진다. null이면 실제로 실행한다. */
+    private static Connection failingCheckpoint(Connection real, Supplier<Throwable> failure) {
         return (Connection) Proxy.newProxyInstance(
                 Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (proxy, method, args) -> {
                     Object result = invoke(method, real, args);
@@ -145,7 +218,10 @@ class TransactionExecutorTest {
                     return Proxy.newProxyInstance(
                             Statement.class.getClassLoader(), new Class<?>[] {Statement.class}, (p, m, a) -> {
                                 if (m.getName().equals("executeQuery") && ((String) a[0]).contains("wal_checkpoint")) {
-                                    throw new SQLException("injected", null, errorCode);
+                                    Throwable t = failure.get();
+                                    if (t != null) {
+                                        throw t;
+                                    }
                                 }
                                 return invoke(m, st, a);
                             });

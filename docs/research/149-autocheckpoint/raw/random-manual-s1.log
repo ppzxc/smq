@@ -1,0 +1,20 @@
+[module] 부모 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+환경: {date=2026-11-04T05:19:37.616964485Z, mode=random, storage=sqlite, os=Linux 6.18.54.1-microsoft-standard-WSL2, arch=amd64, cpus=32, java=25.0.3, workDirFs=ext4, caveat=WSL2에서 잰 값이다. fsync 비용을 과소평가할 수 있다.}
+기록: /home/ppzxc/orca/workspaces/smq/exp149/build/random-bench/runs-20261104-141937.jsonl
+[1] seed=1 PROCESS_CRASH 실행
+[exp] mode=manual, autocheckpoint=0, journal_size_limit=12582912
+[exp-open] locking_mode=exclusive shm=false durability=PROCESS_CRASH
+[exp-hold] mode=manual tx n=7363 p50<=0.1ms p99<=14.3ms p99.9<=22.9ms max=48.57ms over50ms=0 over100ms=0
+[exp-hold] mode=manual commit n=7363 p50<=0.1ms p99<=0.2ms p99.9<=4.7ms max=14.49ms over50ms=0 over100ms=0
+[exp-hold] mode=manual restart n=6 p50<=19.5ms p99<=28.2ms p99.9<=28.2ms max=28.15ms over50ms=0 over100ms=0
+    PASS  156 msg/s, 0.01 MB/s, p50 29982ms, p99 57841ms
+
+처리량이 낮은 순
+  seed                      msg/s     MB/s       p50       p99  판정
+  1                           156     0.01   29982ms   57841ms  PASS
+
+p99가 높은 순
+  seed                      msg/s     MB/s       p50       p99  판정
+  1                           156     0.01   29982ms   57841ms  PASS
+
+합계: 1회 실행, 위반 없음

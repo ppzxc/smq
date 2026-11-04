@@ -1,0 +1,35 @@
+== S1 msg/s  key | manual r1/r2/r3 (med) | auto-2048 r1/r2/r3 (med) | auto-3072 r1/r2/r3 (med) | 2048/m | 3072/m
+S1/P0/POWER_LOSS/empty:msgPerSec              | 67.19/66.63/66.05 (66.63) | 63.33/68.78/66.61 (66.61) | 61.41/66.50/71.19 (66.5) | 1.00 | 1.00
+S1/P0/PROCESS_CRASH/empty:msgPerSec           | 7488/8160/7992 (7992) | 6698/7488/7471 (7471) | 5673/8182/8395 (8182) | 0.93 | 1.02
+S1/P1/POWER_LOSS/1m:msgPerSec                 | 6096/6446/6356 (6356) | 5696/6458/6394 (6394) | 6044/6299/6392 (6299) | 1.01 | 0.99
+S1/P1/POWER_LOSS/empty:msgPerSec              | 6006/6404/6355 (6355) | 6262/6640/6443 (6443) | 6293/6396/6601 (6396) | 1.01 | 1.01
+S1/P1/PROCESS_CRASH/1m:msgPerSec              | 68803/83632/85777 (8.363e+04) | 66266/78286/79086 (7.829e+04) | 72125/84942/84560 (8.456e+04) | 0.94 | 1.01
+S1/P1/PROCESS_CRASH/empty:msgPerSec           | 74353/98742/99469 (9.874e+04) | 59523/92384/93625 (9.238e+04) | 85346/99624/98391 (9.839e+04) | 0.94 | 1.00
+S1/P2/POWER_LOSS/empty:msgPerSec              | 66.68/68.77/68.45 (68.45) | 63.14/66.00/68.96 (66) | 57.90/66.83/65.67 (65.67) | 0.96 | 0.96
+S1/P2/PROCESS_CRASH/empty:msgPerSec           | 7923/7917/7888 (7917) | 6800/6978/7333 (6978) | 6449/8232/8352 (8232) | 0.88 | 1.04
+S1/P3/POWER_LOSS/empty:msgPerSec              | 13696/13663/13419 (1.366e+04) | 11757/12829/13177 (1.283e+04) | 13270/13353/13782 (1.335e+04) | 0.94 | 0.98
+S1/P3/PROCESS_CRASH/empty:msgPerSec           | 35457/36699/34847 (3.546e+04) | 24443/29826/30925 (2.983e+04) | 33853/36602/36908 (3.66e+04) | 0.84 | 1.03
+S1/P4/POWER_LOSS/empty:msgPerSec              | 70.47/69.45/71.54 (70.47) | 67.33/66.77/67.16 (67.16) | 66.45/69.14/67.96 (67.96) | 0.95 | 0.96
+S1/P4/PROCESS_CRASH/empty:msgPerSec           | 4027/5206/5235 (5206) | 3487/4454/4507 (4454) | 4282/5326/5246 (5246) | 0.86 | 1.01
+S1/P5/POWER_LOSS/empty:msgPerSec              | 14455/15757/15142 (1.514e+04) | 11926/14294/14468 (1.429e+04) | 13630/14728/14622 (1.462e+04) | 0.94 | 0.97
+S1/P5/PROCESS_CRASH/empty:msgPerSec           | 26905/35776/34792 (3.479e+04) | 23710/26751/26958 (2.675e+04) | 28401/30474/30345 (3.034e+04) | 0.77 | 0.87
+S1/P6/POWER_LOSS/empty:msgPerSec              | 65.48/46.04/71.13 (65.48) | 63.92/67.53/67.10 (67.1) | 65.22/71.24/68.65 (68.65) | 1.02 | 1.05
+S1/P6/PROCESS_CRASH/empty:msgPerSec           | 3940/5149/5214 (5149) | 4096/4382/4389 (4382) | 4421/5420/5129 (5129) | 0.85 | 1.00
+S1/P7/POWER_LOSS/empty:msgPerSec              | 10615/12236/11670 (1.167e+04) | 5798/10950/11107 (1.095e+04) | 10633/11515/11469 (1.147e+04) | 0.94 | 0.98
+S1/P7/PROCESS_CRASH/empty:msgPerSec           | 15996/18727/18345 (1.835e+04) | 11236/15286/15551 (1.529e+04) | 12499/17013/16943 (1.694e+04) | 0.83 | 0.92
+== randomBench walMax / hold
+random-manual-s1-out     msg/s=156 p50=29982 p99=57841 walMax=9.46MB verdict=PASS
+random-manual-s2-out     msg/s=842 p50=26982 p99=55526 walMax=11.08MB verdict=PASS
+random-manual-s3-out     msg/s=251 p50=None p99=None walMax=10.62MB verdict=PASS
+random-auto-2048-s1-out  msg/s=156 p50=29990 p99=57868 walMax=8.54MB verdict=PASS
+random-auto-2048-s2-out  msg/s=789 p50=23099 p99=55996 walMax=8.58MB verdict=PASS
+random-auto-2048-s3-out  msg/s=253 p50=None p99=None walMax=8.54MB verdict=PASS
+random-auto-3072-s1-out  msg/s=163 p50=27793 p99=57788 walMax=12.68MB verdict=PASS
+random-auto-3072-s2-out  msg/s=825 p50=26848 p99=55746 walMax=12.64MB verdict=PASS
+random-auto-3072-s3-out  msg/s=262 p50=None p99=None walMax=12.58MB verdict=PASS
+manual     walMax max=11.08MB (9.46, 11.08, 10.62)  restart max=71.11ms(n=99)  commit max=114.83ms(n=159)  tx max=115.14ms(n=159)
+auto-2048  walMax max=8.58MB (8.54, 8.58, 8.54)  restart max=nanms(n=0)  commit max=94.21ms(n=159)  tx max=164.30ms(n=159)
+auto-3072  walMax max=12.68MB (12.68, 12.64, 12.58)  restart max=nanms(n=0)  commit max=78.23ms(n=159)  tx max=84.41ms(n=159)
+== 기준
+auto-2048: c1=False (min 0.77) c2=True c3=True c4=True
+auto-3072: c1=False (min 0.87) c2=True c3=True c4=False

@@ -10,6 +10,7 @@
 
 ### Changed
 
+- **호환 파괴**: SQLite 저장소를 한 JVM만 열 수 있게 했다. 열 때 DB 옆의 락 파일(`<DB 파일명>.lock`)에 OS 배타 락을 잡고 연결을 `locking_mode=EXCLUSIVE`로 연다. 다른 프로세스나 같은 JVM의 중복 열기, 외부 도구가 파일을 쥔 경우에는 기다리지 않고 `StorageLockedException`이 올라온다. 같은 파일을 여러 프로세스가 공유하던 사용은 둘째 프로세스의 `open`이 실패한다. 실행 중에는 sqlite3 CLI 같은 외부 도구로 DB 파일을 읽을 수 없고, 대신 `Smq.snapshot(Path)`로 만든 스냅샷을 읽는다. (#128, ADR-0012)
 - **호환 파괴**: `Smq.SqliteBuilder.lockWaitFloor(Duration)`을 공개 API에서 뺐다. lock 대기 하한은 기본 100ms 그대로이고, `wait`가 0인 꺼내기도 정상적인 짧은 직렬화는 기다린다. 이 옵션을 쓰던 빌드는 컴파일 오류가 난다. (#155)
 - **호환 파괴**: SQLite 저장소의 기본 내구성 수준을 `Durability.POWER_LOSS`에서 `Durability.PROCESS_CRASH`로 바꿨다. 기본값은 애플리케이션 크래시까지 견디고, 전원 장애나 OS 크래시 때는 마지막 커밋 몇 개를 잃을 수 있다. 전원·OS 장애까지 견뎌야 하면 빌더에서 `.durability(Durability.POWER_LOSS)`를 명시한다. 그 보장은 저장 장치가 fsync를 지킬 때만 성립한다. v1 성능 하한은 계속 `POWER_LOSS`로 잰다. (#146, ADR-0014)
 - 벤치마크 결과와 기준선의 항목 키에서 형태 구성요소(`proc1`, `same-process`)를 뺐다. 예: `sqlite/S1/P1/proc1/POWER_LOSS/empty:msgPerSec`는 `sqlite/S1/P1/POWER_LOSS/empty:msgPerSec`가 된다. `--filter`에 옛 키를 쓰던 스크립트는 고쳐야 한다. (#129)

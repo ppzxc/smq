@@ -111,12 +111,12 @@ class TransactionExecutorTest {
     }
 
     /**
-     * 커밋 뒤 체크포인트의 SQL 오류는 BUSY(5)든 아니든 같은 규칙이다. 이미 커밋됐고 효력을 알 수 없는
-     * {@link SmqStorageException}이며, 삼키지 않는다.
+     * 커밋 뒤 체크포인트의 SQL 오류는 BUSY(5)든 아니든 같은 규칙이다. 이미 커밋된 연산의 결과는 그대로
+     * 돌려주고 오류는 삼킨다. 되감기는 다음 정규 확인이 다시 시도한다.
      */
     @ParameterizedTest
     @ValueSource(ints = {5, 517, 10})
-    void 커밋_뒤_체크포인트의_SQL_오류는_BUSY든_아니든_효력_불명인_SmqStorageException이다(int errorCode) throws Exception {
+    void 커밋_뒤_체크포인트의_SQL_오류는_BUSY든_아니든_삼키고_커밋은_정상_반환된다(int errorCode) throws Exception {
         walExecutor();
         TransactionExecutor ex = new TransactionExecutor(failingCheckpoint(connection, errorCode));
         ex.execute(c -> {
@@ -125,9 +125,8 @@ class TransactionExecutorTest {
             }
             return null;
         });
-        // 확인 주기(커밋 8번)가 돌아오면 WAL이 한도를 넘었으므로 체크포인트가 실패한다.
-        assertThrows(
-                SmqStorageException.class, () -> commitBlobs(ex, TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS));
+        // 확인 주기(커밋 8번)가 돌아오면 WAL이 한도를 넘었으므로 체크포인트가 실패하지만 예외 없이 돌아온다.
+        assertDoesNotThrow(() -> commitBlobs(ex, TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS));
         try (Statement s = connection.createStatement();
                 ResultSet rs = s.executeQuery("SELECT count(*) FROM big")) {
             assertTrue(rs.getInt(1) >= 2, "체크포인트가 실패해도 커밋은 남는다");

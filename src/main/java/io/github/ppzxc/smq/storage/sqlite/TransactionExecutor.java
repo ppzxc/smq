@@ -20,6 +20,8 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 final class TransactionExecutor {
 
+    private static final System.Logger LOG = System.getLogger(TransactionExecutor.class.getName());
+
     /** SQLite 기본 결과 코드 {@code SQLITE_BUSY}. */
     private static final int SQLITE_BUSY = 5;
 
@@ -100,7 +102,10 @@ final class TransactionExecutor {
         }
     }
 
-    /** 쓰기 트랜잭션 하나를 lock 아래에서 실행한다. SQL 오류는 효력 불명이므로 {@link SmqStorageException}이다. */
+    /**
+     * 쓰기 트랜잭션 하나를 lock 아래에서 실행한다. 커밋까지의 SQL 오류는 효력 불명이므로 {@link SmqStorageException}이다.
+     * 커밋 뒤 체크포인트의 오류는 삼키므로 이미 커밋된 결과를 그대로 돌려준다.
+     */
     <T> T execute(TxBody<T> body) {
         return execute(body, Deadline.NONE);
     }
@@ -147,8 +152,9 @@ final class TransactionExecutor {
      * {@code RESTART} 체크포인트로 되감는다. 파일은 줄이지 않는다. 줄이면 이후 쓰기마다 파일이 다시 늘면서
      * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시
      * 되감을 필요가 없을 때도 계속 건다. 그래서 되감은 직후의 크기를 기억해 파일이 그보다 더 커졌을 때(되감은 구간을 다 채웠을 때)만 다시 건다.
-     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 아무것도 기억하지 않고 다음 정규 확인에 맡긴다. SQL 오류는 BUSY든 아니든 숨기지 않고
-     * {@link SmqStorageException}으로 던진다(이미 커밋됐으므로 호출자에게는 효력 불명이다).
+     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 아무것도 기억하지 않고 다음 정규 확인에 맡긴다. SQL 오류는 BUSY든 아니든 삼키고
+     * 로그만 남긴다. 이미 커밋된 연산을 실패로 올리면 호출자가 재시도해 중복이 생기기 때문이다. 재시도 상태는 두지 않고
+     * 다음 정규 확인(커밋 8번 뒤)이 다시 시도한다.
      */
     private void checkpointIfWalIsLarge() {
         commits++;
@@ -171,7 +177,7 @@ final class TransactionExecutor {
                 }
             }
         } catch (SQLException e) {
-            throw new SmqStorageException("sqlite checkpoint failed after commit", e);
+            LOG.log(System.Logger.Level.WARNING, "sqlite checkpoint failed after commit; the next check will retry", e);
         }
     }
 

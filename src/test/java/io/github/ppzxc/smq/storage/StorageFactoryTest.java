@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
+import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,20 +28,22 @@ class StorageFactoryTest {
 
     @Test
     void v1_견본_factory로_같은_디렉터리를_다시_열어도_데이터가_유지된다() {
-        try (Storage first = StorageFactory.SQLITE_V1_SAMPLE.open(dir)) {
+        try (Storage first =
+                StorageFactory.sqliteV1Sample(Durability.PROCESS_CRASH).open(dir)) {
             publishOne(first);
         }
-        try (Storage second = StorageFactory.SQLITE_V1_SAMPLE.open(dir)) {
+        try (Storage second =
+                StorageFactory.sqliteV1Sample(Durability.PROCESS_CRASH).open(dir)) {
             assertEquals(1, second.counts("extra", T0).ready());
         }
     }
 
     @Test
     void 새_SQLite_factory로_같은_디렉터리를_다시_열어도_데이터가_유지된다() {
-        try (Storage first = StorageFactory.SQLITE_NEW.open(dir)) {
+        try (Storage first = StorageFactory.sqliteNew(Durability.PROCESS_CRASH).open(dir)) {
             publishOne(first);
         }
-        try (Storage second = StorageFactory.SQLITE_NEW.open(dir)) {
+        try (Storage second = StorageFactory.sqliteNew(Durability.PROCESS_CRASH).open(dir)) {
             assertEquals(1, second.counts("extra", T0).ready());
         }
     }

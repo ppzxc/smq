@@ -12,12 +12,20 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.Parameter;
+import org.junit.jupiter.params.ParameterizedClass;
+import org.junit.jupiter.params.provider.EnumSource;
 
+@ParameterizedClass
+@EnumSource(Durability.class)
 class SqliteSmqTest extends SmqConformanceTest {
+
+    @Parameter
+    Durability durability;
 
     @Override
     StorageFactory factory() {
-        return StorageFactory.SQLITE_NEW;
+        return StorageFactory.sqliteNew(durability);
     }
 
     private final List<Smq> direct = new ArrayList<>();

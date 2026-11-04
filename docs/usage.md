@@ -127,7 +127,7 @@ if (!ext.outcomes().allOk()) { /* 일부는 이미 다른 리스로 넘어갔거
 | `QueueInUseException` | 다른 큐가 dead letter 큐로 쓰는 큐를 지우려 했다. |
 | `NoDeadLetterQueueException` | dead letter 큐가 없는 큐에서 reject했다. |
 | `IncompatibleStorageException` | 파일이 smq 파일이 아니거나 스키마 버전이 맞지 않는다. |
-| `SmqStorageException` | 저장소 연산의 효력을 알 수 없다. 반영됐을 수도, 안 됐을 수도 있다. |
+| `SmqStorageException` | 저장소 연산의 효력을 알 수 없다. 반영됐을 수도, 안 됐을 수도 있다. 커밋 뒤 WAL 되감기 오류는 이 예외가 아니다. 삼키고 로그만 남기며 연산은 정상 결과를 돌려준다. |
 | `StorageLockedException` | SQLite 파일을 다른 곳(다른 프로세스, 같은 JVM의 중복 열기, 외부 도구)이 쥐고 있어 열 수 없다. 기다리지 않고 바로 던진다. 아무것도 변경되지 않았다. |
 
 `SmqStorageException` 뒤에는 발행을 다시 해도 된다(앞선 발행이 반영됐다면 중복되지만 at-least-once 범위 안이다). 정산은 같은 `Settlement` 값으로 다시 하면 된다.

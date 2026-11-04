@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- 커밋 뒤 WAL 체크포인트의 SQL 오류를 더 이상 `SmqStorageException`(효력 불명)으로 올리지 않는다. 이미 커밋된 발행이나 정산이 정상 결과를 돌려주고, 오류는 경고 로그(`System.Logger`)만 남기며 다음 정규 확인(커밋 8번 뒤)이 되감기를 다시 시도한다. 호출자가 커밋된 발행을 실패로 보고 재시도해 중복이 생기던 문제를 없앤다. (ADR-0017)
 - 다시 열 때도 `-shm` 없이 `locking_mode=EXCLUSIVE`로 연다. sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않아 `synchronous`가 EXCLUSIVE보다 먼저 돌았고, 이미 WAL인 파일을 다시 열면 `-shm`이 생겼다. 이제 연결 직후 `locking_mode`, `synchronous` 순서로 직접 실행한다. (#153, #148)
 
 ### Removed

@@ -10,7 +10,7 @@ lock 대기에는 하한이 있다. 내부 상수 100ms(`Deadline.DEFAULT_LOCK_W
 
 ## BUSY와 트랜잭션 모드
 
-열린 뒤 실행 중에 나는 `SQLITE_BUSY`는 기다리거나 재시도하지 않는다. 다른 SQL 오류와 똑같이 `SmqStorageException`이 되고, 꺼내기 판정에도 BUSY 분기가 없다(#138). `busy_timeout`은 0이다. 열 때 나는 BUSY는 `StorageLockedException`이다(ADR-0012). 한 JVM만 파일을 여는 지금, 락 파일을 잡은 뒤의 BUSY는 smq 밖의 도구가 DB를 쥔 것이라 기다려도 풀리지 않는다.
+열린 뒤 실행 중에 나는 `SQLITE_BUSY`는 기다리거나 재시도하지 않는다. 커밋 전의 다른 SQL 오류와 똑같이 `SmqStorageException`이 되고(커밋 뒤 체크포인트의 오류는 예외가 아니라 삼키고 로그만 남긴다, ADR-0017), 꺼내기 판정에도 BUSY 분기가 없다(#138). `busy_timeout`은 0이다. 열 때 나는 BUSY는 `StorageLockedException`이다(ADR-0012). 한 JVM만 파일을 여는 지금, 락 파일을 잡은 뒤의 BUSY는 smq 밖의 도구가 DB를 쥔 것이라 기다려도 풀리지 않는다.
 
 쓰기 트랜잭션은 계속 `BEGIN IMMEDIATE`로 시작한다. 바꿀 동기가 성능뿐이라 범위 밖이고, 읽기에서 쓰기로 승격하는 지점을 없애 준다.
 

@@ -119,7 +119,7 @@ record Options(
         try {
             return Durability.valueOf(v.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("--durability는 POWER_LOSS 또는 PROCESS_CRASH여야 한다: " + v);
+            throw new IllegalArgumentException("--durability는 POWER_LOSS 또는 PROCESS_CRASH여야 한다(대소문자 무시): " + v, e);
         }
     }
 

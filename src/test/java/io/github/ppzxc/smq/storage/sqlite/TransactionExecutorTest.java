@@ -3,6 +3,8 @@ package io.github.ppzxc.smq.storage.sqlite;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.SmqStorageException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -14,6 +16,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** 트랜잭션 실행 모듈. */
 class TransactionExecutorTest {
@@ -103,6 +107,57 @@ class TransactionExecutorTest {
                 ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(PASSIVE)")) {
             assertTrue(rs.next());
             assertTrue(rs.getInt(2) < 100, "WAL에 프레임이 " + rs.getInt(2) + "개 남았다. 되감지 않았다");
+        }
+    }
+
+    /**
+     * 커밋 뒤 체크포인트의 SQL 오류는 BUSY(5)든 아니든 같은 규칙이다. 이미 커밋됐고 효력을 알 수 없는
+     * {@link SmqStorageException}이며, 삼키지 않는다.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {5, 517, 10})
+    void 커밋_뒤_체크포인트의_SQL_오류는_BUSY든_아니든_효력_불명인_SmqStorageException이다(int errorCode) throws Exception {
+        walExecutor();
+        TransactionExecutor ex = new TransactionExecutor(failingCheckpoint(connection, errorCode));
+        ex.execute(c -> {
+            try (Statement s = c.createStatement()) {
+                s.execute("INSERT INTO big VALUES (zeroblob(" + (9 * MB) + "))");
+            }
+            return null;
+        });
+        // 확인 주기(커밋 8번)가 돌아오면 WAL이 한도를 넘었으므로 체크포인트가 실패한다.
+        assertThrows(
+                SmqStorageException.class, () -> commitBlobs(ex, TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS));
+        try (Statement s = connection.createStatement();
+                ResultSet rs = s.executeQuery("SELECT count(*) FROM big")) {
+            assertTrue(rs.getInt(1) >= 2, "체크포인트가 실패해도 커밋은 남는다");
+        }
+    }
+
+    /** {@code wal_checkpoint}를 실행하면 주어진 코드의 {@link SQLException}을 던지는 연결. 나머지는 실제 연결에 맡긴다. */
+    private static Connection failingCheckpoint(Connection real, int errorCode) {
+        return (Connection) Proxy.newProxyInstance(
+                Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (proxy, method, args) -> {
+                    Object result = invoke(method, real, args);
+                    if (!method.getName().equals("createStatement")) {
+                        return result;
+                    }
+                    Statement st = (Statement) result;
+                    return Proxy.newProxyInstance(
+                            Statement.class.getClassLoader(), new Class<?>[] {Statement.class}, (p, m, a) -> {
+                                if (m.getName().equals("executeQuery") && ((String) a[0]).contains("wal_checkpoint")) {
+                                    throw new SQLException("injected", null, errorCode);
+                                }
+                                return invoke(m, st, a);
+                            });
+                });
+    }
+
+    private static Object invoke(java.lang.reflect.Method method, Object target, Object[] args) throws Throwable {
+        try {
+            return method.invoke(target, args);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
         }
     }
 

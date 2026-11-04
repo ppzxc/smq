@@ -111,6 +111,14 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    void lock_대기_하한은_공개_빌더_옵션이_아니다() {
+        // 0.1.0 호환 파괴(#155): 하한은 내부 상수(기본 100ms)이고, 테스트만 같은 패키지에서 조정한다.
+        boolean exposed = java.util.Arrays.stream(Smq.SqliteBuilder.class.getMethods())
+                .anyMatch(method -> method.getName().equals("lockWaitFloor"));
+        assertFalse(exposed, "lockWaitFloor가 공개 API에 노출돼 있다");
+    }
+
+    @Test
     void 두_내구성_수준_모두_발행과_꺼내기가_동작한다() throws Exception {
         for (Durability d : Durability.values()) {
             try (Smq smq = Smq.sqlite(dir.resolve(d + ".db")).durability(d).open()) {

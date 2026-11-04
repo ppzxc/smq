@@ -110,11 +110,10 @@ public interface Smq extends AutoCloseable {
         }
 
         /**
-         * 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간. 기본은 100ms다.
-         * 같은 프로세스의 다른 호출이 쓰기 트랜잭션 하나를 끝내는 시간보다 짧으면, 경합 중에 {@code wait}가 짧은 꺼내기가
-         * 메시지가 있는데도 빈 청크로 돌아온다. 쓰기 트랜잭션 하나가 100ms를 넘는 느린 저장 장치에서 늘린다. 0 이상이다.
+         * 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간을 바꾼다. 기본은 100ms다.
+         * 공개 옵션이 아니라 테스트용이다. 0 이상이다.
          */
-        public SqliteBuilder lockWaitFloor(Duration lockWaitFloor) {
+        SqliteBuilder lockWaitFloor(Duration lockWaitFloor) {
             Objects.requireNonNull(lockWaitFloor, "lockWaitFloor");
             if (lockWaitFloor.isNegative()) {
                 throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);

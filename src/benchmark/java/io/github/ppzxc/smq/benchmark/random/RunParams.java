@@ -60,8 +60,8 @@ record RunParams(
     /** 고정 속도 모드의 발행 배치는 스레드 몫의 (1 / 이 값)초 분량을 넘지 않게 한다. 배치가 너무 크면 발행이 덩어리로 몰린다. */
     static final long SOAK_BATCH_WINDOW_DIVISOR = 4;
     /**
-     * 고정 속도 모드의 발행 배치 하한. 건당에 가까운 작은 배치는 커밋을 초당 수백 번 만들어 쓰기 락을 포화시키므로(12시간 실행에서
-     * 배치 2~7인 실행에서만 SQLITE_BUSY와 백로그 증가가 났다), 운영에서 쓰는 수준으로 묶는다.
+     * 고정 속도 모드의 발행 배치 하한. 건당에 가까운 작은 배치는 커밋 횟수를 늘리고, POWER_LOSS는 커밋마다 fsync를 하므로 fsync 상한(ns0270 S1
+     * P0 약 722 msg/s)이 목표 속도를 막는다. 그래서 운영에서 쓰는 수준으로 묶는다.
      */
     static final long SOAK_MIN_PUBLISH_BATCH = 20;
 
@@ -72,7 +72,9 @@ record RunParams(
         int chunkSize = logUniform(r, 1, 500);
         int producers = 1 + r.nextInt(4);
         int consumers = 1 + r.nextInt(4);
-        Durability durability = r.nextBoolean() ? Durability.POWER_LOSS : Durability.PROCESS_CRASH;
+        // 고정해도 난수는 뽑아서, 나머지 매개변수가 같은 시드의 것과 같게 한다.
+        Durability drawn = r.nextBoolean() ? Durability.POWER_LOSS : Durability.PROCESS_CRASH;
+        Durability durability = limits.durability().orElse(drawn);
         int depth = r.nextBoolean() ? 0 : logUniform(r, 1_000, 100_000);
         long avgBytes = avgMessageBytes(0, maxBytes);
         depth = (int) Math.min(Math.min(depth, limits.maxDepth()), PREFILL_BYTES_CAP / avgBytes);

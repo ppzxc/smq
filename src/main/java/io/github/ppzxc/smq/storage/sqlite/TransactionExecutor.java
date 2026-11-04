@@ -43,12 +43,6 @@ final class TransactionExecutor {
      */
     static final long WAL_FILE_KEEP_BYTES = 12L * 1024 * 1024;
     /**
-     * 되감기에 실패한 뒤 이 커밋 수만큼은 다시 시도하지 않는다. 방어 코드: 락 파일은 권고라서 이를 우회한 외부 도구가
-     * 읽고 있으면 되감기가 막힐 수 있다.
-     */
-    private static final int CHECKPOINT_RETRY_AFTER_COMMITS = 8;
-
-    /**
      * 저장소를 열 때 연결에 거는 WAL 설정. 자동 체크포인트를 끄고, 되감은 파일의 상한을 {@link #WAL_FILE_KEEP_BYTES}로 두고, 저널 모드를
      * WAL로 바꾼다. 이 순서로 건다. 열 때와 테스트가 같은 것을 쓴다.
      */
@@ -63,10 +57,6 @@ final class TransactionExecutor {
     private final Connection connection;
     /** 커밋 횟수. lock 아래에서만 바뀐다. */
     private long commits;
-    /** 마지막 확인에서 WAL이 한도를 넘었고 아직 되감지 못했다. {@link #checkpointRetryAtCommit}부터 다시 시도한다. */
-    private boolean walOverLimit;
-    /** {@link #walOverLimit}일 때 다시 시도할 커밋 횟수. */
-    private long checkpointRetryAtCommit;
     /** 처음 확인할 때 찾는다. */
     private Path walFile = NO_WAL;
     /** 마지막으로 되감은 직후의 WAL 파일 크기(최대 {@link #WAL_FILE_KEEP_BYTES}). 파일이 이보다 커져야 다시 되감는다. */
@@ -92,7 +82,7 @@ final class TransactionExecutor {
 
     /**
      * 꺼낼 것이 있는지 autocommit으로 본다. 쓰기 락 없이 읽고 읽기 트랜잭션을 남기지 않는다.
-     * 확실하지 않으면(BUSY) 참을 돌려 쓰기 경로가 다시 확인하게 한다. BUSY가 아닌 오류는 예외다.
+     * 확실하지 않으면(큐가 없으면) 참을 돌려 쓰기 경로가 다시 확인하게 한다. SQL 오류는 BUSY도 예외다.
      */
     boolean anyOrUncertain(ReadProbe probe) {
         return anyOrUncertain(probe, Deadline.NONE);
@@ -104,10 +94,6 @@ final class TransactionExecutor {
         try {
             return probe.apply(connection);
         } catch (SQLException e) {
-            // 방어 코드: 락 파일은 권고라서 이를 우회해 파일을 쥔 외부 도구가 있으면 BUSY가 날 수 있다.
-            if (isBusy(e)) {
-                return true;
-            }
             throw new SmqStorageException("sqlite operation failed", e);
         } finally {
             lock.unlock();
@@ -161,14 +147,12 @@ final class TransactionExecutor {
      * {@code RESTART} 체크포인트로 되감는다. 파일은 줄이지 않는다. 줄이면 이후 쓰기마다 파일이 다시 늘면서
      * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시
      * 되감을 필요가 없을 때도 계속 건다. 그래서 되감은 직후의 크기를 기억해 파일이 그보다 더 커졌을 때(되감은 구간을 다 채웠을 때)만 다시 건다.
-     * 못 되감으면 {@link #CHECKPOINT_RETRY_AFTER_COMMITS}번 커밋 동안은 다시 시도하지 않고 그 뒤에 다시 한다. 이미 커밋된 쓰기의
-     * 결과를 바꾸지 않으므로 BUSY는 삼킨다. BUSY가 아닌 오류는 숨기지 않고 {@link SmqStorageException}으로 던진다(이미 커밋됐으므로
-     * 호출자에게는 효력 불명이다).
+     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 아무것도 기억하지 않고 다음 정규 확인에 맡긴다. SQL 오류는 BUSY든 아니든 숨기지 않고
+     * {@link SmqStorageException}으로 던진다(이미 커밋됐으므로 호출자에게는 효력 불명이다).
      */
     private void checkpointIfWalIsLarge() {
         commits++;
-        boolean due = walOverLimit ? commits >= checkpointRetryAtCommit : commits % CHECKPOINT_CHECK_EVERY_COMMITS == 0;
-        if (!due) {
+        if (commits % CHECKPOINT_CHECK_EVERY_COMMITS != 0) {
             return;
         }
         try {
@@ -176,28 +160,18 @@ final class TransactionExecutor {
                 walFile = locateWalFile();
             }
             long size = walFile.equals(NO_WAL) ? 0 : walSize();
-            walOverLimit = size >= CHECKPOINT_WAL_BYTES && size > walSizeAtRestart;
-            if (!walOverLimit) {
+            if (size < CHECKPOINT_WAL_BYTES || size <= walSizeAtRestart) {
                 return;
             }
-            try (Statement s = connection.createStatement()) {
-                try (ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
-                    // 첫 열이 0이면 WAL을 끝까지 되감았다.
-                    walOverLimit = !rs.next() || rs.getInt(1) != 0;
+            try (Statement s = connection.createStatement();
+                    ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
+                // 첫 열이 0이면 WAL을 끝까지 되감았다.
+                if (rs.next() && rs.getInt(1) == 0) {
+                    walSizeAtRestart = Math.min(walSize(), WAL_FILE_KEEP_BYTES);
                 }
             }
-            if (walOverLimit) {
-                checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;
-            } else {
-                walSizeAtRestart = Math.min(walSize(), WAL_FILE_KEEP_BYTES);
-            }
         } catch (SQLException e) {
-            if (!isBusy(e)) {
-                throw new SmqStorageException("sqlite checkpoint failed after commit", e);
-            }
-            // 방어 코드: 락 파일은 권고라서 이를 우회해 파일을 쥔 외부 도구가 있으면 BUSY가 날 수 있다.
-            walOverLimit = true;
-            checkpointRetryAtCommit = commits + CHECKPOINT_RETRY_AFTER_COMMITS;
+            throw new SmqStorageException("sqlite checkpoint failed after commit", e);
         }
     }
 

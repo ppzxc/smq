@@ -140,7 +140,7 @@ public final class SqliteStorage implements Storage {
     }
 
     /**
-     * 연결을 열고 연결 설정을 건다. 저장소 내부 테스트 픽스처도 같은 함수를 거쳐 실제 열기 경로와 같은 설정을 쓴다.
+     * 연결을 열고 연결 설정을 건다. `open`이 쓰고, 저장소 내부 테스트 픽스처는 이 함수를 거쳐 실제 열기 경로와 같은 설정을 쓰게 한다(#152 T4).
      *
      * <p>설정에는 {@code busy_timeout}만 넣고, {@code locking_mode}와 {@code synchronous}는 연결 직후 이 순서로 직접
      * 실행한다. 기다리지 않는다: 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고, 난다면
@@ -152,10 +152,15 @@ public final class SqliteStorage implements Storage {
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
         try (Statement s = connection.createStatement()) {
             // sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않으므로, EXCLUSIVE를 첫 문장으로 직접 건다.
+            // 두 문장의 순서가 곧 설정이다. 순서를 바꾸거나 SQLiteConfig로 되돌리면 같은 고장이 다시 난다.
             // 이미 WAL인 파일을 다시 열 때도 WAL로 들어가기 전에 켜야 -shm 대신 heap memory wal-index를 쓴다.
             s.execute("PRAGMA locking_mode = EXCLUSIVE");
             // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
-            s.execute("PRAGMA synchronous = " + (durability == Durability.POWER_LOSS ? "FULL" : "NORMAL"));
+            s.execute("PRAGMA synchronous = "
+                    + switch (durability) {
+                        case POWER_LOSS -> "FULL";
+                        case PROCESS_CRASH -> "NORMAL";
+                    });
         } catch (SQLException | RuntimeException e) {
             try {
                 connection.close();

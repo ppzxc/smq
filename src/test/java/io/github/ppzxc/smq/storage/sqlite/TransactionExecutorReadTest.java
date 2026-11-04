@@ -12,6 +12,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** autocommit 읽기. 큐가 없어 확실하지 않으면 "있다"고 답하고, SQL 오류는 BUSY도 예외다. */
 class TransactionExecutorReadTest {
@@ -49,24 +51,17 @@ class TransactionExecutorReadTest {
         assertTrue(executor.anyOrUncertain(c -> true));
     }
 
-    @Test
-    void BUSY도_다른_SQL_오류처럼_재시도_없이_SmqStorageException이다() {
+    /** SQL 오류는 BUSY(5, 517)든 아니든 같은 규칙이다. 재시도 없이 한 번 실행하고 예외로 올린다. */
+    @ParameterizedTest
+    @ValueSource(ints = {5, SQLITE_BUSY_SNAPSHOT, 19})
+    void SQL_오류는_코드와_상관없이_재시도_없이_SmqStorageException이다(int errorCode) {
         int[] calls = {0};
         assertThrows(
                 SmqStorageException.class,
                 () -> executor.anyOrUncertain(c -> {
                     calls[0]++;
-                    throw new SQLException("busy", null, SQLITE_BUSY_SNAPSHOT);
+                    throw new SQLException("boom", null, errorCode);
                 }));
         assertEquals(1, calls[0]);
-    }
-
-    @Test
-    void BUSY가_아닌_오류는_SmqStorageException이다() {
-        assertThrows(
-                SmqStorageException.class,
-                () -> executor.anyOrUncertain(c -> {
-                    throw new SQLException("boom", null, 19);
-                }));
     }
 }

@@ -160,6 +160,94 @@ class TransactionExecutorTest {
         }
     }
 
+    /** 커밋 뒤 체크포인트에서 Error가 나도 이미 커밋된 결과는 그대로 돌려주고 롤백하지 않는다. */
+    @Test
+    void 커밋_뒤_체크포인트의_Error도_삼키고_커밋은_정상_반환된다() throws Exception {
+        List<Supplier<Throwable>> errors = List.of(
+                () -> new LinkageError("injected"),
+                () -> new StackOverflowError("injected"),
+                () -> new OutOfMemoryError("injected"));
+        for (Supplier<Throwable> error : errors) {
+            try (Connection c =
+                    SqliteStorage.connect(dir.resolve("e" + System.nanoTime() + ".db"), Durability.POWER_LOSS)) {
+                try (Statement s = c.createStatement()) {
+                    TransactionExecutor.configureWal(s);
+                    s.execute("PRAGMA synchronous = NORMAL");
+                    s.execute("CREATE TABLE big (b BLOB)");
+                }
+                TransactionExecutor ex = new TransactionExecutor(failingCheckpoint(c, error));
+                commitBlobs(ex, 1, (int) (9 * MB));
+                assertDoesNotThrow(() -> commitBlobs(ex, TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS - 1));
+                try (Statement s = c.createStatement();
+                        ResultSet rs = s.executeQuery("SELECT count(*) FROM big")) {
+                    assertEquals(TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS, rs.getInt(1));
+                }
+            }
+        }
+    }
+
+    /** WAL 위치 확인 실패는 체크포인트 실패가 아니다. 구분된 메시지로 남고, 연속 실패 간격 억제를 따른다. */
+    @Test
+    void WAL_위치_확인_실패는_구분된_메시지로_간격_억제를_따라_남는다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            TransactionExecutor ex = new TransactionExecutor(
+                    failingQuery(connection, "database_list", () -> new SQLException("injected")));
+            assertDoesNotThrow(() -> commitBlobs(ex, every * 5));
+            assertEquals(1, warnings.size());
+            String message = warnings.get(0).getMessage();
+            assertTrue(message.contains("could not be located"), message);
+            assertFalse(message.contains("checkpoint did not complete"), message);
+        });
+    }
+
+    /** 크기 읽기 중 런타임 예외(예: SecurityException)도 크기 읽기 실패 메시지로 남는다. */
+    @Test
+    void WAL_크기_읽기의_런타임_예외도_크기_읽기_실패_메시지로_남는다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            TransactionExecutor ex = new TransactionExecutor(connection, path -> {
+                throw new SecurityException("injected");
+            });
+            commitBlobs(ex, every);
+            assertEquals(1, warnings.size());
+            assertTrue(warnings.get(0).getMessage().contains("size could not be read"));
+        });
+    }
+
+    /**
+     * 되감기가 실패하면 기억한 크기를 한도 아래로 되돌려, 파일이 이전 기억값 이하로 돌아와도 다음 확인에서 다시 시도한다.
+     * 낡은 기억값이 남으면 "이미 되감은 구간"으로 보고 시도를 건너뛰며 연속 실패 횟수도 지운다.
+     */
+    @Test
+    void 되감기가_실패하면_낡은_기억_크기가_다음_시도를_막지_않는다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        walExecutor();
+        AtomicBoolean failing = new AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        TransactionExecutor ex = new TransactionExecutor(failingCheckpoint(connection, () -> {
+            attempts.incrementAndGet();
+            return failing.get() ? new IllegalStateException("injected") : null;
+        }));
+        commitBlobs(ex, 1, (int) (20 * MB));
+        commitBlobs(ex, every - 1); // 되감기 성공. 기억값은 12MB로 잘린다.
+        assertEquals(1, attempts.get());
+        failing.set(true);
+        commitBlobs(ex, 1, (int) (13 * MB));
+        commitBlobs(ex, every - 1); // WAL이 12MB를 넘었으므로 시도하고 실패한다.
+        assertEquals(2, attempts.get());
+        try (Statement s = connection.createStatement()) {
+            s.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+        }
+        commitBlobs(ex, 1, (int) (10 * MB)); // 한도(8MB)와 낡은 기억값(12MB) 사이
+        commitBlobs(ex, every - 1);
+        assertEquals(3, attempts.get(), "실패한 되감기 뒤에는 다시 시도해야 한다");
+    }
+
     /** 연속 실패 중에는 첫 실패만 WARNING이고, 체크포인트가 성공하면 상태가 리셋돼 다음 실패가 다시 WARNING이다. */
     @Test
     void 체크포인트가_연속_실패해도_WARNING은_첫_실패에만_남고_성공하면_다시_남는다() throws Exception {
@@ -415,6 +503,11 @@ class TransactionExecutorTest {
 
     /** {@code wal_checkpoint}를 실행할 때마다 {@code failure}가 돌려주는 예외를 던진다. null이면 실제로 실행한다. */
     private static Connection failingCheckpoint(Connection real, Supplier<Throwable> failure) {
+        return failingQuery(real, "wal_checkpoint", failure);
+    }
+
+    /** SQL에 {@code fragment}가 든 {@code executeQuery}마다 {@code failure}의 예외를 던진다. null이면 실제로 실행한다. */
+    private static Connection failingQuery(Connection real, String fragment, Supplier<Throwable> failure) {
         return (Connection) Proxy.newProxyInstance(
                 Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (proxy, method, args) -> {
                     Object result = invoke(method, real, args);
@@ -424,7 +517,7 @@ class TransactionExecutorTest {
                     Statement st = (Statement) result;
                     return Proxy.newProxyInstance(
                             Statement.class.getClassLoader(), new Class<?>[] {Statement.class}, (p, m, a) -> {
-                                if (m.getName().equals("executeQuery") && ((String) a[0]).contains("wal_checkpoint")) {
+                                if (m.getName().equals("executeQuery") && ((String) a[0]).contains(fragment)) {
                                     Throwable t = failure.get();
                                     if (t != null) {
                                         throw t;

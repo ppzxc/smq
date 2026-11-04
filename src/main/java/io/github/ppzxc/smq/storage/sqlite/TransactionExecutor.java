@@ -154,17 +154,19 @@ final class TransactionExecutor {
         try (Statement s = connection.createStatement()) {
             s.execute("BEGIN IMMEDIATE");
         }
+        T result;
         try {
-            T result = body.apply(connection);
+            result = body.apply(connection);
             try (Statement s = connection.createStatement()) {
                 s.execute("COMMIT");
             }
-            checkpointIfWalIsLarge();
-            return result;
         } catch (Throwable t) {
             rollbackQuietly();
             throw t;
         }
+        // 커밋이 확정됐다. 이 아래의 어떤 실패도 롤백이나 호출자의 실패로 이어지면 안 된다.
+        checkpointIfWalIsLarge();
+        return result;
     }
 
     /**
@@ -173,9 +175,9 @@ final class TransactionExecutor {
      * {@code RESTART} 체크포인트로 되감는다. 파일은 줄이지 않는다. 줄이면 이후 쓰기마다 파일이 다시 늘면서
      * 크기 변경이 fsync에 실려 단건 청크 처리량이 떨어진다. {@code RESTART}는 되감은 뒤에도 파일이 한도 이상이므로 크기만 보면 다시
      * 되감을 필요가 없을 때도 계속 건다. 그래서 되감은 직후의 크기를 기억해 파일이 그보다 더 커졌을 때(되감은 구간을 다 채웠을 때)만 다시 건다.
-     * 되감지 못했으면(결과 행 첫 열이 0이 아니면) 크기는 기억하지 않고 다음 정규 확인에 맡긴다. 되감기에 성공한 뒤 크기를 못 읽으면
+     * 되감지 못했으면(결과 행 첫 열이 0이 아니거나 예외) 기억값을 0으로 되돌려, 낡은 기억값 때문에 다음 확인이 시도를 건너뛰지 않게 한다. 되감기에 성공한 뒤 크기를 못 읽으면
      * 되감기는 실패가 아니다. 기억값을 0(다음 확인에서 다시 걸 수 있는 쪽)으로 두고 따로 로그한다. SQL 오류든 런타임 예외든
-     * (예: {@code InvalidPathException}) 삼키고 로그만 남긴다. 이미 커밋된 연산을 실패로 올리면 호출자가 재시도해 중복이 생기기
+     * (예: {@code InvalidPathException}) 심지어 {@code Error}든 삼키고 로그만 남긴다. 이미 커밋된 연산을 실패로 올리면 호출자가 재시도해 중복이 생기기
      * 때문이다. 재시도 상태는 두지 않고 다음 정규 확인(커밋 8번 뒤)이 다시 시도한다. 계속 실패해도 로그가 쏟아지지 않게, 실패(예외와
      * 되감지 못함)가 이어지는 동안은 첫 번째와 {@value #CHECKPOINT_FAILURE_LOG_EVERY}번째마다(연속 실패 횟수 포함) WARNING으로
      * 남기고, 되감기에 성공하거나 WAL이 한도 아래라 확인이 통과하면 횟수를 지운다.
@@ -186,49 +188,74 @@ final class TransactionExecutor {
             return;
         }
         try {
-            if (!walFileLocated) {
+            checkWalSizeAndRewind();
+        } catch (Throwable t) {
+            // 커밋은 이미 확정됐다. Error(LinkageError, StackOverflowError, OutOfMemoryError 등)를 올려도 JVM을 살리지도,
+            // 커밋을 되돌리지도 못하고 호출자가 성공한 쓰기를 실패로 보고 재시도해 중복만 만든다. VirtualMachineError는 복구할 수
+            // 없지만 같은 이유로 여기서 삼킨다. 진짜로 망가진 JVM이면 다음 할당이나 호출에서 호출자에게 다시 드러난다.
+            // ThreadDeath도 같다(Thread.stop은 폐기됐다). 로그조차 못 남기는 상태일 수 있어 로그 실패는 무시한다.
+            walSizeAtRestart = 0;
+            try {
+                checkpointFailed(CHECKPOINT_UNEXPECTED, t);
+            } catch (Throwable ignored) {
+                // 로그를 남기지 못해도 커밋 결과에는 영향이 없다.
+            }
+        }
+    }
+
+    private void checkWalSizeAndRewind() {
+        if (!walFileLocated) {
+            try {
                 walFile = locateWalFile();
                 walFileLocated = true;
+            } catch (SQLException | RuntimeException e) {
+                // 위치를 모르면 크기도 볼 수 없다. 확인하지 못했을 뿐 체크포인트를 시도한 것은 아니다.
+                checkpointFailed(WAL_LOCATE_FAILED, e);
+                return;
             }
-            long size;
-            if (walFile.equals(NO_WAL)) {
+        }
+        long size;
+        if (walFile.equals(NO_WAL)) {
+            size = 0;
+        } else {
+            try {
+                size = walSizeReader.size(walFile);
+            } catch (NoSuchFileException e) {
+                // -wal이 아직 없거나 지워졌다. 오류가 아니라 크기 0(한도 아래)이다.
                 size = 0;
+            } catch (IOException | RuntimeException e) {
+                // 크기를 모르면 "한도 아래"로 볼 수 없다. 연속 실패 상태를 지우지 않고 다음 확인에 맡긴다.
+                checkpointFailed(WAL_SIZE_UNREADABLE, e);
+                return;
+            }
+        }
+        if (size < CHECKPOINT_WAL_BYTES) {
+            consecutiveCheckpointFailures = 0;
+            return;
+        }
+        if (size <= walSizeAtRestart) {
+            // 되감은 구간을 아직 다 채우지 못했다. 되감기 성공 때 이미 횟수를 지웠고, 실패하면 기억값을 0으로 되돌리므로
+            // 여기서 실패 상태를 지울 일은 없다.
+            return;
+        }
+        try (Statement s = connection.createStatement();
+                ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
+            // 첫 열이 0이면 WAL을 끝까지 되감았다.
+            if (rs.next() && rs.getInt(1) == 0) {
+                consecutiveCheckpointFailures = 0;
+                rememberSizeAfterRestart();
             } else {
-                try {
-                    size = walSizeReader.size(walFile);
-                } catch (NoSuchFileException e) {
-                    // -wal이 아직 없거나 지워졌다. 오류가 아니라 크기 0(한도 아래)이다.
-                    size = 0;
-                } catch (IOException e) {
-                    // 크기를 모르면 "한도 아래"로 볼 수 없다. 연속 실패 상태를 지우지 않고 다음 확인에 맡긴다.
-                    checkpointFailed(
-                            "sqlite WAL size could not be read, so the checkpoint check was skipped;"
-                                    + " the next check will retry",
-                            e);
-                    return;
-                }
-            }
-            if (size < CHECKPOINT_WAL_BYTES) {
-                consecutiveCheckpointFailures = 0;
-                return;
-            }
-            if (size <= walSizeAtRestart) {
-                consecutiveCheckpointFailures = 0;
-                return;
-            }
-            try (Statement s = connection.createStatement();
-                    ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
-                // 첫 열이 0이면 WAL을 끝까지 되감았다.
-                if (rs.next() && rs.getInt(1) == 0) {
-                    consecutiveCheckpointFailures = 0;
-                    rememberSizeAfterRestart();
-                } else {
-                    checkpointFailed(CHECKPOINT_INCOMPLETE, null);
-                }
+                rewindFailed(null);
             }
         } catch (SQLException | RuntimeException e) {
-            checkpointFailed(CHECKPOINT_INCOMPLETE, e);
+            rewindFailed(e);
         }
+    }
+
+    /** 되감기 실패. 낡은 기억 크기가 다음 시도를 막지 않도록 한도 아래(0)로 되돌린다. 재시도 상태는 아니다. */
+    private void rewindFailed(@Nullable Exception cause) {
+        walSizeAtRestart = 0;
+        checkpointFailed(CHECKPOINT_INCOMPLETE, cause);
     }
 
     /** 되감기에 성공한 직후의 크기를 기억한다. 못 읽으면 0으로 두어(다음 확인에서 다시 걸 수 있는 쪽) 낡은 값이 남지 않게 한다. */
@@ -246,12 +273,18 @@ final class TransactionExecutor {
 
     private static final String CHECKPOINT_INCOMPLETE =
             "sqlite checkpoint did not complete after commit; the next check will retry";
+    private static final String WAL_LOCATE_FAILED =
+            "sqlite WAL file could not be located, so the checkpoint check was skipped; the next check will retry";
+    private static final String WAL_SIZE_UNREADABLE =
+            "sqlite WAL size could not be read, so the checkpoint check was skipped; the next check will retry";
+    private static final String CHECKPOINT_UNEXPECTED =
+            "sqlite checkpoint check failed unexpectedly after commit; the next check will retry";
 
     /**
-     * 확인이 끝까지 가지 못한 실패(되감기 실패, 크기 읽기 실패)를 센다. 연속 실패 중 첫 번째와
-     * {@link #CHECKPOINT_FAILURE_LOG_EVERY}번째마다 WARNING으로 남긴다. 둘은 메시지만 다르다.
+     * 확인이 끝까지 가지 못한 실패(WAL 위치 확인, 크기 읽기, 되감기 실패)를 센다. 연속 실패 중 첫 번째와
+     * {@link #CHECKPOINT_FAILURE_LOG_EVERY}번째마다 WARNING으로 남긴다. 단계마다 메시지만 다르다.
      */
-    private void checkpointFailed(String what, @Nullable Exception cause) {
+    private void checkpointFailed(String what, @Nullable Throwable cause) {
         long failures = ++consecutiveCheckpointFailures;
         if (failures != 1 && failures % CHECKPOINT_FAILURE_LOG_EVERY != 0) {
             return;

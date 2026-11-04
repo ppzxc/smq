@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class SqliteStorageTest {
 
@@ -130,6 +132,24 @@ class SqliteStorageTest {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.PROCESS_CRASH)) {
             assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
             assertEquals("1", s.inTransaction(c -> pragma(c, "synchronous")));
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Durability.class)
+    void 다시_열어도_shm_없이_열리고_synchronous가_내구성_수준대로_걸린다(Durability durability) {
+        Path db = dir.resolve("smq.db");
+        Path shm = Path.of(db + "-shm");
+        try (SqliteStorage s = SqliteStorage.open(db, durability)) {
+            s.declare("q", QueueOptions.defaults());
+            assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
+        }
+        try (SqliteStorage s = SqliteStorage.open(db, durability)) {
+            s.publish("q", List.of(message()), Instant.EPOCH);
+            assertFalse(Files.exists(shm), "다시 열어도 -shm이 생기면 안 된다");
+            String expected = durability == Durability.POWER_LOSS ? "2" : "1";
+            assertEquals(expected, s.inTransaction(c -> pragma(c, "synchronous")));
+            assertEquals("exclusive", s.inTransaction(c -> pragma(c, "locking_mode")));
         }
     }
 

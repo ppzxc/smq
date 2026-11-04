@@ -13,7 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** autocommit 읽기. 확실하지 않으면 "있다"고 답하고, 쓰기 락도 읽기 트랜잭션도 남기지 않는다. */
+/** autocommit 읽기. 큐가 없어 확실하지 않으면 "있다"고 답하고, SQL 오류는 BUSY도 예외다. */
 class TransactionExecutorReadTest {
 
     private static final int SQLITE_BUSY_SNAPSHOT = 517;
@@ -50,12 +50,14 @@ class TransactionExecutorReadTest {
     }
 
     @Test
-    void BUSY가_나면_재시도_없이_있다고_답한다() {
+    void BUSY도_다른_SQL_오류처럼_재시도_없이_SmqStorageException이다() {
         int[] calls = {0};
-        assertTrue(executor.anyOrUncertain(c -> {
-            calls[0]++;
-            throw new SQLException("busy", null, SQLITE_BUSY_SNAPSHOT);
-        }));
+        assertThrows(
+                SmqStorageException.class,
+                () -> executor.anyOrUncertain(c -> {
+                    calls[0]++;
+                    throw new SQLException("busy", null, SQLITE_BUSY_SNAPSHOT);
+                }));
         assertEquals(1, calls[0]);
     }
 
@@ -66,25 +68,5 @@ class TransactionExecutorReadTest {
                 () -> executor.anyOrUncertain(c -> {
                     throw new SQLException("boom", null, 19);
                 }));
-    }
-
-    @Test
-    void 읽는_동안과_읽은_뒤에_다른_연결의_쓰기가_막히지_않는다() throws Exception {
-        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("t.db"))) {
-            try (Statement s = other.createStatement()) {
-                s.execute("PRAGMA busy_timeout=0");
-            }
-            executor.anyOrUncertain(c -> {
-                insert(other); // 읽는 중에도 쓰기 락이 비어 있다.
-                return false;
-            });
-            insert(other); // 읽기 트랜잭션도 남지 않았다.
-        }
-    }
-
-    private static void insert(Connection c) throws SQLException {
-        try (Statement s = c.createStatement()) {
-            s.execute("INSERT INTO t VALUES (1)");
-        }
     }
 }

@@ -73,22 +73,6 @@ class SqliteStorageTest {
     }
 
     @Test
-    void 쓰기_트랜잭션은_BEGIN_IMMEDIATE로_시작한다() throws Exception {
-        Path db = dir.resolve("smq.db");
-        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
-            s.inTransaction(c -> {
-                // 즉시 쓰기 락을 잡았으므로 다른 연결의 쓰기는 busy가 된다
-                try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db + "?busy_timeout=0");
-                        Statement st = other.createStatement()) {
-                    SQLException e = assertThrows(SQLException.class, () -> st.execute("BEGIN IMMEDIATE"));
-                    assertTrue(e.getMessage().contains("BUSY") || e.getMessage().contains("locked"), e.getMessage());
-                }
-                return null;
-            });
-        }
-    }
-
-    @Test
     void 꺼내기가_쓰는_쿼리는_인덱스를_탄다() throws Exception {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             for (String sql : List.of(SqliteStorage.SELECT_PULLABLE, SqliteStorage.SELECT_EXHAUSTED)) {

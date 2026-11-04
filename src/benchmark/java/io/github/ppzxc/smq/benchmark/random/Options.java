@@ -1,8 +1,11 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.Durability;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
@@ -18,6 +21,7 @@ import java.util.OptionalLong;
  *   <li>{@code --message-bytes <n>}: 고정 속도 모드의 메시지 크기 상한(최소는 그 절반, 균등). 기본 1,024. {@code --rate}가 있어야 한다.
  *   <li>{@code --depth <n>}: 고정 속도 모드의 미리 채울 깊이(데이터 256MB 추정 상한 안에서). 기본 100,000. {@code --rate}가 있어야 한다.
  *   <li>{@code --standing-queue}: 고정 속도 모드에서 큐 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어서 그 깊이가 유지되게 한다. {@code --rate}가 있어야 한다.
+ *   <li>{@code --durability <수준>}: 내구성 수준({@code POWER_LOSS}, {@code PROCESS_CRASH})을 고정한다. 주지 않으면 시드에서 무작위로 고른다.
  *   <li>{@code --jfr}: JVM에 Java Flight Recorder 연속 레코딩을 켠다. 실행 디렉터리에 {@code .jfr} 파일을 남긴다.
  *   <li>{@code --out-dir <디렉터리>}: 산출물 위치. 기본 {@code build/random-bench}.
  * </ul>
@@ -33,7 +37,8 @@ record Options(
         long rate,
         int messageBytes,
         int depth,
-        boolean standingQueue) {
+        boolean standingQueue,
+        Optional<Durability> durability) {
 
     static final Duration DEFAULT_BUDGET = Duration.ofMinutes(30);
     static final Duration SMOKE_LOAD = Duration.ofSeconds(2);
@@ -50,6 +55,7 @@ record Options(
         int messageBytes = 0;
         int depth = 0;
         boolean standingQueue = false;
+        Optional<Durability> durability = Optional.empty();
         Path out = Path.of("build/random-bench");
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -77,6 +83,7 @@ record Options(
                 case "--rate" -> rate = parseRate(v);
                 case "--message-bytes" -> messageBytes = parsePositiveInt(a, v);
                 case "--depth" -> depth = parsePositiveInt(a, v);
+                case "--durability" -> durability = Optional.of(parseDurability(v));
                 case "--out-dir" -> out = Path.of(v);
                 default -> throw new IllegalArgumentException("알 수 없는 옵션: " + a);
             }
@@ -104,7 +111,16 @@ record Options(
                 rate,
                 messageBytes,
                 depth,
-                standingQueue);
+                standingQueue,
+                durability);
+    }
+
+    private static Durability parseDurability(String v) {
+        try {
+            return Durability.valueOf(v.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("--durability는 POWER_LOSS 또는 PROCESS_CRASH여야 한다(대소문자 무시): " + v, e);
+        }
     }
 
     private static int parsePositiveInt(String option, String v) {

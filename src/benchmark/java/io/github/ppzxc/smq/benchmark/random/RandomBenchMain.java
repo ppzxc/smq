@@ -49,6 +49,9 @@ public final class RandomBenchMain {
         Files.createDirectories(workRoot);
         Map<String, String> env = Environment.capture(o.smoke() ? "smoke" : "random", "sqlite", workRoot);
         Limits limits = o.smoke() ? Limits.smoke(o.load().toMillis()) : soakLimits(o);
+        if (o.durability().isPresent()) {
+            limits = limits.withDurability(o.durability().get());
+        }
         Path jsonLines = o.outDir()
                 .resolve("runs-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                         + ".jsonl");

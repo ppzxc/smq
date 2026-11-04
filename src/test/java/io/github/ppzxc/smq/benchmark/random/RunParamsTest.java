@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -175,5 +177,32 @@ class RunParamsTest {
         for (long seq = 0; seq < 50; seq++) {
             assertEquals(1, script.message(new Tag(7, seq)).message().payload().length);
         }
+    }
+
+    @Test
+    void 내구성을_주면_시드의_무작위_선택을_덮어쓰고_나머지_매개변수는_그대로다() {
+        for (Durability forced : Durability.values()) {
+            for (long seed = 0; seed < 200; seed++) {
+                RunParams random = RunParams.fromSeed(seed, FULL);
+                RunParams p = RunParams.fromSeed(seed, FULL.withDurability(forced));
+                assertEquals(forced, p.durability(), "seed " + seed);
+                Map<String, Object> expected = new LinkedHashMap<>(random.toMap());
+                Map<String, Object> actual = new LinkedHashMap<>(p.toMap());
+                expected.remove("durability");
+                actual.remove("durability");
+                assertEquals(expected, actual, "내구성 말고는 같은 시드의 매개변수 그대로: " + seed);
+            }
+        }
+        RunParams soak = RunParams.fromSeed(7, FULL.withRate(500).withDurability(Durability.POWER_LOSS));
+        assertEquals(Durability.POWER_LOSS, soak.durability());
+    }
+
+    @Test
+    void 내구성을_주지_않으면_두_수준이_모두_나온다() {
+        Set<Durability> seen = EnumSet.noneOf(Durability.class);
+        for (long seed = 0; seed < 50; seed++) {
+            seen.add(RunParams.fromSeed(seed, FULL).durability());
+        }
+        assertEquals(EnumSet.allOf(Durability.class), seen);
     }
 }

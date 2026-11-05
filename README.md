@@ -127,7 +127,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 |---|---|
 | [docs/usage.md](docs/usage.md) | 사용법 레퍼런스(발행, 꺼내기, 정산, 예외 등) |
 | [GLOSSARY.md](GLOSSARY.md) | 도메인 용어 정의. 코드와 문서가 이 용어를 쓴다. |
-| [docs/adr/](docs/adr) | 설계 결정 기록(0001~0014) |
+| [docs/adr/](docs/adr) | 설계 결정 기록(0001~0017) |
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
 | [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
 | [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |

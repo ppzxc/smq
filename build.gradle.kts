@@ -218,13 +218,18 @@ abstract class RandomBench : JavaExec() {
     @get:Optional
     @get:Option(option = "standing-queue", description = "고정 속도 모드에서 큐 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어 그 깊이를 유지한다. --rate가 있어야 한다")
     abstract val standingQueue: Property<Boolean>
+
+    @get:Input
+    @get:Optional
+    @get:Option(option = "durability", description = "내구성 수준을 고정한다: POWER_LOSS 또는 PROCESS_CRASH (기본: 시드에서 무작위)")
+    abstract val durability: Property<String>
 }
 
 val randomBenchMain = "io.github.ppzxc.smq.benchmark.random.RandomBenchMain"
 val randomBenchOut = layout.buildDirectory.dir("random-bench").get().asFile.path
 
 tasks.register<RandomBench>("randomBench") {
-    description = "무작위 워크로드와 불변식 검사기. 수동 실행. 첫 위반에서 멈추고 비정상 종료한다. --seed, --budget 옵션."
+    description = "무작위 워크로드와 불변식 검사기. 수동 실행. 첫 위반에서 멈추고 비정상 종료한다. --seed, --budget, --durability 옵션."
     benchmarkRunner("--out-dir", randomBenchOut, main = randomBenchMain)
     doFirst {
         seed.orNull?.let { args("--seed", it) }
@@ -234,6 +239,7 @@ tasks.register<RandomBench>("randomBench") {
         rate.orNull?.let { args("--rate", it) }
         messageBytes.orNull?.let { args("--message-bytes", it) }
         depth.orNull?.let { args("--depth", it) }
+        durability.orNull?.let { args("--durability", it) }
         if (standingQueue.orNull == true) args("--standing-queue")
         if (jfr.orNull == true) args("--jfr")
     }

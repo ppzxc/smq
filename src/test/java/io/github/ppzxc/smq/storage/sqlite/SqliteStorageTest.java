@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class SqliteStorageTest {
 
@@ -69,22 +71,6 @@ class SqliteStorageTest {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
             assertEquals("2", s.inTransaction(c -> pragma(c, "synchronous")));
-        }
-    }
-
-    @Test
-    void 쓰기_트랜잭션은_BEGIN_IMMEDIATE로_시작한다() throws Exception {
-        Path db = dir.resolve("smq.db");
-        try (SqliteStorage s = SqliteStorage.open(db, Durability.POWER_LOSS)) {
-            s.inTransaction(c -> {
-                // 즉시 쓰기 락을 잡았으므로 다른 연결의 쓰기는 busy가 된다
-                try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + db + "?busy_timeout=0");
-                        Statement st = other.createStatement()) {
-                    SQLException e = assertThrows(SQLException.class, () -> st.execute("BEGIN IMMEDIATE"));
-                    assertTrue(e.getMessage().contains("BUSY") || e.getMessage().contains("locked"), e.getMessage());
-                }
-                return null;
-            });
         }
     }
 
@@ -149,7 +135,47 @@ class SqliteStorageTest {
         }
     }
 
+    @ParameterizedTest
+    @EnumSource(Durability.class)
+    void 다시_열어도_shm_없이_열리고_synchronous가_내구성_수준대로_걸린다(Durability durability) {
+        Path db = dir.resolve("smq.db");
+        Path shm = Path.of(db + "-shm");
+        try (SqliteStorage s = SqliteStorage.open(db, durability)) {
+            s.declare("q", QueueOptions.defaults());
+            assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
+        }
+        try (SqliteStorage s = SqliteStorage.open(db, durability)) {
+            s.publish("q", List.of(message()), Instant.EPOCH);
+            assertFalse(Files.exists(shm), "다시 열어도 -shm이 생기면 안 된다");
+            String expected = durability == Durability.POWER_LOSS ? "2" : "1";
+            assertEquals(expected, s.inTransaction(c -> pragma(c, "synchronous")));
+            assertEquals("exclusive", s.inTransaction(c -> pragma(c, "locking_mode")));
+        }
+    }
+
     private static NewMessage message() {
         return new NewMessage(new byte[] {1}, Map.of());
+    }
+
+    /**
+     * SQLite가 EXCLUSIVE를 거부하는 상황은 실제 연결로 만들 수 없어(메모리·파일 모두 "exclusive"로 답한다) 판정 함수만 직접
+     * 시험한다. 결과가 exclusive가 아니면 SQLException이고 대소문자는 가리지 않는다.
+     */
+    @Test
+    void locking_mode_결과가_exclusive가_아니면_SQLException이다() {
+        assertDoesNotThrow(() -> SqliteStorage.requireExclusive("exclusive"));
+        assertDoesNotThrow(() -> SqliteStorage.requireExclusive("EXCLUSIVE"));
+        assertThrows(SQLException.class, () -> SqliteStorage.requireExclusive("normal"));
+        assertThrows(SQLException.class, () -> SqliteStorage.requireExclusive(null));
+    }
+
+    @Test
+    void 연결을_열면_locking_mode가_exclusive다() throws Exception {
+        try (Connection c = SqliteStorage.connect(dir.resolve("x.db"), Durability.POWER_LOSS);
+                Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("PRAGMA locking_mode")) {
+            assertTrue(rs.next());
+            assertEquals("exclusive", rs.getString(1));
+        }
     }
 }

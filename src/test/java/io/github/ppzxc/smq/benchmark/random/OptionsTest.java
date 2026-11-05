@@ -2,6 +2,7 @@ package io.github.ppzxc.smq.benchmark.random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import io.github.ppzxc.smq.Durability;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -94,5 +95,22 @@ class OptionsTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> Options.parse(new String[] {"--rate", "500", "--depth", "-1"}, 0));
+    }
+
+    @Test
+    void 내구성_옵션은_기본이_없고_수준_이름을_받는다() {
+        assertTrue(Options.parse(new String[0], 0).durability().isEmpty());
+        assertEquals(
+                Durability.PROCESS_CRASH,
+                Options.parse(new String[] {"--durability", "PROCESS_CRASH"}, 0)
+                        .durability()
+                        .orElseThrow());
+        assertEquals(
+                Durability.POWER_LOSS,
+                Options.parse(new String[] {"--durability", "power_loss"}, 0)
+                        .durability()
+                        .orElseThrow());
+        assertThrows(
+                IllegalArgumentException.class, () -> Options.parse(new String[] {"--durability", "sometimes"}, 0));
     }
 }

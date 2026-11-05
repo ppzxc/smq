@@ -30,11 +30,15 @@ class SessionTest {
     }
 
     private Session session(Session.Executor executor) {
+        return session(executor, LIMITS);
+    }
+
+    private Session session(Session.Executor executor, Limits limits) {
         return new Session(
                 dir,
                 dir.resolve("runs.jsonl"),
                 Map.of("workDirFs", "ext4", "caveat", "테스트"),
-                LIMITS,
+                limits,
                 executor,
                 new PrintStream(bytes, true, StandardCharsets.UTF_8));
     }
@@ -152,6 +156,22 @@ class SessionTest {
         assertTrue(out.contains("99"), "관련 메시지 id");
         assertTrue(out.contains("leaseMillis"), "풀어 쓴 매개변수");
         assertTrue(out.contains(failed.toString()));
+    }
+
+    @Test
+    void rerunHintOmitsDurabilityWhenNotPinned() {
+        Session s = session(fake(p -> result(p, Verdict.VIOLATION, 10, null, List.of(LOSS), RunResult.Records.EMPTY)));
+        s.run(List.of(4L).iterator(), Long.MAX_VALUE);
+        assertTrue(output().contains("randomBench --seed 4" + System.lineSeparator()));
+    }
+
+    @Test
+    void rerunHintIncludesPinnedDurability() {
+        Session s = session(
+                fake(p -> result(p, Verdict.VIOLATION, 10, null, List.of(LOSS), RunResult.Records.EMPTY)),
+                LIMITS.withDurability(io.github.ppzxc.smq.Durability.PROCESS_CRASH));
+        s.run(List.of(4L).iterator(), Long.MAX_VALUE);
+        assertTrue(output().contains("randomBench --seed 4 --durability PROCESS_CRASH"), output());
     }
 
     @Test

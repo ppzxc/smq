@@ -3,17 +3,29 @@ package io.github.ppzxc.smq;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.storage.StorageFactory;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.Parameter;
+import org.junit.jupiter.params.ParameterizedClass;
+import org.junit.jupiter.params.provider.EnumSource;
 
+@ParameterizedClass
+@EnumSource(Durability.class)
 class SqliteSmqTest extends SmqConformanceTest {
+
+    @Parameter
+    Durability durability;
 
     @Override
     StorageFactory factory() {
-        return StorageFactory.SQLITE_NEW;
+        return StorageFactory.sqliteNew(durability);
     }
 
     private final List<Smq> direct = new ArrayList<>();
@@ -108,6 +120,19 @@ class SqliteSmqTest extends SmqConformanceTest {
         // ADR-0014: 기본은 애플리케이션 크래시까지 견디고, 전원·OS 장애까지 견디려면 POWER_LOSS를 명시한다.
         assertEquals(
                 Durability.PROCESS_CRASH, Smq.sqlite(dir.resolve("default.db")).durability());
+    }
+
+    @Test
+    void SQLite_빌더의_공개_옵션에_lock_대기_하한이_없다() {
+        // 0.1.0 호환 파괴(#155): 하한은 내부 상수(기본 100ms)이고, 테스트만 같은 패키지에서 조정한다.
+        // 저장소 구현(storage.sqlite)은 module-info가 내보내지 않으므로 빌더가 유일한 공개 경로다.
+        // 이름이 바뀐 재노출도 잡도록 공개 메서드 전체를 허용 목록과 견준다.
+        Set<String> publicMethods = Arrays.stream(Smq.SqliteBuilder.class.getMethods())
+                .filter(method -> method.getDeclaringClass() == Smq.SqliteBuilder.class)
+                .map(Method::getName)
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("durability", "clock", "leaseDuration", "open"), publicMethods);
+        assertEquals(0, Smq.SqliteBuilder.class.getFields().length);
     }
 
     @Test

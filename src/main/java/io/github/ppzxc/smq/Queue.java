@@ -21,9 +21,9 @@ public interface Queue {
      * 메시지가 하나라도 있으면 바로, 없으면 {@code wait}까지 기다려 최대 max개를 id 순서로 돌려준다. 없으면 빈 청크다.
      *
      * <p>SQLite 저장소에서 {@code wait}는 저장소의 lock을 기다리는 시간도 한정한다.
-     * 같은 프로세스의 다른 호출이 쓰기 락을 오래 쥐면 {@code wait} 안에 꺼내지 못하고 빈 청크로 돌아온다.
-     * 정상적인 짧은 직렬화는 {@code wait}가 0이어도 기다린다(lock 대기 하한, 기본 100ms, {@code SqliteBuilder.lockWaitFloor}로 바꾼다).
-     * 여기에 쓰기 커밋 뒤 WAL을 되감는 체크포인트 시간(ADR-0010)이 {@code wait}와 별개로 더 붙을 수 있다.
+     * 같은 {@code Smq}의 다른 연산이 오래 걸리면 {@code wait} 안에 꺼내지 못하고 빈 청크로 돌아온다.
+     * 정상적인 짧은 직렬화는 {@code wait}가 0이어도 기다린다(lock 대기 하한, 100ms).
+     * 여기에 쓰기 커밋 뒤 WAL을 되감는 체크포인트 시간(ADR-0017)이 {@code wait}와 별개로 더 붙을 수 있다.
      * 이 한도는 꺼내기에만 있다. 선언, 발행, 정산, 연장, {@link Smq#close()}는 같은 프로세스의 다른 호출이 락을 쥐고 있는 동안
      * 직렬로 막힐 수 있다.
      */

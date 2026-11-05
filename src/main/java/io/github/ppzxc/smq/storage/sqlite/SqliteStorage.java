@@ -102,29 +102,17 @@ public final class SqliteStorage implements Storage {
     /**
      * 연산 lock 대기 하한을 정해 저장소 경합 중 빈 청크를 피한다.
      *
-     * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0009).
-     *     0 이상이다. 쓰기 트랜잭션 하나가 기본값(100ms)보다 오래 걸리는 저장소에서 늘린다.
+     * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0016).
+     *     0 이상이다. 공개 설정이 아니므로({@code Smq}의 빌더는 기본 100ms를 쓴다) 이 값을 바꿔 쓰는 곳은 테스트다.
      */
     public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
         if (lockWaitFloor.isNegative()) {
             throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
         }
-        SQLiteConfig config = new SQLiteConfig();
-        // 기다리지 않는다. 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고,
-        // 난다면 smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012). 열린 뒤에도 0을 그대로 쓴다.
-        config.setBusyTimeout(0);
-        // 연결이 락을 놓지 않게 한다. WAL로 바꾸기 전에 켜야 -shm이 생기지 않는다.
-        config.setLockingMode(SQLiteConfig.LockingMode.EXCLUSIVE);
-        // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
-        config.setSynchronous(
-                durability == Durability.POWER_LOSS
-                        ? SQLiteConfig.SynchronousMode.FULL
-                        : SQLiteConfig.SynchronousMode.NORMAL);
         StorageLock storageLock = StorageLock.acquire(path);
         @Nullable Connection connection = null;
         try {
-            connection = StatementCachingConnection.wrap(
-                    DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties()));
+            connection = StatementCachingConnection.wrap(connect(path, durability));
             TransactionExecutor executor = new TransactionExecutor(connection);
             executor.execute(SCHEMA::establish);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
@@ -148,6 +136,54 @@ public final class SqliteStorage implements Storage {
                 throw re;
             }
             throw new SmqStorageException("cannot open " + path, e);
+        }
+    }
+
+    /**
+     * 연결을 열고 연결 설정을 건다. 설정 순서를 이 함수 하나에 모은다.
+     *
+     * <p>설정에는 {@code busy_timeout}만 넣고, {@code locking_mode}와 {@code synchronous}는 연결 직후 이 순서로 직접
+     * 실행한다. 기다리지 않는다: 락 파일과 EXCLUSIVE 아래에서는 같은 파일을 쥔 연결이 이 연결뿐이라 BUSY가 나지 않고, 난다면
+     * smq 밖의 도구가 쥔 것이라 기다려도 풀리지 않는다(ADR-0012). 열린 뒤에도 0을 그대로 쓴다.
+     */
+    static Connection connect(Path path, Durability durability) throws SQLException {
+        SQLiteConfig config = new SQLiteConfig();
+        config.setBusyTimeout(0);
+        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
+        boolean ok = false;
+        try (Statement s = connection.createStatement()) {
+            // sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않으므로, EXCLUSIVE를 첫 문장으로 직접 건다.
+            // 두 문장의 순서가 곧 설정이다. 아래 결과 확인은 pragma가 무시된 경우만 잡고, 락을 실제로 잡았는지는 -shm 부재 테스트가 확인한다. 순서를 바꾸거나 SQLiteConfig로
+            // 되돌리면 같은 고장이 다시 난다.
+            // 이미 WAL인 파일을 다시 열 때도 WAL로 들어가기 전에 켜야 -shm 대신 heap memory wal-index를 쓴다.
+            try (ResultSet rs = s.executeQuery("PRAGMA locking_mode = EXCLUSIVE")) {
+                requireExclusive(rs.next() ? rs.getString(1) : null);
+            }
+            // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
+            s.execute("PRAGMA synchronous = "
+                    + switch (durability) {
+                        case POWER_LOSS -> "FULL";
+                        case PROCESS_CRASH -> "NORMAL";
+                    });
+            ok = true;
+        } finally {
+            if (!ok) {
+                closeQuietly(connection);
+            }
+        }
+        return connection;
+    }
+
+    /**
+     * {@code PRAGMA locking_mode = EXCLUSIVE}가 돌려준 모드가 exclusive가 아니면 연결을 쓰지 않는다.
+     *
+     * <p>이 검사가 잡는 것은 pragma가 무시되거나 인식되지 않아 모드가 바뀌지 않은 경우뿐이다. pragma는 파일 락을 실제로
+     * 잡기 전에도 'exclusive'를 돌려주므로, 락이 실제로 잡혔는지, WAL에서 {@code -shm} 없이 동작하는지는 이 검사로 알 수 없다.
+     * 그 보증은 {@code -shm} 파일이 생기지 않음을 확인하는 테스트가 진다.
+     */
+    static void requireExclusive(@Nullable String mode) throws SQLException {
+        if (!"exclusive".equalsIgnoreCase(mode)) {
+            throw new SQLException("locking_mode=EXCLUSIVE was not applied: " + mode);
         }
     }
 
@@ -348,8 +384,8 @@ public final class SqliteStorage implements Storage {
      * 꺼낼 메시지가 있는지 autocommit으로 본다. 실행은 {@link TransactionExecutor#anyOrUncertain}이 맡아 쓰기 락 없이,
      * 읽기 트랜잭션을 남기지 않고 한다. 있다고 나와도 실제 꺼내기는 쓰기 트랜잭션이 다시 확인한다.
      * 확실하지 않으면 true를 돌려 쓰기 경로가 다시 확인하게 한다. 그런 경우는 큐가 없을 때(쓰기 경로가 오류를
-     * 던진다), 읽기가 BUSY일 때다.
-     * BUSY가 아닌 오류는 true가 아니라 예외다.
+     * 던진다)다.
+     * SQL 오류는 true가 아니라 예외다.
      */
     private boolean anyReady(String queue, Instant now, Deadline waitDeadline) {
         return executor.anyOrUncertain(
@@ -376,7 +412,7 @@ public final class SqliteStorage implements Storage {
         return pull(queue, max, lease, now, Deadline.NONE);
     }
 
-    /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0009). */
+    /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0016). */
     @Override
     public PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
         try {

@@ -47,6 +47,7 @@ class SqliteSingleProcessLockTest {
         }
     }
 
+    /** ADR-0006 검증 조건, 건너뛰지 말 것. Windows 조건부 지원의 근거라서 assume 없이 Linux·Windows CI에서 모두 돈다. */
     @Test
     @Timeout(60)
     void 다른_JVM이_쥔_파일은_열_수_없고_그_JVM이_죽으면_다시_열_수_있다() throws Exception {

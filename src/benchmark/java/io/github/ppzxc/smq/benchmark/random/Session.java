@@ -224,7 +224,9 @@ final class Session {
     private void reportFailure(RunResult r) {
         out.println();
         out.println("실패: " + r.verdict() + " seed=" + r.params().seed());
-        out.println("다시 돌리려면: ./gradlew randomBench --seed " + r.params().seed());
+        String durabilityOption =
+                limits.durability().map(d -> " --durability " + d.name()).orElse("");
+        out.println("다시 돌리려면: ./gradlew randomBench --seed " + r.params().seed() + durabilityOption);
         out.println("매개변수:");
         out.println(r.params().describe());
         if (r.error() != null) {

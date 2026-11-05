@@ -14,7 +14,7 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** SQLite 파일의 스키마 판정과 트랜잭션마다 하는 버전 확인(ADR 0004). 공개 API로 열고, 파일 조작만 JDBC로 한다. */
+/** SQLite 파일의 스키마 판정과 트랜잭션마다 하는 버전 확인(ADR-0015). 공개 API로 열고, 파일 조작만 JDBC로 한다. */
 class SqliteSchemaTest {
 
     @TempDir
@@ -146,21 +146,6 @@ class SqliteSchemaTest {
         assertTrue(e.getMessage().contains("found " + (supported - 1)), e.getMessage());
         assertTrue(e.getMessage().contains("supported " + supported), e.getMessage());
         assertEquals(supported - 1, userVersion(db()));
-    }
-
-    /** 자식 JVM의 진입점. 시작 신호 파일이 생길 때까지 기다렸다가 열고, 연 인스턴스로 큐 하나를 쓴다. */
-    public static final class OpenerMain {
-        public static void main(String[] args) throws Exception {
-            Path db = Path.of(args[0]);
-            Path go = Path.of(args[1]);
-            Files.createFile(Path.of(args[1] + ".ready." + args[2])); // 준비됐음을 부모에게 알린다.
-            while (!Files.exists(go)) {
-                Thread.sleep(1);
-            }
-            try (Smq smq = Smq.sqlite(db).open()) {
-                smq.declare("q", QueueOptions.defaults()).publish(msg(args[2]));
-            }
-        }
     }
 
     /**

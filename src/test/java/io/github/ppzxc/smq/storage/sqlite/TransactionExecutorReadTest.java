@@ -2,18 +2,20 @@ package io.github.ppzxc.smq.storage.sqlite;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.SmqStorageException;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
-/** autocommit 읽기. 확실하지 않으면 "있다"고 답하고, 쓰기 락도 읽기 트랜잭션도 남기지 않는다. */
+/** autocommit 읽기. 큐가 없어 확실하지 않으면 "있다"고 답하고, SQL 오류는 BUSY도 예외다. */
 class TransactionExecutorReadTest {
 
     private static final int SQLITE_BUSY_SNAPSHOT = 517;
@@ -26,7 +28,7 @@ class TransactionExecutorReadTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        connection = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("t.db"));
+        connection = SqliteStorage.connect(dir.resolve("t.db"), Durability.POWER_LOSS);
         try (Statement s = connection.createStatement()) {
             s.execute("PRAGMA journal_mode=WAL");
             s.execute("CREATE TABLE t (v INTEGER)");
@@ -49,42 +51,17 @@ class TransactionExecutorReadTest {
         assertTrue(executor.anyOrUncertain(c -> true));
     }
 
-    @Test
-    void BUSY가_나면_재시도_없이_있다고_답한다() {
+    /** SQL 오류는 BUSY(5, 517)든 아니든 같은 규칙이다. 재시도 없이 한 번 실행하고 예외로 올린다. */
+    @ParameterizedTest
+    @ValueSource(ints = {5, SQLITE_BUSY_SNAPSHOT, 19})
+    void SQL_오류는_코드와_상관없이_재시도_없이_SmqStorageException이다(int errorCode) {
         int[] calls = {0};
-        assertTrue(executor.anyOrUncertain(c -> {
-            calls[0]++;
-            throw new SQLException("busy", null, SQLITE_BUSY_SNAPSHOT);
-        }));
-        assertEquals(1, calls[0]);
-    }
-
-    @Test
-    void BUSY가_아닌_오류는_SmqStorageException이다() {
         assertThrows(
                 SmqStorageException.class,
                 () -> executor.anyOrUncertain(c -> {
-                    throw new SQLException("boom", null, 19);
+                    calls[0]++;
+                    throw new SQLException("boom", null, errorCode);
                 }));
-    }
-
-    @Test
-    void 읽는_동안과_읽은_뒤에_다른_연결의_쓰기가_막히지_않는다() throws Exception {
-        try (Connection other = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("t.db"))) {
-            try (Statement s = other.createStatement()) {
-                s.execute("PRAGMA busy_timeout=0");
-            }
-            executor.anyOrUncertain(c -> {
-                insert(other); // 읽는 중에도 쓰기 락이 비어 있다.
-                return false;
-            });
-            insert(other); // 읽기 트랜잭션도 남지 않았다.
-        }
-    }
-
-    private static void insert(Connection c) throws SQLException {
-        try (Statement s = c.createStatement()) {
-            s.execute("INSERT INTO t VALUES (1)");
-        }
+        assertEquals(1, calls[0]);
     }
 }

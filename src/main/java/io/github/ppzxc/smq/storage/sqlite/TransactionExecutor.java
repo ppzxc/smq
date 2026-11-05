@@ -178,7 +178,8 @@ final class TransactionExecutor {
      * 되감지 못했으면(결과 행 첫 열이 0이 아니거나 예외) 기억값을 0으로 되돌려, 낡은 기억값 때문에 다음 확인이 시도를 건너뛰지 않게 한다. 되감기에 성공한 뒤 크기를 못 읽으면
      * 되감기는 실패가 아니다. 기억값을 0(다음 확인에서 다시 걸 수 있는 쪽)으로 두고 따로 로그한다. SQL 오류든 런타임 예외든
      * (예: {@code InvalidPathException}) 심지어 {@code Error}든 삼키고 로그만 남긴다. 이미 커밋된 연산을 실패로 올리면 호출자가 재시도해 중복이 생기기
-     * 때문이다. 재시도 상태는 두지 않고 다음 정규 확인(커밋 8번 뒤)이 다시 시도한다. 계속 실패해도 로그가 쏟아지지 않게, 실패(예외와
+     * 때문이다. 재시도 상태는 두지 않고 다음 정규 확인(커밋 8번 뒤)이 다시 시도한다. {@code Error}와 예기치 못한 예외는 억제 없이 매번
+     * 스택 트레이스와 함께 WARNING으로 남긴다. 예상 가능한 반복 실패는 계속 실패해도 로그가 쏟아지지 않게, 실패(예외와
      * 되감지 못함)가 이어지는 동안은 첫 번째와 {@value #CHECKPOINT_FAILURE_LOG_EVERY}번째마다(연속 실패 횟수 포함) WARNING으로
      * 남기고, 되감기에 성공하거나 WAL이 한도 아래라 확인이 통과하면 횟수를 지운다.
      */
@@ -193,10 +194,11 @@ final class TransactionExecutor {
             // 커밋은 이미 확정됐다. Error(LinkageError, StackOverflowError, OutOfMemoryError 등)를 올려도 JVM을 살리지도,
             // 커밋을 되돌리지도 못하고 호출자가 성공한 쓰기를 실패로 보고 재시도해 중복만 만든다. VirtualMachineError는 복구할 수
             // 없지만 같은 이유로 여기서 삼킨다. 진짜로 망가진 JVM이면 다음 할당이나 호출에서 호출자에게 다시 드러난다.
-            // ThreadDeath도 같다(Thread.stop은 폐기됐다). 로그조차 못 남기는 상태일 수 있어 로그 실패는 무시한다.
+            // ThreadDeath도 같다(Thread.stop은 폐기됐다). 예상 가능한 반복 실패가 아니라 드문 이상 신호이므로 연속 실패 간격
+            // 억제를 거치지 않고 매번 스택 트레이스와 함께 남긴다. 로그조차 못 남기는 상태일 수 있어 로그 실패는 무시한다.
             walSizeAtRestart = 0;
             try {
-                checkpointFailed(CHECKPOINT_UNEXPECTED, t);
+                LOG.log(System.Logger.Level.WARNING, CHECKPOINT_UNEXPECTED, t);
             } catch (Throwable ignored) {
                 // 로그를 남기지 못해도 커밋 결과에는 영향이 없다.
             }
@@ -278,7 +280,7 @@ final class TransactionExecutor {
     private static final String WAL_SIZE_UNREADABLE =
             "sqlite WAL size could not be read, so the checkpoint check was skipped; the next check will retry";
     private static final String CHECKPOINT_UNEXPECTED =
-            "sqlite checkpoint check failed unexpectedly after commit; the next check will retry";
+            "sqlite checkpoint check failed unexpectedly after commit (not rate-limited); the next check will retry";
 
     /**
      * 확인이 끝까지 가지 못한 실패(WAL 위치 확인, 크기 읽기, 되감기 실패)를 센다. 연속 실패 중 첫 번째와

@@ -186,6 +186,29 @@ class TransactionExecutorTest {
         }
     }
 
+    /** 예기치 못한 실패(Error)는 연속 실패 간격 억제를 거치지 않고 매번 스택 트레이스와 함께 WARNING으로 남고, 커밋 결과는 그대로다. */
+    @Test
+    void 예기치_못한_실패는_억제_없이_매번_스택_트레이스와_함께_WARNING으로_남는다() throws Exception {
+        int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
+        int checks = 5;
+        List<LogRecord> warnings = new ArrayList<>();
+        withWarnings(warnings, () -> {
+            walExecutor();
+            TransactionExecutor ex =
+                    new TransactionExecutor(failingCheckpoint(connection, () -> new LinkageError("injected")));
+            commitBlobs(ex, 1, (int) (9 * MB));
+            assertDoesNotThrow(() -> commitBlobs(ex, every * checks - 1));
+            assertEquals(checks, warnings.size(), "Error는 억제 없이 확인마다 WARNING");
+            for (LogRecord w : warnings) {
+                assertTrue(w.getThrown() instanceof LinkageError, "스택 트레이스용 원인이 붙어야 한다");
+            }
+            try (Statement s = connection.createStatement();
+                    ResultSet rs = s.executeQuery("SELECT count(*) FROM big")) {
+                assertEquals(every * checks, rs.getInt(1));
+            }
+        });
+    }
+
     /** WAL 위치 확인 실패는 체크포인트 실패가 아니다. 구분된 메시지로 남고, 연속 실패 간격 억제를 따른다. */
     @Test
     void WAL_위치_확인_실패는_구분된_메시지로_간격_억제를_따라_남는다() throws Exception {

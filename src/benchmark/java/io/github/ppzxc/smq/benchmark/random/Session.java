@@ -63,7 +63,7 @@ final class Session {
 
     /**
      * @param budgetMillis 새 실행을 시작할 수 있는 시간. 지나면 더 시작하지 않는다(이미 도는 실행은 끝낸다)
-     * @return 모두 통과하면 {@link #EXIT_OK}, 실패가 있으면 {@link #EXIT_FAILED}. 고정 속도 모드에서는 백로그 증가({@link Verdict#BACKLOG_GROWING})와 예외(연속 {@link #MAX_CONSECUTIVE_ERRORS}번 미만)를 기록만 하고 계속 돌고, 다른 실패는 거기서 멈춘다
+     * @return 모두 통과하면 {@link #EXIT_OK}, 실패가 있으면 {@link #EXIT_FAILED}. 고정 속도 모드에서는 백로그 증가({@link Verdict#BACKLOG_GROWING}), 달성률 미달({@link Verdict#UNDER_RATE}), 예외(연속 {@link #MAX_CONSECUTIVE_ERRORS}번 미만)를 기록만 하고 계속 돌고, 다른 실패는 거기서 멈춘다
      */
     int run(Iterator<Long> seeds, long budgetMillis) {
         long start = System.nanoTime();
@@ -103,7 +103,7 @@ final class Session {
     }
 
     /**
-     * 실패한 뒤에도 다음 시드를 돌지. 고정 속도 모드는 긴 실행이라 한 번의 실패로 끊지 않는다. 백로그 증가(용량)와 예외(예:
+     * 실패한 뒤에도 다음 시드를 돌지. 고정 속도 모드는 긴 실행이라 한 번의 실패로 끊지 않는다. 백로그 증가(용량), 달성률 미달, 예외(예:
      * SmqStorageException)는 기록하고 계속 가되, 예외가 연속 {@link #MAX_CONSECUTIVE_ERRORS}번이면 하네스 문제로 보고 멈춘다. 불변식
      * 위반과 소진 실패는 데이터가 틀렸다는 뜻이라 바로 멈춘다. 무작위 모드는 첫 실패에서 멈춘다.
      */
@@ -112,6 +112,7 @@ final class Session {
             return false;
         }
         return failed.verdict() == Verdict.BACKLOG_GROWING
+                || failed.verdict() == Verdict.UNDER_RATE
                 || (failed.verdict() == Verdict.ERROR && consecutiveErrors < MAX_CONSECUTIVE_ERRORS);
     }
 

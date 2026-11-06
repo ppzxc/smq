@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
  * @param maxDeliveries 최대 전달 횟수. 없으면 0
  * @param targetRate 프로듀서 전체의 목표 초당 메시지 수. 0이면 목표 없이 최대한 보낸다(무작위 모드)
  * @param minMessageBytes 메시지 크기의 하한. 0이면 0부터 로그 균등(무작위 모드), 양수면 하한부터 상한까지 균등(고정 속도 모드)
+ * @param minAchieved 달성률 하한. 0이면 판정하지 않는다. 시드와 무관하게 {@link Limits}에서 그대로 온다
  * @param consumerPaced 깊은 큐 모드. 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어서, 소비가 유입과 같아지며 깊이가 유지된다
  */
 record RunParams(
@@ -47,7 +48,8 @@ record RunParams(
         long loadMillis,
         long targetRate,
         int minMessageBytes,
-        boolean consumerPaced) {
+        boolean consumerPaced,
+        double minAchieved) {
 
     static final int MAX_MESSAGE_BYTES = 64 * 1024;
     /** 미리 채우기가 만드는 데이터의 상한(바이트 추정). 큰 메시지로 수 GB를 만들지 않으려는 것이다. */
@@ -140,7 +142,8 @@ record RunParams(
                 limits.loadMillis(),
                 rate,
                 minBytes,
-                consumerPaced);
+                consumerPaced,
+                limits.minAchieved());
     }
 
     /** 메시지 크기 범위에서 어림한 평균 크기(바이트). 하한이 없으면 로그 균등으로 보고 상한의 4분의 1로 어림한다. 미리 채우기와 쌓임 상한을 바이트로 환산할 때 쓴다. */

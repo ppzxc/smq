@@ -113,4 +113,20 @@ class OptionsTest {
         assertThrows(
                 IllegalArgumentException.class, () -> Options.parse(new String[] {"--durability", "sometimes"}, 0));
     }
+
+    @Test
+    void min_achieved는_rate와_함께_쓰고_0_초과_1_이하다() {
+        assertEquals(
+                0.95,
+                Options.parse(new String[] {"--rate", "500", "--min-achieved", "0.95"}, 0)
+                        .minAchieved());
+        assertEquals(0, Options.parse(new String[] {"--rate", "500"}, 0).minAchieved());
+        assertThrows(IllegalArgumentException.class, () -> Options.parse(new String[] {"--min-achieved", "0.9"}, 0));
+        for (String bad : new String[] {"0", "1.01", "-0.5", "abc", "NaN"}) {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> Options.parse(new String[] {"--rate", "500", "--min-achieved", bad}, 0),
+                    bad);
+        }
+    }
 }

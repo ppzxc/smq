@@ -95,11 +95,16 @@ class RandomRunTest {
         SoakJudge.Report growing = new SoakJudge.Report(500, 1.0, 100, 200, 5_000, true);
         SoakJudge.Report fine = new SoakJudge.Report(500, 0.3, 100, 0, 10, false);
         Violation v = new Violation(Invariant.GHOST, java.util.List.of(), java.util.List.of(), "합성");
-        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, java.util.List.of(), growing));
-        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), fine), "달성률이 낮아도 보고만 한다");
-        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), null));
-        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), growing));
-        assertEquals(Verdict.DRAIN_TIMEOUT, RandomRun.verdict(false, java.util.List.of(v), growing));
+        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, java.util.List.of(), growing, 0));
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), fine, 0), "달성률이 낮아도 보고만 한다");
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), null, 0.95));
+        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), growing, 0));
+        assertEquals(Verdict.DRAIN_TIMEOUT, RandomRun.verdict(false, java.util.List.of(v), growing, 0));
+        // 달성률 판정은 --min-achieved가 있을 때만 한다. 백로그 증가와 위반이 먼저다.
+        assertEquals(Verdict.UNDER_RATE, RandomRun.verdict(true, java.util.List.of(), fine, 0.95));
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), fine, 0.3), "기준과 같으면 통과다");
+        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, java.util.List.of(), growing, 1.0));
+        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), fine, 0.95));
     }
 
     private Path subdir(String name) {

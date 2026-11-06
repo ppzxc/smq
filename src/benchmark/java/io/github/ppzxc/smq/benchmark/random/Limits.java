@@ -13,6 +13,7 @@ import java.util.Optional;
  * @param ratePerSecond 프로듀서 전체의 목표 초당 메시지 수. 0이면 목표 없이 최대한 보내는 무작위 모드이고, 양수면 고정 속도 모드다
  * @param soakMessageBytes 고정 속도 모드의 메시지 크기 상한(최소는 그 절반). 0이면 기본값 {@link #DEFAULT_SOAK_MESSAGE_BYTES}
  * @param standingQueue 고정 속도 모드에서 큐 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어서, 미리 채운 깊이가 비워지지 않고 유지되게 한다
+ * @param minAchieved 고정 속도 모드에서 달성률이 이 값 아래면 {@code UNDER_RATE}로 판정한다. 0이면 판정하지 않고 기록만 한다
  * @param durability 내구성 수준을 고정한다. 비어 있으면 시드에서 무작위로 고른다
  */
 record Limits(
@@ -22,6 +23,7 @@ record Limits(
         long ratePerSecond,
         int soakMessageBytes,
         boolean standingQueue,
+        double minAchieved,
         Optional<Durability> durability) {
 
     static final long DEFAULT_LOAD_MILLIS = 10_000;
@@ -30,31 +32,59 @@ record Limits(
     static final int DEFAULT_SOAK_MESSAGE_BYTES = 1024;
 
     static Limits full(long loadMillis) {
-        return new Limits(loadMillis, 100_000, 10_000, 0, 0, false, Optional.empty());
+        return new Limits(loadMillis, 100_000, 10_000, 0, 0, false, 0, Optional.empty());
     }
 
     static Limits smoke(long loadMillis) {
-        return new Limits(loadMillis, 2_000, 1_000, 0, 0, false, Optional.empty());
+        return new Limits(loadMillis, 2_000, 1_000, 0, 0, false, 0, Optional.empty());
     }
 
     Limits withRate(long ratePerSecond) {
         return new Limits(
-                loadMillis, maxDepth, maxLeaseMillis, ratePerSecond, soakMessageBytes, standingQueue, durability);
+                loadMillis,
+                maxDepth,
+                maxLeaseMillis,
+                ratePerSecond,
+                soakMessageBytes,
+                standingQueue,
+                minAchieved,
+                durability);
     }
 
     Limits withMessageBytes(int soakMessageBytes) {
         return new Limits(
-                loadMillis, maxDepth, maxLeaseMillis, ratePerSecond, soakMessageBytes, standingQueue, durability);
+                loadMillis,
+                maxDepth,
+                maxLeaseMillis,
+                ratePerSecond,
+                soakMessageBytes,
+                standingQueue,
+                minAchieved,
+                durability);
     }
 
     Limits withDepth(int maxDepth) {
         return new Limits(
-                loadMillis, maxDepth, maxLeaseMillis, ratePerSecond, soakMessageBytes, standingQueue, durability);
+                loadMillis,
+                maxDepth,
+                maxLeaseMillis,
+                ratePerSecond,
+                soakMessageBytes,
+                standingQueue,
+                minAchieved,
+                durability);
     }
 
     Limits withStandingQueue(boolean standingQueue) {
         return new Limits(
-                loadMillis, maxDepth, maxLeaseMillis, ratePerSecond, soakMessageBytes, standingQueue, durability);
+                loadMillis,
+                maxDepth,
+                maxLeaseMillis,
+                ratePerSecond,
+                soakMessageBytes,
+                standingQueue,
+                minAchieved,
+                durability);
     }
 
     Limits withDurability(Durability durability) {
@@ -65,6 +95,19 @@ record Limits(
                 ratePerSecond,
                 soakMessageBytes,
                 standingQueue,
+                minAchieved,
                 Optional.of(durability));
+    }
+
+    Limits withMinAchieved(double minAchieved) {
+        return new Limits(
+                loadMillis,
+                maxDepth,
+                maxLeaseMillis,
+                ratePerSecond,
+                soakMessageBytes,
+                standingQueue,
+                minAchieved,
+                durability);
     }
 }

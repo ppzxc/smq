@@ -20,6 +20,7 @@ import java.util.OptionalLong;
  *   <li>{@code --rate <n>}: 고정 속도 모드. 프로듀서 전체가 초당 n개를 보내고 달성률과 백로그 추세를 판정한다. JFR이 기본으로 켜진다.
  *   <li>{@code --message-bytes <n>}: 고정 속도 모드의 메시지 크기 상한(최소는 그 절반, 균등). 기본 1,024. {@code --rate}가 있어야 한다.
  *   <li>{@code --depth <n>}: 고정 속도 모드의 미리 채울 깊이(데이터 256MB 추정 상한 안에서). 기본 100,000. {@code --rate}가 있어야 한다.
+ *   <li>{@code --min-achieved <비율>}: 고정 속도 모드에서 달성률이 이 비율(0 초과 1 이하) 아래면 {@code UNDER_RATE}로 판정해 비정상 종료한다. 기본은 꺼짐(기록만 한다). {@code --rate}가 있어야 한다.
  *   <li>{@code --standing-queue}: 고정 속도 모드에서 큐 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어서 그 깊이가 유지되게 한다. {@code --rate}가 있어야 한다.
  *   <li>{@code --durability <수준>}: 내구성 수준({@code POWER_LOSS}, {@code PROCESS_CRASH})을 고정한다. 주지 않으면 시드에서 무작위로 고른다.
  *   <li>{@code --jfr}: JVM에 Java Flight Recorder 연속 레코딩을 켠다. 실행 디렉터리에 {@code .jfr} 파일을 남긴다.
@@ -38,6 +39,7 @@ record Options(
         int messageBytes,
         int depth,
         boolean standingQueue,
+        double minAchieved,
         Optional<Durability> durability) {
 
     static final Duration DEFAULT_BUDGET = Duration.ofMinutes(30);
@@ -55,6 +57,7 @@ record Options(
         int messageBytes = 0;
         int depth = 0;
         boolean standingQueue = false;
+        double minAchieved = 0;
         Optional<Durability> durability = Optional.empty();
         Path out = Path.of("build/random-bench");
         for (int i = 0; i < args.length; i++) {
@@ -83,6 +86,7 @@ record Options(
                 case "--rate" -> rate = parseRate(v);
                 case "--message-bytes" -> messageBytes = parsePositiveInt(a, v);
                 case "--depth" -> depth = parsePositiveInt(a, v);
+                case "--min-achieved" -> minAchieved = parseRatio(a, v);
                 case "--durability" -> durability = Optional.of(parseDurability(v));
                 case "--out-dir" -> out = Path.of(v);
                 default -> throw new IllegalArgumentException("알 수 없는 옵션: " + a);
@@ -100,6 +104,9 @@ record Options(
         if (rate == 0 && (messageBytes > 0 || depth > 0 || standingQueue)) {
             throw new IllegalArgumentException("--message-bytes, --depth, --standing-queue는 --rate와 함께 쓴다");
         }
+        if (rate == 0 && minAchieved > 0) {
+            throw new IllegalArgumentException("--min-achieved는 --rate와 함께 쓴다");
+        }
         return new Options(
                 seed,
                 budget,
@@ -112,6 +119,7 @@ record Options(
                 messageBytes,
                 depth,
                 standingQueue,
+                minAchieved,
                 durability);
     }
 
@@ -121,6 +129,19 @@ record Options(
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("--durability는 POWER_LOSS 또는 PROCESS_CRASH여야 한다(대소문자 무시): " + v, e);
         }
+    }
+
+    private static double parseRatio(String option, String v) {
+        double d;
+        try {
+            d = Double.parseDouble(v.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(option + "는 0 초과 1 이하의 숫자여야 한다: " + v, e);
+        }
+        if (!(d > 0 && d <= 1)) {
+            throw new IllegalArgumentException(option + "는 0 초과 1 이하의 숫자여야 한다: " + v);
+        }
+        return d;
     }
 
     private static int parsePositiveInt(String option, String v) {

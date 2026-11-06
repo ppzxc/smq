@@ -116,7 +116,7 @@ class SqliteStorageTest {
             var ok = new io.github.ppzxc.smq.storage.NewMessage(new byte[] {1}, java.util.Map.of());
             var bad = new io.github.ppzxc.smq.storage.NewMessage(null, java.util.Map.of());
             assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), Instant.EPOCH));
-            assertEquals(0, s.counts("q", Instant.EPOCH).ready());
+            assertEquals(0, s.counts("q").ready());
         }
     }
 

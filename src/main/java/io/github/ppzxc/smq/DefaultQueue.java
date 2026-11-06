@@ -48,7 +48,7 @@ final class DefaultQueue implements Queue {
 
     @Override
     public QueueCounts counts() {
-        return storage.counts(name, clock.instant());
+        return storage.counts(name);
     }
 
     @Override

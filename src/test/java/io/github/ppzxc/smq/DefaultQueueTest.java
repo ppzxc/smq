@@ -77,7 +77,7 @@ class DefaultQueueTest {
         }
 
         @Override
-        public QueueCounts counts(String queue, Instant now) {
+        public QueueCounts counts(String queue) {
             throw new UnsupportedOperationException();
         }
 

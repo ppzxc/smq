@@ -27,7 +27,13 @@ public interface Storage extends AutoCloseable {
     /** 선언된 큐의 옵션. 큐가 없으면 비어 있다. */
     Optional<QueueOptions> options(String queue);
 
-    QueueCounts counts(String queue, Instant now);
+    /**
+     * 기록된 상태 전환을 따라 센 근사값이다. 시각을 보지 않는다: 리스 토큰이 남은 메시지는 기한이 지났어도 리스 중이고, 꺼낼 시각이
+     * 남은 메시지는 그 시각이 지났어도 꺼내기 전까지 지연됨이다(ADR-0018).
+     *
+     * @throws io.github.ppzxc.smq.QueueNotFoundException 큐가 없을 때
+     */
+    QueueCounts counts(String queue);
 
     /** 전부 아니면 전무. */
     List<MessageId> publish(String queue, List<NewMessage> batch, Instant now);

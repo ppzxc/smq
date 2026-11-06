@@ -55,8 +55,8 @@ abstract class StorageContractTest {
         PullResult exact = pullAfterExhausting("exact", cap);
         assertTrue(exact.messages().isEmpty());
         assertFalse(exact.deadLettersRemain());
-        assertEquals(cap, storage.counts("dead-exact", T0.plus(LEASE)).ready());
-        assertEquals(0, storage.counts("exact", T0.plus(LEASE)).ready());
+        assertEquals(cap, storage.counts("dead-exact").ready());
+        assertEquals(0, storage.counts("exact").ready());
     }
 
     @Test
@@ -65,7 +65,7 @@ abstract class StorageContractTest {
         PullResult over = pullAfterExhausting("over", cap + 1);
         assertTrue(over.messages().isEmpty());
         assertTrue(over.deadLettersRemain());
-        assertEquals(cap, storage.counts("dead-over", T0.plus(LEASE)).ready());
+        assertEquals(cap, storage.counts("dead-over").ready());
     }
 
     @Test
@@ -75,7 +75,7 @@ abstract class StorageContractTest {
         PullResult next = storage.pull("over", 1, LEASE, T0.plus(LEASE));
         assertTrue(next.messages().isEmpty());
         assertFalse(next.deadLettersRemain());
-        assertEquals(cap + 1, storage.counts("dead-over", T0.plus(LEASE)).ready());
+        assertEquals(cap + 1, storage.counts("dead-over").ready());
     }
 
     @Test
@@ -92,7 +92,7 @@ abstract class StorageContractTest {
         var ok = message(1);
         var bad = new NewMessage(null, Map.of());
         assertThrows(RuntimeException.class, () -> storage.publish("q", List.of(ok, bad), T0));
-        assertEquals(0, storage.counts("q", T0).ready());
+        assertEquals(0, storage.counts("q").ready());
     }
 
     @Test
@@ -181,7 +181,11 @@ abstract class StorageContractTest {
         Extended late = storage.extend(first.token(), List.of(a, b), LEASE, InstantSource.fixed(T0.plusSeconds(12)));
 
         assertEquals(List.of(new Result(a, Outcome.STALE), new Result(b, Outcome.STALE)), late.results());
-        assertEquals(new QueueCounts(1, 1, 0), storage.counts("q", T0.plus(LEASE)));
+        // b의 리스 토큰은 남아 있어 개수로는 리스 중이다. 되살아나지 않았음은 다시 꺼내지는 것으로 확인한다.
+        // 되살아났다면 b의 기한은 T0+22초라 T0+20초에 꺼낼 수 없다.
+        assertEquals(new QueueCounts(0, 2, 0), storage.counts("q"));
+        PullResult third = storage.pull("q", 2, LEASE, T0.plus(LEASE).plus(LEASE));
+        assertEquals(List.of(a, b), third.messages().stream().map(Message::id).toList());
     }
 
     @Test
@@ -197,7 +201,10 @@ abstract class StorageContractTest {
         Extended late = storage.extend(first.token(), List.of(b), LEASE, InstantSource.fixed(T0.plusSeconds(12)));
 
         assertEquals(List.of(new Result(b, Outcome.STALE)), late.results());
-        assertEquals(new QueueCounts(1, 0, 0), storage.counts("q", T0.plusSeconds(12)));
+        // 되살아났다면 b의 기한은 T0+22초라 T0+15초에 꺼낼 수 없다.
+        assertEquals(new QueueCounts(0, 1, 0), storage.counts("q"));
+        PullResult third = storage.pull("q", 1, LEASE, T0.plusSeconds(15));
+        assertEquals(List.of(b), third.messages().stream().map(Message::id).toList());
     }
 
     @Test
@@ -219,7 +226,10 @@ abstract class StorageContractTest {
         Extended late = storage.extend(first.token(), ids, LEASE, InstantSource.fixed(T0.plusSeconds(12)));
 
         assertTrue(late.results().stream().allMatch(r -> r.outcome() == Outcome.STALE));
-        assertEquals(0, storage.counts("q", T0.plusSeconds(12)).leased());
+        // 되살아났다면 남은 메시지의 리스가 살아 있어 꺼내기가 막히고 옮겨지지 않는다.
+        PullResult third = storage.pull("q", 1, LEASE, T0.plusSeconds(15));
+        assertFalse(third.deadLettersRemain());
+        assertEquals(new QueueCounts(0, 0, 0), storage.counts("q"));
     }
 
     @Test
@@ -233,7 +243,7 @@ abstract class StorageContractTest {
         Extended extended = storage.extend(pulled.token(), List.of(id), LEASE, InstantSource.fixed(now));
 
         assertEquals(List.of(new Result(id, Outcome.OK)), extended.results());
-        assertEquals(1, storage.counts("q", now).leased());
+        assertEquals(1, storage.counts("q").leased());
     }
 
     @Test
@@ -266,7 +276,7 @@ abstract class StorageContractTest {
                 storage.settle(first.token(), List.of(new Disposition(id, Disposition.Kind.ACK)), second);
 
         assertEquals(List.of(new Result(id, Outcome.STALE)), results);
-        assertEquals(new QueueCounts(0, 1, 0), storage.counts("q", second));
+        assertEquals(new QueueCounts(0, 1, 0), storage.counts("q"));
         Instant expired = second.plus(LEASE);
         assertEquals(1, storage.pull("q", 1, LEASE, expired).messages().size());
     }
@@ -288,7 +298,7 @@ abstract class StorageContractTest {
                                 new Disposition(rejected, Disposition.Kind.REJECT)),
                         T0));
 
-        assertEquals(new QueueCounts(0, 2, 0), storage.counts("q", T0));
+        assertEquals(new QueueCounts(0, 2, 0), storage.counts("q"));
         assertEquals(2, storage.pull("q", 2, LEASE, T0.plus(LEASE)).messages().size());
     }
 

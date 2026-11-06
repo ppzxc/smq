@@ -138,19 +138,20 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public QueueCounts counts(String queue, Instant now) {
+    public QueueCounts counts(String queue) {
         lock.lock();
         try {
+            // SqliteStorage와 같은 규칙: 시각을 보지 않고 저장된 상태로 센다(ADR-0018).
             long ready = 0;
             long leased = 0;
             long delayed = 0;
             for (Entry e : require(queue).values()) {
-                if (isDelayed(e, now)) {
-                    delayed++;
-                } else if (isReady(e, now)) {
-                    ready++;
-                } else {
+                if (e.leaseToken != null) {
                     leased++;
+                } else if (e.availableAt != null) {
+                    delayed++;
+                } else {
+                    ready++;
                 }
             }
             return new QueueCounts(ready, leased, delayed);

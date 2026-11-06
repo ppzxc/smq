@@ -471,15 +471,19 @@ abstract class SmqConformanceTest {
     }
 
     @Test
-    void counts는_리스_중_개수를_돌려주고_기한이_지났지만_다시_꺼내지_않은_메시지는_준비로_센다() throws Exception {
+    void counts는_리스_중_개수를_돌려주고_기한이_지난_리스도_다시_꺼내기_전까지는_리스_중으로_센다() throws Exception {
         Queue q = open(Duration.ofSeconds(10)).declare("q", QueueOptions.defaults());
         q.publish(List.of(msg("a"), msg("b"), msg("c")));
         q.pull(2, Duration.ZERO);
         assertEquals(new QueueCounts(1, 2, 0), q.counts());
         clock.advance(Duration.ofSeconds(10));
-        assertEquals(new QueueCounts(3, 0, 0), q.counts());
+        // 시각은 보지 않는다. 기한이 지났어도 저장된 상태(리스 토큰)가 남아 있어 리스 중이다.
+        assertEquals(new QueueCounts(1, 2, 0), q.counts());
+        // 만료된 리스를 다시 꺼내면 리스 중에서 리스 중으로 가므로 그대로이고, 준비였던 메시지는 리스 중이 된다.
         q.pull(1, Duration.ZERO);
-        assertEquals(new QueueCounts(2, 1, 0), q.counts());
+        assertEquals(new QueueCounts(1, 2, 0), q.counts());
+        q.pull(2, Duration.ZERO);
+        assertEquals(new QueueCounts(0, 3, 0), q.counts());
     }
 
     @Test
@@ -550,9 +554,11 @@ abstract class SmqConformanceTest {
         Extension late = q.extend(first, Duration.ofSeconds(100));
 
         assertEquals(ids, late.outcomes().stale());
-        // 되살아난 리스가 없으므로 둘째 청크의 리스만 남는다.
-        assertEquals(new QueueCounts(1, 1, 0), q.counts());
+        // b의 리스 토큰은 남아 있어 개수로는 리스 중이다. 되살아나지 않았음은 다시 꺼내지는 것으로 확인한다.
+        assertEquals(new QueueCounts(0, 2, 0), q.counts());
         assertTrue(q.settle(second.ackAll()).allOk());
+        Chunk third = q.pull(1, Duration.ZERO);
+        assertEquals(ids.get(1), third.messages().getFirst().id());
     }
 
     @Test
@@ -603,9 +609,9 @@ abstract class SmqConformanceTest {
 
         // 거부된 호출은 아무것도 바꾸지 않아 A의 리스는 그대로이고, 올바른 큐로는 정산된다.
         assertEquals(new QueueCounts(0, 1, 0), a.counts());
-        // 연장이 잘못 반영됐다면 100초로 늘어나 10초 뒤에도 리스 중일 것이다.
+        // 시각이 지나도 개수는 그대로다(저장된 상태 기준).
         clock.advance(Duration.ofSeconds(10));
-        assertEquals(new QueueCounts(1, 0, 0), a.counts());
+        assertEquals(new QueueCounts(0, 1, 0), a.counts());
         assertTrue(a.settle(fromA.ackAll()).allOk());
         assertEquals(new QueueCounts(0, 0, 0), a.counts());
     }
@@ -691,14 +697,13 @@ abstract class SmqConformanceTest {
         for (int round = 0; round < 50; round++) {
             List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
             Chunk c = q.pull(3, Duration.ZERO);
-            clock.advance(Duration.ofSeconds(10));
-            // 기한이 지난 리스라 3개 모두 준비로 센다. 정산 뒤에는 NACK한 b 하나만 남는다.
-            assertEquals(3, q.counts().ready());
+            // 3개 모두 리스 중이다. 정산 뒤에는 NACK한 b 하나만 준비로 남는다.
+            assertEquals(new QueueCounts(0, 3, 0), q.counts());
             AtomicBoolean done = new AtomicBoolean();
-            List<Long> seen = Collections.synchronizedList(new ArrayList<>());
+            List<QueueCounts> seen = Collections.synchronizedList(new ArrayList<>());
             Thread observer = new Thread(() -> {
                 while (!done.get()) {
-                    seen.add(q.counts().ready());
+                    seen.add(q.counts());
                 }
             });
             observer.start();
@@ -706,8 +711,12 @@ abstract class SmqConformanceTest {
             done.set(true);
             observer.join();
             assertTrue(r.allOk());
-            assertTrue(seen.stream().allMatch(n -> n == 3 || n == 1), "torn state: " + seen);
-            assertEquals(1, q.counts().ready());
+            // 한 큐의 세 값은 한 참조째 바뀐다. 정산 전이나 후의 값만 보이고 섞인 값은 보이지 않는다.
+            assertTrue(
+                    seen.stream()
+                            .allMatch(n -> n.equals(new QueueCounts(0, 3, 0)) || n.equals(new QueueCounts(1, 0, 0))),
+                    "torn state: " + seen);
+            assertEquals(new QueueCounts(1, 0, 0), q.counts());
             Chunk drain = q.pull(10, Duration.ZERO);
             assertTrue(q.settle(drain.ackAll()).allOk());
         }
@@ -853,7 +862,7 @@ abstract class SmqConformanceTest {
     }
 
     @Test
-    void counts는_지연됨_개수를_돌려주고_지연이_끝나면_준비로_센다() throws Exception {
+    void counts는_지연됨_개수를_돌려주고_지연이_끝나도_꺼내기_전까지는_지연됨으로_센다() throws Exception {
         Queue q = open(Duration.ofSeconds(60)).declare("q", QueueOptions.defaults());
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
         q.publish(msg("d").withDelay(Duration.ofSeconds(10)));
@@ -863,10 +872,11 @@ abstract class SmqConformanceTest {
         assertTrue(q.settle(c.settle().nack(ids.get(0), Duration.ofSeconds(5)).ackRest())
                 .allOk());
         assertEquals(new QueueCounts(1, 0, 2), q.counts());
-        clock.advance(Duration.ofSeconds(5));
-        assertEquals(new QueueCounts(2, 0, 1), q.counts());
-        clock.advance(Duration.ofSeconds(5));
-        assertEquals(new QueueCounts(3, 0, 0), q.counts());
+        clock.advance(Duration.ofSeconds(10));
+        // 시각은 보지 않는다. 지연이 끝났어도 다음에 꺼낼 때 반영된다.
+        assertEquals(new QueueCounts(1, 0, 2), q.counts());
+        assertEquals(3, q.pull(10, Duration.ZERO).messages().size());
+        assertEquals(new QueueCounts(0, 3, 0), q.counts());
     }
 
     @Test
@@ -1613,7 +1623,8 @@ abstract class SmqConformanceTest {
         // 지연이 끝나 x는 도달한 준비 메시지지만, y의 리스가 살아 있으므로 빈 청크이고 옮기지 않는다.
         clock.advance(Duration.ofSeconds(6));
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
-        assertEquals(new QueueCounts(1, 1, 0), q.counts());
+        // x는 지연이 끝났어도 저장된 상태가 지연됨이다.
+        assertEquals(new QueueCounts(0, 1, 1), q.counts());
         assertEquals(new QueueCounts(0, 0, 0), dead.counts());
 
         // 리스가 끝나면 다음 꺼내기가 x와 y를 옮긴다.

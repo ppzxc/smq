@@ -92,7 +92,8 @@ class SchemaV1SampleTest {
             // 지연됨 메시지는 지연 시간이 지나야 나온다
             assertEquals(new QueueCounts(0, 2, 1), orders.counts());
             clock.advance(Duration.ofHours(1));
-            assertEquals(new QueueCounts(1, 2, 0), orders.counts());
+            // 지연이 끝나도 꺼내기 전까지는 지연됨으로 센다.
+            assertEquals(new QueueCounts(0, 2, 1), orders.counts());
             Message delayed = orders.pull(10, Duration.ZERO).messages().getFirst();
             assertEquals("m5", text(delayed));
             assertEquals(1, delayed.deliveryCount());

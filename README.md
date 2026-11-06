@@ -78,7 +78,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 - **청크**는 `pull`로 한 번에 꺼낸 메시지 묶음이고, 묶음 전체가 **리스** 하나를 공유한다. 리스는 기한부 점유라서, 기한 안에 정산하지 않으면 메시지를 다시 꺼낼 수 있다.
 - **정산**은 리스 중인 메시지에 ACK(지움), NACK(돌려줌, 지연 가능), reject(dead letter 큐로 보냄)를 적용한다. 서로 다른 결과를 섞어도 한 번에 전부 반영된다.
 - 이미 다른 리스로 넘어갔거나 정산된 메시지에 대한 정산은 예외가 아니라 `Outcome.STALE` 결과로 돌아온다.
-- 메시지 상태는 **준비**(지금 꺼낼 수 있음), **리스 중**, **지연됨**(지정 시각 전)이고, `queue.counts()`가 세 값을 돌려준다.
+- 메시지 상태는 **준비**(지금 꺼낼 수 있음), **리스 중**, **지연됨**(지정 시각 전)이고, `queue.counts()`가 세 값을 돌려준다. 이 값은 기록된 상태 전환을 따라 센 근사값이라서 락 없이 큐 깊이와 무관한 비용으로 읽힌다. 기한이 지난 리스와 끝난 지연은 다음에 꺼낼 때 반영된다([ADR 0018](docs/adr/0018-counts-is-an-approximation-from-recorded-transitions.md)).
 
 사용법의 전체 레퍼런스(열기, 큐 선언, 발행, 꺼내기, 정산, 리스 연장, dead letter, 예외)는 [docs/usage.md](docs/usage.md)에 있다.
 
@@ -127,7 +127,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 |---|---|
 | [docs/usage.md](docs/usage.md) | 사용법 레퍼런스(발행, 꺼내기, 정산, 예외 등) |
 | [GLOSSARY.md](GLOSSARY.md) | 도메인 용어 정의. 코드와 문서가 이 용어를 쓴다. |
-| [docs/adr/](docs/adr) | 설계 결정 기록(0001~0017) |
+| [docs/adr/](docs/adr) | 설계 결정 기록(0001~0018) |
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
 | [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
 | [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |

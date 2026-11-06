@@ -308,7 +308,7 @@ final class RandomRun {
         return depthSnapshot(target) >= backlogCapMessages(params);
     }
 
-    /** 대상 큐 깊이(ready+leased+delayed). {@code counts()}가 쓰기 락을 잡으므로 {@link #DEPTH_REFRESH_NANOS}마다만 새로 읽는다. */
+    /** 대상 큐 깊이(ready+leased+delayed). {@code counts()}는 메모리 개수를 읽어 싸지만(ADR-0018) 매번 읽지 않고 {@link #DEPTH_REFRESH_NANOS}마다만 새로 읽는다. */
     private long depthSnapshot(Queue target) {
         long now = System.nanoTime();
         long at = depthAtNanos.get();

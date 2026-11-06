@@ -136,7 +136,15 @@ final class TransactionExecutor {
      * 아무것도 반영되지 않았다.
      */
     <T> T execute(TxBody<T> body, Deadline deadline) {
-        return runLocked(() -> runOnce(body), deadline);
+        return execute(body, deadline, () -> {});
+    }
+
+    /**
+     * {@code afterCommit}은 COMMIT이 끝난 직후, lock을 쥔 채 한 번 실행한다. 롤백이나 커밋 실패 때는 실행하지 않는다.
+     * 메모리 상태를 커밋된 결과에 맞춰 바꾸는 용도라 던지면 안 된다. 던지면 이미 커밋된 연산이 실패로 보이므로 삼키고 로그한다.
+     */
+    <T> T execute(TxBody<T> body, Deadline deadline, Runnable afterCommit) {
+        return runLocked(() -> runOnce(body, afterCommit), deadline);
     }
 
     void close() {
@@ -150,7 +158,7 @@ final class TransactionExecutor {
         }
     }
 
-    private <T> T runOnce(TxBody<T> body) throws SQLException {
+    private <T> T runOnce(TxBody<T> body, Runnable afterCommit) throws SQLException {
         try (Statement s = connection.createStatement()) {
             s.execute("BEGIN IMMEDIATE");
         }
@@ -165,6 +173,11 @@ final class TransactionExecutor {
             throw t;
         }
         // 커밋이 확정됐다. 이 아래의 어떤 실패도 롤백이나 호출자의 실패로 이어지면 안 된다.
+        try {
+            afterCommit.run();
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR, "after-commit hook failed; in-memory state may lag the database", e);
+        }
         checkpointIfWalIsLarge();
         return result;
     }

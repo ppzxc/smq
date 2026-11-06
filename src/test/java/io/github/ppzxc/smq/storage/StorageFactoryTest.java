@@ -34,7 +34,7 @@ class StorageFactoryTest {
         }
         try (Storage second =
                 StorageFactory.sqliteV1Sample(Durability.PROCESS_CRASH).open(dir)) {
-            assertEquals(1, second.counts("extra", T0).ready());
+            assertEquals(1, second.counts("extra").ready());
         }
     }
 
@@ -44,7 +44,7 @@ class StorageFactoryTest {
             publishOne(first);
         }
         try (Storage second = StorageFactory.sqliteNew(Durability.PROCESS_CRASH).open(dir)) {
-            assertEquals(1, second.counts("extra", T0).ready());
+            assertEquals(1, second.counts("extra").ready());
         }
     }
 

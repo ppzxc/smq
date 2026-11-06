@@ -33,7 +33,10 @@ public final class RandomBenchMain {
     }
 
     private static Limits soakLimits(Options o) {
-        Limits limits = Limits.full(o.load().toMillis()).withRate(o.rate()).withStandingQueue(o.standingQueue());
+        Limits limits = Limits.full(o.load().toMillis())
+                .withRate(o.rate())
+                .withStandingQueue(o.standingQueue())
+                .withMinAchieved(o.minAchieved());
         if (o.messageBytes() > 0) {
             limits = limits.withMessageBytes(o.messageBytes());
         }

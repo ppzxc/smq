@@ -41,12 +41,13 @@ class ScriptGoldenTest {
         return crc.getValue();
     }
 
+    // 다이제스트는 RunParams.toString()을 포함한다. minAchieved 필드를 더하면서 값을 다시 고정했다(작업량 생성 코드는 건드리지 않았다).
     @Test
     void generatedWorkloadIsPinnedForFixedSeeds() {
-        assertEquals(1650023215L, digest(1));
-        assertEquals(3614411652L, digest(7));
-        assertEquals(4015063363L, digest(42));
-        assertEquals(4006591804L, digest(-5));
-        assertEquals(1018423965L, digest(123456789L));
+        assertEquals(2987651438L, digest(1));
+        assertEquals(113552775L, digest(7));
+        assertEquals(1626929857L, digest(42));
+        assertEquals(2819112002L, digest(-5));
+        assertEquals(1054620683L, digest(123456789L));
     }
 }

@@ -600,7 +600,7 @@ final class RandomRun {
                 new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
         List<Violation> violations = checker.check(config, pub, del, smp);
         SoakJudge.Report soak = params.isSoak() ? soakReport(countPublishedInLoad(pub), smp) : null;
-        Verdict verdict = verdict(drained, violations, soak);
+        Verdict verdict = verdict(drained, violations, soak, params.minAchieved());
         double seconds = params.loadMillis() / 1000.0;
         long[] latencies = latenciesMillis(pub, del);
         Double p50 = latencies.length == 0 ? null : (double) Aggregator.percentile(latencies, 50);
@@ -621,15 +621,23 @@ final class RandomRun {
                 soak);
     }
 
-    /** 소진 실패와 불변식 위반이 먼저고, 그 다음이 백로그 증가다. 달성률은 판정에 쓰지 않는다. */
-    static Verdict verdict(boolean drained, List<Violation> violations, SoakJudge.Report soak) {
+    /**
+     * 소진 실패와 불변식 위반이 먼저고, 그 다음이 백로그 증가, 그 다음이 달성률 미달이다. 달성률은 {@code minAchieved}가 양수일 때만
+     * 판정하고, 0이면 기록만 한다.
+     */
+    static Verdict verdict(boolean drained, List<Violation> violations, SoakJudge.Report soak, double minAchieved) {
         if (!drained) {
             return Verdict.DRAIN_TIMEOUT;
         }
         if (!violations.isEmpty()) {
             return Verdict.VIOLATION;
         }
-        return soak != null && soak.backlogGrowing() ? Verdict.BACKLOG_GROWING : Verdict.PASS;
+        if (soak != null && soak.backlogGrowing()) {
+            return Verdict.BACKLOG_GROWING;
+        }
+        return soak != null && minAchieved > 0 && soak.achievedRatio() < minAchieved
+                ? Verdict.UNDER_RATE
+                : Verdict.PASS;
     }
 
     /** 기록을 디스크에 쌓은 실행의 판정. 기록은 조각으로 나눠 검사하고 힙에 한꺼번에 올리지 않는다. */
@@ -639,7 +647,7 @@ final class RandomRun {
                 new InvariantChecker.Config(params.singleActiveConsumer(), params.maxDeliveries());
         SpoolCheck.Result checked = SpoolCheck.run(runDir, config, smp, loadStartMillis, loadEndMillis);
         SoakJudge.Report soak = soakReport(checked.publishedInLoad(), smp);
-        Verdict verdict = verdict(drained, checked.violations(), soak);
+        Verdict verdict = verdict(drained, checked.violations(), soak, params.minAchieved());
         double seconds = params.loadMillis() / 1000.0;
         return new RunResult(
                 params,

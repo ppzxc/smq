@@ -83,6 +83,10 @@ final class SqliteSchema {
                       available_at INTEGER
                     )""");
             s.execute("CREATE INDEX message_ready ON message(queue_id, id)");
+            s.execute("CREATE INDEX message_stored_ready ON message(queue_id, id) WHERE lease_deadline IS NULL AND available_at IS NULL");
+            s.execute("CREATE INDEX message_lease_deadline ON message(queue_id, lease_deadline) WHERE lease_deadline IS NOT NULL");
+            s.execute("CREATE INDEX message_available_at ON message(queue_id, available_at) WHERE available_at IS NOT NULL");
+            s.execute("CREATE INDEX message_redelivered_ready ON message(queue_id, delivery_count, id) WHERE lease_deadline IS NULL AND available_at IS NULL AND delivery_count > 0");
             s.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)");
             s.execute("INSERT INTO meta(key, value) VALUES ('lease_seq', 0)");
             s.execute("PRAGMA application_id = " + APPLICATION_ID);

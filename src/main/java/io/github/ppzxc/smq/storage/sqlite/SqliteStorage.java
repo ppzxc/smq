@@ -67,7 +67,7 @@ public final class SqliteStorage implements Storage {
 
     /** 꺼낼 수 있는 메시지의 시각 조건. 지연이 끝났고 리스가 없거나 만료됐다. 자리표시자 둘은 모두 현재 시각이다. */
     private static final String READY_TIME_CONDITION =
-            "(available_at IS NULL OR available_at <= ?) AND (lease_token IS NULL OR lease_deadline <= ?)";
+            "lease_deadline IS NULL AND available_at IS NULL";
 
     /** 준비 조건: 큐, 지연 끝남, 리스 없음 또는 만료. 바인딩은 (queue_id, now, now) 순서다. */
     private static final String READY_FROM_WHERE = " FROM message WHERE queue_id = ? AND " + READY_TIME_CONDITION;
@@ -86,7 +86,7 @@ public final class SqliteStorage implements Storage {
     /** 최대 전달 횟수에 도달한 준비 메시지. dead letter 큐로 옮길 대상이다. 바인딩은 SELECT_PULLABLE과 같다. */
     static final String SELECT_EXHAUSTED = "SELECT id, payload, headers, delivery_count, " + STORED_STATE
             + READY_FROM_WHERE
-            + " AND delivery_count >= ? ORDER BY id LIMIT ?";
+            + " AND delivery_count > 0 AND delivery_count >= ? ORDER BY delivery_count, id LIMIT ?";
 
     /** 운영 스키마: 목표 버전 1, 업그레이드 단계 없음. */
     private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
@@ -368,7 +368,7 @@ public final class SqliteStorage implements Storage {
 
     private static boolean hasActiveLease(Connection c, long queueId, Instant now) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(
-                "SELECT 1 FROM message WHERE queue_id = ? AND lease_token IS NOT NULL AND lease_deadline > ? LIMIT 1")) {
+                "SELECT 1 FROM message WHERE queue_id = ? AND lease_deadline > ? LIMIT 1")) {
             ps.setLong(1, queueId);
             ps.setLong(2, toNanos(now));
             try (ResultSet rs = ps.executeQuery()) {
@@ -451,13 +451,13 @@ public final class SqliteStorage implements Storage {
         return executor.anyOrUncertain(
                 connection -> {
                     try (PreparedStatement ps = connection.prepareStatement(
-                            "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
-                                    + " AND " + READY_TIME_CONDITION + "), "
-                                    + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
+                            "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?1)"
+                                    + " AND " + READY_TIME_CONDITION + ")"
+                                    + " OR EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?1) AND lease_deadline <= ?2)"
+                                    + " OR EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?1) AND available_at <= ?2), "
+                                    + "EXISTS(SELECT 1 FROM queue WHERE name = ?1)")) {
                         ps.setString(1, queue);
                         ps.setLong(2, toNanos(now));
-                        ps.setLong(3, toNanos(now));
-                        ps.setString(4, queue);
                         try (ResultSet rs = ps.executeQuery()) {
                             // 행이 없는 일은 없지만, 모르면 쓰기 경로가 확인하게 한다.
                             return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
@@ -494,6 +494,20 @@ public final class SqliteStorage implements Storage {
                     if (options.singleActiveConsumer() && hasActiveLease(c, queueId, now)) {
                         return PullResult.empty();
                     }
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "UPDATE message SET lease_deadline = NULL WHERE queue_id = ? AND lease_deadline <= ?")) {
+                        ps.setLong(1, queueId);
+                        ps.setLong(2, toNanos(now));
+                        ps.executeUpdate();
+                    }
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "UPDATE message SET available_at = NULL WHERE queue_id = ? AND available_at <= ?")) {
+                        ps.setLong(1, queueId);
+                        ps.setLong(2, toNanos(now));
+                        int n = ps.executeUpdate();
+                        tx.delayed(queueId, -n);
+                        tx.ready(queueId, n);
+                    }
                     int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
                     boolean deadLettersRemain = options.maxDeliveries().isPresent()
                             && moveExhausted(c, tx, queue, queueId, options, limit, now);
@@ -503,10 +517,8 @@ public final class SqliteStorage implements Storage {
                     long picked = 0;
                     try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE_STATE)) {
                         peek.setLong(1, queueId);
-                        peek.setLong(2, toNanos(now));
-                        peek.setLong(3, toNanos(now));
-                        peek.setInt(4, limit);
-                        peek.setInt(5, max);
+                        peek.setInt(2, limit);
+                        peek.setInt(3, max);
                         try (ResultSet rs = peek.executeQuery()) {
                             while (rs.next()) {
                                 picked++;
@@ -543,10 +555,8 @@ public final class SqliteStorage implements Storage {
                         ps.setLong(1, token);
                         ps.setLong(2, toNanos(deadline));
                         ps.setLong(3, queueId);
-                        ps.setLong(4, toNanos(now));
-                        ps.setLong(5, toNanos(now));
-                        ps.setInt(6, limit);
-                        ps.setInt(7, max);
+                        ps.setInt(4, limit);
+                        ps.setInt(5, max);
                         try (ResultSet rs = ps.executeQuery()) {
                             while (rs.next()) {
                                 messages.add(new Message(
@@ -577,10 +587,8 @@ public final class SqliteStorage implements Storage {
         List<Exhausted> found = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(SELECT_EXHAUSTED)) {
             ps.setLong(1, queueId);
-            ps.setLong(2, toNanos(now));
-            ps.setLong(3, toNanos(now));
-            ps.setInt(4, limit);
-            ps.setInt(5, DeadLetters.MAX_MOVES_PER_PULL + 1);
+            ps.setInt(2, limit);
+            ps.setInt(3, DeadLetters.MAX_MOVES_PER_PULL + 1);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     found.add(new Exhausted(

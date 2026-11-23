@@ -38,6 +38,22 @@ class SqliteStorageCountersTest {
     }
 
     @Test
+    void pullPromotesAllDueDelaysEvenWhenTheChunkIsSmaller() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.PROCESS_CRASH)) {
+            s.declare("q", QueueOptions.defaults());
+            Duration delay = Duration.ofSeconds(5);
+            s.publish("q", List.of(message(1, delay), message(2, delay), message(3, LEASE)), T0);
+
+            assertEquals(new QueueCounts(0, 0, 3), s.counts("q"));
+            PullResult result = s.pull("q", 1, LEASE, T0.plus(delay));
+            assertEquals(1, result.messages().size());
+            assertEquals(1, result.messages().getFirst().payload()[0]);
+            assertEquals(new QueueCounts(1, 1, 1), s.counts("q"));
+            assertMatchesStored(s, "q");
+        }
+    }
+
+    @Test
     void 무작위_연산_뒤에도_메모리_개수가_저장된_상태_집계와_같고_다시_열어도_같다() {
         Path db = dir.resolve("smq.db");
         Random random = new Random(20261106);
@@ -57,6 +73,7 @@ class SqliteStorageCountersTest {
                         s.publish("q", batch, now);
                     }
                     case 1 -> {
+                        now = now.plusSeconds(random.nextInt(13));
                         PullResult r = s.pull("q", 1 + random.nextInt(4), LEASE, now);
                         if (!r.messages().isEmpty()) {
                             held.add(r);

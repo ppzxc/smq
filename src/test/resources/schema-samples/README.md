@@ -5,8 +5,9 @@
 | 파일 | `user_version` | 내용 |
 | --- | --- | --- |
 | `schema-v1.db` | 1 | 아래 표 |
+| `schema-v2.db` | 2 | 아래 표 |
 
-## schema-v1.db 내용
+## 견본 내용
 
 시각 `2026-01-01T00:00:00Z`(T0)에 고정하고, 리스 시간은 1시간이다.
 
@@ -28,4 +29,4 @@
 ./gradlew generateSchemaSample
 ```
 
-기본 출력은 `src/test/resources/schema-samples/schema-v1.db`이고, 다른 경로는 인자로 준다(`./gradlew generateSchemaSample --args="경로"`). 생성기를 바꿨다면 `SchemaV1SampleTest`의 기대값(큐 선언, 개수, 메시지 id, 전달 횟수, 헤더)도 함께 맞춘다.
+기본 출력은 현재 스키마 버전의 `src/test/resources/schema-samples/schema-vN.db`이고, 다른 경로는 인자로 준다(`./gradlew generateSchemaSample --args="경로"`). 생성기를 바꿨다면 `SchemaV1SampleTest`의 기대값(큐 선언, 개수, 메시지 id, 전달 횟수, 헤더)도 함께 맞춘다.

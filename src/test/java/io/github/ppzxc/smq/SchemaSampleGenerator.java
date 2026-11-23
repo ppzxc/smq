@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq;
 
+import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 스키마 버전별 견본 {@code schema-v1.db}를 만드는 수동 실행용 도구. 평소 테스트는 이것을 돌리지 않고 커밋된 파일만 연다.
+ * 현재 스키마 버전의 견본을 만드는 수동 실행용 도구. 평소 테스트는 이것을 돌리지 않고 커밋된 파일만 연다.
  * 공개 API와 고정 시계만 쓰므로 어느 스키마 버전의 코드에서 돌려도 그 버전의 견본이 나온다.
  * 실행: {@code ./gradlew generateSchemaSample} (견본 폴더의 README 참고).
  *
@@ -25,7 +26,10 @@ public final class SchemaSampleGenerator {
     private SchemaSampleGenerator() {}
 
     public static void main(String[] args) throws Exception {
-        Path out = Path.of(args.length > 0 ? args[0] : "src/test/resources/schema-samples/schema-v1.db");
+        Path out = Path.of(
+                args.length > 0
+                        ? args[0]
+                        : "src/test/resources/schema-samples/schema-v" + SqliteStorage.SCHEMA_VERSION + ".db");
         Files.createDirectories(out.toAbsolutePath().getParent());
         Files.deleteIfExists(out);
         generate(out);

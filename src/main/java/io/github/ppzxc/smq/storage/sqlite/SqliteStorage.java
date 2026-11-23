@@ -63,33 +63,36 @@ public final class SqliteStorage implements Storage {
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
     public static final int APPLICATION_ID = SqliteSchema.APPLICATION_ID;
 
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
-    /** 꺼낼 수 있는 메시지의 시각 조건. 지연이 끝났고 리스가 없거나 만료됐다. 자리표시자 둘은 모두 현재 시각이다. */
-    private static final String READY_TIME_CONDITION =
-            "(available_at IS NULL OR available_at <= ?) AND (lease_token IS NULL OR lease_deadline <= ?)";
+    private static final String STORED_READY = "lease_deadline IS NULL AND available_at IS NULL";
 
-    /** 준비 조건: 큐, 지연 끝남, 리스 없음 또는 만료. 바인딩은 (queue_id, now, now) 순서다. */
-    private static final String READY_FROM_WHERE = " FROM message WHERE queue_id = ? AND " + READY_TIME_CONDITION;
+    static final String PROMOTE_EXPIRED_LEASES =
+            "UPDATE message SET lease_deadline = NULL WHERE queue_id = ? AND lease_deadline <= ?";
+    static final String PROMOTE_DUE_DELAYS =
+            "UPDATE message SET available_at = NULL WHERE queue_id = ? AND available_at <= ?";
 
-    /** 저장된 상태 두 칸: 리스 토큰이 있는지, 꺼낼 시각 값이 있는지. 개수를 옮길 원천 상태를 알아내는 데 쓴다(ADR-0018). */
-    private static final String STORED_STATE = "lease_token IS NOT NULL, available_at IS NOT NULL";
+    private static final String QUEUE_ID_BY_NAME = "(SELECT id FROM queue WHERE name = ?)";
+    static final String ANY_READY = """
+            SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = %1$s AND %2$s)
+                OR EXISTS(SELECT 1 FROM message WHERE queue_id = %1$s AND lease_deadline <= ?)
+                OR EXISTS(SELECT 1 FROM message WHERE queue_id = %1$s AND available_at <= ?),
+                EXISTS(SELECT 1 FROM queue WHERE name = ?)
+            """.formatted(QUEUE_ID_BY_NAME, STORED_READY);
 
-    /** 최대 전달 횟수에 도달하지 않은 준비 메시지. 꺼내기가 실제로 고르는 대상이다. 바인딩: 준비 조건, 횟수 상한, LIMIT. */
-    static final String SELECT_PULLABLE =
-            "SELECT id" + READY_FROM_WHERE + " AND delivery_count < ? ORDER BY id LIMIT ?";
+    private static final String STORED_READY_FROM_WHERE = " FROM message WHERE queue_id = ? AND " + STORED_READY;
+    private static final String PULLABLE_FROM_WHERE =
+            STORED_READY_FROM_WHERE + " AND delivery_count < ? ORDER BY id LIMIT ?";
 
-    /** {@link #SELECT_PULLABLE}과 같은 대상을 저장된 상태와 함께 읽는다. 바인딩도 같다. */
-    private static final String SELECT_PULLABLE_STATE =
-            "SELECT id, " + STORED_STATE + READY_FROM_WHERE + " AND delivery_count < ? ORDER BY id LIMIT ?";
+    static final String SELECT_PULLABLE = "SELECT id" + PULLABLE_FROM_WHERE;
+    static final String SELECT_PULLABLE_STATE = "SELECT lease_token IS NOT NULL" + PULLABLE_FROM_WHERE;
 
-    /** 최대 전달 횟수에 도달한 준비 메시지. dead letter 큐로 옮길 대상이다. 바인딩은 SELECT_PULLABLE과 같다. */
-    static final String SELECT_EXHAUSTED = "SELECT id, payload, headers, delivery_count, " + STORED_STATE
-            + READY_FROM_WHERE
+    /** 최대 전달 횟수에 도달한 준비 메시지. dead letter 큐로 옮길 대상이다. */
+    static final String SELECT_EXHAUSTED = "SELECT id, payload, headers, delivery_count, lease_token IS NOT NULL"
+            + STORED_READY_FROM_WHERE
             + " AND delivery_count >= ? ORDER BY id LIMIT ?";
 
-    /** 운영 스키마: 목표 버전 1, 업그레이드 단계 없음. */
-    private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of());
+    private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of(1, SqliteSchema::upgradeV1ToV2));
 
     private final TransactionExecutor executor;
     private final Duration lockWaitFloor;
@@ -450,14 +453,14 @@ public final class SqliteStorage implements Storage {
     private boolean anyReady(String queue, Instant now, Deadline waitDeadline) {
         return executor.anyOrUncertain(
                 connection -> {
-                    try (PreparedStatement ps = connection.prepareStatement(
-                            "SELECT EXISTS(SELECT 1 FROM message WHERE queue_id = (SELECT id FROM queue WHERE name = ?)"
-                                    + " AND " + READY_TIME_CONDITION + "), "
-                                    + "EXISTS(SELECT 1 FROM queue WHERE name = ?)")) {
+                    try (PreparedStatement ps = connection.prepareStatement(ANY_READY)) {
+                        long nowNanos = toNanos(now);
                         ps.setString(1, queue);
-                        ps.setLong(2, toNanos(now));
-                        ps.setLong(3, toNanos(now));
+                        ps.setString(2, queue);
+                        ps.setLong(3, nowNanos);
                         ps.setString(4, queue);
+                        ps.setLong(5, nowNanos);
+                        ps.setString(6, queue);
                         try (ResultSet rs = ps.executeQuery()) {
                             // 행이 없는 일은 없지만, 모르면 쓰기 경로가 확인하게 한다.
                             return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
@@ -494,29 +497,23 @@ public final class SqliteStorage implements Storage {
                     if (options.singleActiveConsumer() && hasActiveLease(c, queueId, now)) {
                         return PullResult.empty();
                     }
+                    promote(c, tx, queueId, toNanos(now));
                     int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
                     boolean deadLettersRemain = options.maxDeliveries().isPresent()
                             && moveExhausted(c, tx, queue, queueId, options, limit, now);
                     // 꺼낼 대상을 저장된 상태와 함께 먼저 읽는다. 아래 UPDATE가 같은 트랜잭션에서 같은 행을 고른다.
                     long fromReady = 0;
-                    long fromDelayed = 0;
                     long picked = 0;
                     try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE_STATE)) {
                         peek.setLong(1, queueId);
-                        peek.setLong(2, toNanos(now));
-                        peek.setLong(3, toNanos(now));
-                        peek.setInt(4, limit);
-                        peek.setInt(5, max);
+                        peek.setInt(2, limit);
+                        peek.setInt(3, max);
                         try (ResultSet rs = peek.executeQuery()) {
                             while (rs.next()) {
                                 picked++;
-                                if (rs.getInt(2) == 0) {
-                                    // 리스 만료 행은 리스 중에서 리스 중으로 가므로 개수가 바뀌지 않는다.
-                                    if (rs.getInt(3) == 0) {
-                                        fromReady++;
-                                    } else {
-                                        fromDelayed++;
-                                    }
+                                // 리스 토큰이 남은 행은 리스 중에서 리스 중으로 간다.
+                                if (rs.getInt(1) == 0) {
+                                    fromReady++;
                                 }
                             }
                         }
@@ -525,8 +522,7 @@ public final class SqliteStorage implements Storage {
                         return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
                     }
                     tx.ready(queueId, -fromReady);
-                    tx.delayed(queueId, -fromDelayed);
-                    tx.leased(queueId, fromReady + fromDelayed);
+                    tx.leased(queueId, fromReady);
                     long token;
                     try (Statement s = c.createStatement();
                             ResultSet rs = s.executeQuery(
@@ -543,10 +539,8 @@ public final class SqliteStorage implements Storage {
                         ps.setLong(1, token);
                         ps.setLong(2, toNanos(deadline));
                         ps.setLong(3, queueId);
-                        ps.setLong(4, toNanos(now));
-                        ps.setLong(5, toNanos(now));
-                        ps.setInt(6, limit);
-                        ps.setInt(7, max);
+                        ps.setInt(4, limit);
+                        ps.setInt(5, max);
                         try (ResultSet rs = ps.executeQuery()) {
                             while (rs.next()) {
                                 messages.add(new Message(
@@ -564,6 +558,22 @@ public final class SqliteStorage implements Storage {
                 waitDeadline);
     }
 
+    private static void promote(Connection c, QueueCounters.Tx tx, long queueId, long nowNanos) throws SQLException {
+        // 토큰을 남겨 아직 다시 꺼내지 않은 메시지의 정산과 개수를 유지한다.
+        try (PreparedStatement ps = c.prepareStatement(PROMOTE_EXPIRED_LEASES)) {
+            ps.setLong(1, queueId);
+            ps.setLong(2, nowNanos);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = c.prepareStatement(PROMOTE_DUE_DELAYS)) {
+            ps.setLong(1, queueId);
+            ps.setLong(2, nowNanos);
+            int promoted = ps.executeUpdate();
+            tx.delayed(queueId, -promoted);
+            tx.ready(queueId, promoted);
+        }
+    }
+
     /**
      * 최대 전달 횟수에 도달한 준비 메시지를 id 순서로 dead letter 큐에 새 메시지로 옮긴다(꺼내기 트랜잭션 안).
      * 한 번에 옮기는 개수에는 상한이 있다.
@@ -577,10 +587,8 @@ public final class SqliteStorage implements Storage {
         List<Exhausted> found = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(SELECT_EXHAUSTED)) {
             ps.setLong(1, queueId);
-            ps.setLong(2, toNanos(now));
-            ps.setLong(3, toNanos(now));
-            ps.setInt(4, limit);
-            ps.setInt(5, DeadLetters.MAX_MOVES_PER_PULL + 1);
+            ps.setInt(2, limit);
+            ps.setInt(3, DeadLetters.MAX_MOVES_PER_PULL + 1);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     found.add(new Exhausted(
@@ -588,8 +596,7 @@ public final class SqliteStorage implements Storage {
                             rs.getBytes(2),
                             decodeHeaders(rs.getBytes(3)),
                             rs.getInt(4),
-                            rs.getInt(5) != 0,
-                            rs.getInt(6) != 0));
+                            rs.getInt(5) != 0));
                 }
             }
         }
@@ -616,8 +623,6 @@ public final class SqliteStorage implements Storage {
                 // 원천은 저장된 상태로 정한다. 기한이 지난 리스가 남은 행은 리스 중에서 빠진다.
                 if (e.leased()) {
                     tx.leased(queueId, -1);
-                } else if (e.delayed()) {
-                    tx.delayed(queueId, -1);
                 } else {
                     tx.ready(queueId, -1);
                 }
@@ -630,8 +635,7 @@ public final class SqliteStorage implements Storage {
     /** dead letter 큐로 옮길 도달 메시지 한 건. */
     // payload 배열은 JDBC에서 읽어 즉시 SQL 바인딩에만 사용한다.
     @SuppressWarnings("ArrayRecordComponent")
-    private record Exhausted(
-            long id, byte[] payload, Map<String, String> headers, int deliveryCount, boolean leased, boolean delayed) {}
+    private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount, boolean leased) {}
 
     @Override
     public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {

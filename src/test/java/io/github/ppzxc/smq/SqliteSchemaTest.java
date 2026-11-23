@@ -2,6 +2,7 @@ package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import io.github.ppzxc.smq.storage.StorageFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -138,14 +139,40 @@ class SqliteSchemaTest {
     void 지원하는_버전보다_낮은_smq_파일은_업그레이드_틀을_거치되_마이그레이션이_없으면_거부한다() throws Exception {
         int supported = supportedVersion();
         Smq.sqlite(db()).open().close();
-        jdbc(db(), "PRAGMA user_version = " + (supported - 1));
+        jdbc(db(), "PRAGMA user_version = 0");
 
         IncompatibleStorageException e = assertThrows(
                 IncompatibleStorageException.class, () -> Smq.sqlite(db()).open());
 
-        assertTrue(e.getMessage().contains("found " + (supported - 1)), e.getMessage());
+        assertTrue(e.getMessage().contains("found 0"), e.getMessage());
         assertTrue(e.getMessage().contains("supported " + supported), e.getMessage());
-        assertEquals(supported - 1, userVersion(db()));
+        assertEquals(0, userVersion(db()));
+    }
+
+    @Test
+    void 버전_1_견본을_열면_버전_2로_올라간다() throws Exception {
+        Path copy = StorageFactory.copyV1Sample(db());
+        assertEquals(1, userVersion(copy));
+        Smq.sqlite(copy).open().close();
+        assertEquals(2, userVersion(copy));
+    }
+
+    @Test
+    void v1_변환이_실패하면_롤백되어_다시_올릴_수_있다() throws Exception {
+        Path copy = StorageFactory.copyV1Sample(db());
+        jdbc(copy, "UPDATE message SET available_at = lease_deadline WHERE lease_token IS NOT NULL", """
+                CREATE TRIGGER fail_upgrade BEFORE UPDATE OF available_at ON message
+                WHEN OLD.lease_token IS NOT NULL
+                BEGIN SELECT RAISE(ABORT, 'injected upgrade failure'); END
+                """);
+
+        assertThrows(SmqStorageException.class, () -> Smq.sqlite(copy).open());
+        assertEquals(1, userVersion(copy));
+
+        // 앞서 만든 인덱스도 롤백되었으므로 같은 업그레이드를 다시 실행할 수 있다.
+        jdbc(copy, "DROP TRIGGER fail_upgrade");
+        Smq.sqlite(copy).open().close();
+        assertEquals(2, userVersion(copy));
     }
 
     /**

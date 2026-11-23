@@ -2,6 +2,7 @@ package io.github.ppzxc.smq.storage.sqlite;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -80,10 +81,9 @@ class SqliteSchemaModuleTest {
     }
 
     @Test
-    void 더_높은_버전_파일은_지원하지_않는_버전으로_거부한다() throws Exception {
-        createV1File();
+    void 버전_1만_지원하면_버전_2_파일을_거부한다() throws Exception {
+        SqliteStorage.open(dir.resolve("smq.db"), Durability.PROCESS_CRASH).close();
         try (Connection c = connect()) {
-            exec(c, "PRAGMA user_version = 2");
             IncompatibleStorageException e =
                     assertThrows(IncompatibleStorageException.class, () -> establishInTransaction(production(), c));
             assertEquals("unsupported schema version: found 2, supported 1", e.getMessage());

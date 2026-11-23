@@ -122,13 +122,23 @@ public final class SqliteStorage implements Storage {
      *     0 이상이다. 공개 설정이 아니므로({@code Smq}의 빌더는 기본 100ms를 쓴다) 이 값을 바꿔 쓰는 곳은 테스트다.
      */
     public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
+        return open(path, durability, lockWaitFloor, SqliteStorage::connect);
+    }
+
+    @FunctionalInterface
+    interface Connector {
+        Connection connect(Path path, Durability durability) throws SQLException;
+    }
+
+    static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor, Connector connector) {
         if (lockWaitFloor.isNegative()) {
             throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
         }
         StorageLock storageLock = StorageLock.acquire(path);
         @Nullable Connection connection = null;
+        boolean success = false;
         try {
-            connection = StatementCachingConnection.wrap(connect(path, durability));
+            connection = StatementCachingConnection.wrap(connector.connect(path, durability));
             TransactionExecutor executor = new TransactionExecutor(connection);
             executor.execute(SCHEMA::establish);
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
@@ -143,10 +153,10 @@ public final class SqliteStorage implements Storage {
                 loadCounters(c, counters);
                 return Boolean.TRUE;
             });
-            return new SqliteStorage(path, executor, lockWaitFloor, storageLock, counters);
+            SqliteStorage storage = new SqliteStorage(path, executor, lockWaitFloor, storageLock, counters);
+            success = true;
+            return storage;
         } catch (SQLException | RuntimeException e) {
-            closeQuietly(connection);
-            storageLock.close();
             if (isNotADatabase(e)) {
                 throw SCHEMA.notSmq("not a SQLite file");
             }
@@ -157,6 +167,14 @@ public final class SqliteStorage implements Storage {
                 throw re;
             }
             throw new SmqStorageException("cannot open " + path, e);
+        } finally {
+            if (!success) {
+                try {
+                    closeQuietly(connection);
+                } finally {
+                    storageLock.close();
+                }
+            }
         }
     }
 
@@ -340,12 +358,12 @@ public final class SqliteStorage implements Storage {
 
     @Override
     public boolean exists(String queue) {
-        return inTransaction(c -> findQueue(c, queue) != null);
+        return executor.read(c -> findQueue(c, queue) != null);
     }
 
     @Override
     public Optional<QueueOptions> options(String queue) {
-        return inTransaction(
+        return executor.read(
                 c -> findQueue(c, queue) == null ? Optional.<QueueOptions>empty() : Optional.of(readOptions(c, queue)));
     }
 
@@ -531,6 +549,9 @@ public final class SqliteStorage implements Storage {
                     try (Statement s = c.createStatement();
                             ResultSet rs = s.executeQuery(
                                     "UPDATE meta SET value = value + 1 WHERE key = 'lease_seq' RETURNING value")) {
+                        if (!rs.next()) {
+                            throw new SQLException("lease sequence row missing");
+                        }
                         token = rs.getLong(1);
                     }
                     Instant deadline = now.plus(lease);
@@ -878,13 +899,16 @@ public final class SqliteStorage implements Storage {
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(raw));
             int n = in.readInt();
+            if (n < 0 || n > in.available() / 8) {
+                throw new IOException("invalid header count");
+            }
             Map<String, String> headers = new LinkedHashMap<>();
             for (int i = 0; i < n; i++) {
                 headers.put(readString(in), readString(in));
             }
             return headers;
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            throw new SmqStorageException("invalid message headers", e);
         }
     }
 
@@ -895,7 +919,11 @@ public final class SqliteStorage implements Storage {
     }
 
     private static String readString(DataInputStream in) throws IOException {
-        byte[] b = new byte[in.readInt()];
+        int length = in.readInt();
+        if (length < 0 || length > in.available()) {
+            throw new IOException("invalid header string length");
+        }
+        byte[] b = new byte[length];
         in.readFully(b);
         return new String(b, java.nio.charset.StandardCharsets.UTF_8);
     }

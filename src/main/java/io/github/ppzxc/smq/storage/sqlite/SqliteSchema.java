@@ -42,6 +42,9 @@ final class SqliteSchema {
         boolean empty;
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
+            if (!rs.next()) {
+                throw new SQLException("schema count row missing");
+            }
             empty = rs.getInt(1) == 0;
         }
         if (empty && applicationId == 0) {
@@ -120,6 +123,9 @@ final class SqliteSchema {
     static int pragmaInt(Connection c, String name) throws SQLException {
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("PRAGMA " + name)) {
+            if (!rs.next()) {
+                throw new SQLException("pragma row missing: " + name);
+            }
             return rs.getInt(1);
         }
     }

@@ -99,6 +99,31 @@ class SqliteStorageTest {
     }
 
     @Test
+    void existingV2SampleInstallsDelayedIndexAtomically() throws Exception {
+        Path db = dir.resolve("v2.db");
+        try (var sample = getClass().getResourceAsStream("/schema-samples/schema-v2-before-delayed-index.db")) {
+            assertNotNull(sample);
+            Files.copy(sample, db);
+        }
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db)) {
+            c.setAutoCommit(false);
+            SqliteSchema.ensureDelayedIdIndex(c);
+            c.rollback();
+            try (Statement st = c.createStatement();
+                    ResultSet rs =
+                            st.executeQuery("SELECT count(*) FROM sqlite_schema WHERE name = 'message_delayed_id'")) {
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+        try (SqliteStorage storage = SqliteStorage.open(db, Durability.POWER_LOSS)) {
+            assertSearchesIndex(
+                    explain(storage, SqliteStorage.SELECT_DELAY_BARRIER, 1L), "message_delayed_id", "(queue_id=?)");
+            assertEquals("2", storage.inTransaction(c -> pragma(c, "user_version")));
+        }
+    }
+
+    @Test
     void pullQueriesSeekByStoredStateAndDeadline() {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             for (String sql : List.of(SqliteStorage.SELECT_PULLABLE, SqliteStorage.SELECT_PULLABLE_STATE)) {
@@ -109,9 +134,7 @@ class SqliteStorageTest {
             assertSearchesIndex(exhausted, "message_redelivered_ready", "(queue_id=? AND delivery_count>?)");
 
             assertSearchesIndex(
-                    explain(s, SqliteStorage.SELECT_DELAY_BARRIER, 1L),
-                    "message_available_at",
-                    "(queue_id=? AND available_at>?)");
+                    explain(s, SqliteStorage.SELECT_DELAY_BARRIER, 1L), "message_delayed_id", "(queue_id=?)");
 
             String active = explain(s, SqliteStorage.SELECT_ACTIVE_LEASE, 1L, 0L);
             assertSearchesIndex(active, "message_lease_deadline", "(queue_id=? AND lease_deadline>?)");

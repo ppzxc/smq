@@ -85,7 +85,7 @@ public final class SqliteStorage implements Storage {
             STORED_READY_FROM_WHERE + " AND delivery_count < ? AND id <= ? ORDER BY id LIMIT ?";
 
     static final String SELECT_DELAY_BARRIER =
-            "SELECT MIN(id) FROM message INDEXED BY message_available_at WHERE queue_id = ? AND available_at IS NOT NULL";
+            "SELECT MIN(id) FROM message INDEXED BY message_delayed_id WHERE queue_id = ? AND available_at IS NOT NULL";
 
     static final String SELECT_PULLABLE = "SELECT id" + PULLABLE_FROM_WHERE;
     static final String SELECT_PULLABLE_STATE = "SELECT lease_token IS NOT NULL" + PULLABLE_FROM_WHERE;
@@ -148,7 +148,11 @@ public final class SqliteStorage implements Storage {
         try {
             connection = StatementCachingConnection.wrap(connector.connect(path, durability));
             TransactionExecutor executor = new TransactionExecutor(connection);
-            executor.execute(SCHEMA::establish);
+            executor.execute(c -> {
+                int version = SCHEMA.establish(c);
+                SqliteSchema.ensureDelayedIdIndex(c);
+                return version;
+            });
             // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
             executor.executeOutsideTransaction(() -> {
                 try (Statement s = executor.connection().createStatement()) {

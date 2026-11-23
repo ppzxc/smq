@@ -114,6 +114,15 @@ final class SqliteSchema {
         }
     }
 
+    // Schema v2 files created before this index was introduced remain compatible.
+    static void ensureDelayedIdIndex(Connection c) throws SQLException {
+        try (Statement s = c.createStatement()) {
+            s.execute("""
+                    CREATE INDEX IF NOT EXISTS message_delayed_id ON message(queue_id, id)
+                      WHERE available_at IS NOT NULL""");
+        }
+    }
+
     /** 한 단계씩 올린다. */
     private void upgrade(Connection c, int from) throws SQLException {
         for (int version = from; version < targetVersion; version++) {

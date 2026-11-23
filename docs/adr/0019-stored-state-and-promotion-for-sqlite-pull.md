@@ -15,6 +15,7 @@ SQLite 스키마 버전 2에서 꺼낼 메시지는 시각 조건을 행마다 �
 |---|---|---|
 | `message_stored_ready` | `queue_id, id` | 기한과 꺼낼 시각이 NULL; 준비 행 선택 |
 | `message_lease_deadline` | `queue_id, lease_deadline` | 기한이 NULL이 아님; 리스 승격과 살아 있는 리스 확인 |
+| `message_delayed_id` | `queue_id, id` | 꺼낼 시각이 NULL이 아님; 단일 활성 컨슈머의 첫 지연 메시지 탐색 |
 | `message_available_at` | `queue_id, available_at` | 꺼낼 시각이 NULL이 아님; 지연 승격 |
 | `message_redelivered_ready` | `queue_id, delivery_count, id` | 저장된 준비이고 전달 횟수가 0보다 큼; 최대 전달 횟수 도달 행 선택 |
 
@@ -32,3 +33,5 @@ SQLite 스키마 버전 2에서 꺼낼 메시지는 시각 조건을 행마다 �
 - **메모리 카운터로 스캔만 건너뛰기**: 마지막 전달을 처리 중인 메시지가 있으면 스캔을 피하지 못한다.
 - **승격 때 토큰도 지우기**: 아직 다시 꺼내지 않은 메시지의 늦은 정산이 낡은 연산이 된다.
 - **승격 건수에 상한 두기**: 시각으로는 준비인 앞쪽 메시지를 건너뛰어 FIFO를 깨뜨린다.
+
+기존 버전 2 파일도 열 때 같은 트랜잭션에서 `message_delayed_id`를 없으면 만든다. 이 인덱스는 저장 형식을 바꾸지 않으며 이전 버전 2 구현도 유지할 수 있다. 지연 승격은 시각순 인덱스를, 단일 활성 컨슈머의 장벽은 id순 부분 인덱스의 첫 항목을 사용한다.

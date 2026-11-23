@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | `schema-v1.db` | 1 | 아래 표 |
 | `schema-v2.db` | 2 | 아래 표 |
+| `schema-v2-before-delayed-index.db` | 2 | id순 지연 인덱스 도입 전 견본; 기존 v2 호환성 검사 |
 
 ## 견본 내용
 

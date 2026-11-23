@@ -42,10 +42,10 @@ class SqliteStorageCountersTest {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.PROCESS_CRASH)) {
             s.declare("q", QueueOptions.defaults());
             Duration delay = Duration.ofSeconds(5);
-            s.publish("q", List.of(message(1, delay), message(2, delay), message(3, LEASE)), T0);
+            s.publish("q", List.of(message(1, delay), message(2, delay), message(3, LEASE)), InstantSource.fixed(T0));
 
             assertEquals(new QueueCounts(0, 0, 3), s.counts("q"));
-            PullResult result = s.pull("q", 1, LEASE, T0.plus(delay));
+            PullResult result = s.pull("q", 1, LEASE, InstantSource.fixed(T0.plus(delay)));
             assertEquals(1, result.messages().size());
             assertEquals(1, result.messages().getFirst().payload()[0]);
             assertEquals(new QueueCounts(1, 1, 1), s.counts("q"));
@@ -70,11 +70,11 @@ class SqliteStorageCountersTest {
                         for (int i = 0; i <= random.nextInt(4); i++) {
                             batch.add(message(i, random.nextInt(3) == 0 ? Duration.ofSeconds(5) : Duration.ZERO));
                         }
-                        s.publish("q", batch, now);
+                        s.publish("q", batch, InstantSource.fixed(now));
                     }
                     case 1 -> {
                         now = now.plusSeconds(random.nextInt(13));
-                        PullResult r = s.pull("q", 1 + random.nextInt(4), LEASE, now);
+                        PullResult r = s.pull("q", 1 + random.nextInt(4), LEASE, InstantSource.fixed(now));
                         if (!r.messages().isEmpty()) {
                             held.add(r);
                         }
@@ -93,7 +93,7 @@ class SqliteStorageCountersTest {
                                                             m.id(), Disposition.Kind.NACK, Duration.ofSeconds(7));
                                                 default -> new Disposition(m.id(), Disposition.Kind.REJECT);
                                             }));
-                            s.settle(r.token(), items, now);
+                            s.settle(r.token(), items, InstantSource.fixed(now));
                         }
                     }
                     case 4 -> {
@@ -129,8 +129,8 @@ class SqliteStorageCountersTest {
             s.publish(
                     "q",
                     List.of(message(1, Duration.ZERO), message(2, Duration.ZERO), message(3, Duration.ofSeconds(5))),
-                    T0);
-            s.pull("q", 1, LEASE, T0);
+                    InstantSource.fixed(T0));
+            s.pull("q", 1, LEASE, InstantSource.fixed(T0));
             assertEquals(ExactCounts.at(s, "q", T0), s.counts("q"));
 
             Instant later = T0.plusSeconds(60);

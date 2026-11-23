@@ -56,6 +56,10 @@ final class Plan {
         if (storage == Storage.SQLITE) {
             plan.add(RunSpec.s1(storage, Profile.P1, Durability.POWER_LOSS, 0, d, w));
             plan.add(RunSpec.s1(storage, Profile.P1, Durability.PROCESS_CRASH, SMOKE_DEPTH, d, w));
+            for (RunSpec.QueueKind kind : List.of(
+                    RunSpec.QueueKind.MAX_DELIVERIES,
+                    RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
+                    RunSpec.QueueKind.LEASED_HEAD)) plan.add(RunSpec.s1(kind, SMOKE_DEPTH, d, w));
             plan.add(RunSpec.s2(storage, Profile.P1, d, w));
             plan.add(RunSpec.s3(storage, Profile.P1, d, w));
         } else {
@@ -81,6 +85,12 @@ final class Plan {
             for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
         // 100만 건 깊이는 P1에서만.
         for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, dur, deep, d, w));
+        if (sqlite)
+            for (RunSpec.QueueKind kind : List.of(
+                    RunSpec.QueueKind.MAX_DELIVERIES,
+                    RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
+                    RunSpec.QueueKind.LEASED_HEAD))
+                for (int depth : new int[] {0, deep}) plan.add(RunSpec.s1(kind, depth, d, w));
         // S2: 묶음 프로파일과 단건 프로파일(P0, P2, P4, P6), 빈 큐.
         for (Profile p :
                 List.of(Profile.P1, Profile.P3, Profile.P5, Profile.P7, Profile.P0, Profile.P2, Profile.P4, Profile.P6))

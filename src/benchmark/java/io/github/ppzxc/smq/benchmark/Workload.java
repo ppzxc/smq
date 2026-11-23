@@ -40,12 +40,28 @@ final class Workload {
 
     /** 큐를 선언하고 깊이만큼 미리 채운다. SQLite는 부모가, 인메모리는 자식이 부른다. */
     static void prepare(Smq smq, RunSpec spec) {
-        Queue q = smq.declare(QUEUE, QueueOptions.defaults());
+        QueueOptions options = QueueOptions.defaults();
+        if (spec.queueKind() == RunSpec.QueueKind.MAX_DELIVERIES) {
+            smq.declare("bench-dlq", QueueOptions.defaults());
+            options = options.maxDeliveries(5, "bench-dlq");
+        } else if (spec.queueKind() == RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER) {
+            options = options.singleActiveConsumer(true);
+        }
+        Queue q = smq.declare(QUEUE, options);
         if (spec.depth() == 0) return;
         List<OutgoingMessage> batch = batch(spec.profile(), PREFILL_BATCH);
         for (int done = 0; done < spec.depth(); done += PREFILL_BATCH) {
             int n = Math.min(PREFILL_BATCH, spec.depth() - done);
             q.publish(n == PREFILL_BATCH ? batch : batch.subList(0, n));
+        }
+        if (spec.queueKind() == RunSpec.QueueKind.LEASED_HEAD) {
+            try {
+                for (int done = 0; done < spec.depth(); done += 10_000)
+                    q.pull(Math.min(10_000, spec.depth() - done), Duration.ZERO, Duration.ofHours(1));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("리스 준비가 중단되었다", e);
+            }
         }
     }
 

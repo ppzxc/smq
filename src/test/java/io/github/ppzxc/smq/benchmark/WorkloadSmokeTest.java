@@ -38,6 +38,20 @@ class WorkloadSmokeTest {
     }
 
     @Test
+    void leasedHeadRemainsLeasedAndNewMessagesCanBePulled() throws Exception {
+        RunSpec spec = RunSpec.s1(RunSpec.QueueKind.LEASED_HEAD, 123, 200, 0);
+        try (Smq smq = Workload.open(spec, dir.resolve("leased.db"))) {
+            Workload.prepare(smq, spec);
+            var q = smq.queue(Workload.QUEUE);
+            assertEquals(123, q.counts().leased());
+            assertEquals(0, q.counts().ready());
+            assertTrue(Workload.run(smq, spec, Role.WORKER, System.currentTimeMillis())
+                            .messages()
+                    > 0);
+        }
+    }
+
+    @Test
     void s2Publishes() throws Exception {
         ChildResult r = run(RunSpec.s2(Storage.SQLITE, Profile.P3, 200, 50), Role.WORKER);
         assertTrue(r.messages() > 0);

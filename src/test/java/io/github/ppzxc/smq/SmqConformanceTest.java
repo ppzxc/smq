@@ -75,6 +75,37 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 닫힌_뒤_큐_선언은_실패한다() {
+        Smq smq = open();
+        smq.close();
+        assertThrows(IllegalStateException.class, () -> smq.declare("q", QueueOptions.defaults()));
+    }
+
+    @Test
+    void 닫힌_뒤_조회와_큐_연산은_실패한다() throws Exception {
+        Smq smq = open();
+        Queue q = smq.declare("q", QueueOptions.defaults());
+        q.publish(msg("a"));
+        Chunk chunk = q.pull(1, Duration.ZERO);
+        Chunk empty = q.pull(1, Duration.ZERO);
+        smq.close();
+        assertAll(
+                () -> assertThrows(IllegalStateException.class, () -> smq.queue("q")),
+                () -> assertThrows(IllegalStateException.class, () -> smq.delete("q")),
+                () -> assertThrows(IllegalStateException.class, () -> smq.snapshot(dir.resolve("snapshot.db"))),
+                () -> assertThrows(IllegalStateException.class, q::counts),
+                () -> assertThrows(IllegalStateException.class, () -> q.publish(msg("b"))),
+                () -> assertThrows(IllegalStateException.class, () -> q.publish(List.of())),
+                () -> assertThrows(IllegalStateException.class, () -> q.settle(chunk.ackAll())),
+                () -> assertThrows(IllegalStateException.class, () -> q.settle(empty.ackAll())),
+                () -> assertThrows(IllegalStateException.class, () -> q.extend(chunk, Duration.ofSeconds(1))),
+                () -> assertThrows(IllegalStateException.class, () -> q.extend(empty, Duration.ofSeconds(1))));
+        assertThrows(IllegalArgumentException.class, () -> q.pull(0, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ofSeconds(-1)));
+        assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ZERO, Duration.ZERO));
+    }
+
+    @Test
     void 매우_긴_대기에도_메시지를_꺼낸다() throws Exception {
         Queue q = open().declare("long-wait", QueueOptions.defaults());
         q.publish(msg("ready"));

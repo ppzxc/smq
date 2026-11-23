@@ -41,6 +41,12 @@ final class PullWaiter {
         hint.wake();
     }
 
+    void requireOpen() {
+        if (closed.get()) {
+            throw new IllegalStateException("Smq is closed");
+        }
+    }
+
     /** 닫히면 대기자는 빈 결과로 깨어난다. */
     void close() {
         closed.set(true);

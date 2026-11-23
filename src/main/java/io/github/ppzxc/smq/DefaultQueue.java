@@ -48,12 +48,14 @@ final class DefaultQueue implements Queue {
 
     @Override
     public QueueCounts counts() {
+        waiter.requireOpen();
         return storage.counts(name);
     }
 
     @Override
     public List<MessageId> publish(List<OutgoingMessage> batch) {
         Objects.requireNonNull(batch, "batch");
+        waiter.requireOpen();
         List<NewMessage> converted = batch.stream()
                 .map(m -> {
                     Objects.requireNonNull(m, "batch element");
@@ -111,6 +113,7 @@ final class DefaultQueue implements Queue {
     public Outcomes settle(Settlement settlement) {
         Objects.requireNonNull(settlement, "settlement");
         requireOwn(settlement.queue(), "settlement");
+        waiter.requireOpen();
         if (settlement.items().isEmpty()) {
             return new Outcomes(Map.of());
         }
@@ -131,6 +134,7 @@ final class DefaultQueue implements Queue {
         Objects.requireNonNull(chunk, "chunk");
         Validation.positive(leaseDuration, "leaseDuration");
         requireOwn(chunk.queue(), "chunk");
+        waiter.requireOpen();
         if (chunk.isEmpty()) {
             return new Extension(null, new Outcomes(Map.of()));
         }

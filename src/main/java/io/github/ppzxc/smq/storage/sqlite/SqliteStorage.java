@@ -589,7 +589,7 @@ public final class SqliteStorage implements Storage {
         try (PreparedStatement ps = c.prepareStatement(PROMOTE_DUE_DELAYS)) {
             ps.setLong(1, queueId);
             ps.setLong(2, nowNanos);
-            int promoted = ps.executeUpdate();
+            long promoted = ps.executeLargeUpdate();
             tx.delayed(queueId, -promoted);
             tx.ready(queueId, promoted);
         }

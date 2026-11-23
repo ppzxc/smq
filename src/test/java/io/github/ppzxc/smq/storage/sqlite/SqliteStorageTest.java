@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -207,6 +208,55 @@ class SqliteStorageTest {
             assertFalse(s.exists("missing"));
             assertTrue(s.options("missing").isEmpty());
             assertEquals(before, begins.get());
+        }
+    }
+
+    @Test
+    void pullTransfersLargePromotionCountWithoutOverflow() {
+        long promoted = (long) Integer.MAX_VALUE + 1;
+        try (SqliteStorage s = SqliteStorage.open(
+                dir.resolve("large-count.db"),
+                Durability.POWER_LOSS,
+                Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                (path, durability) -> {
+                    Connection real = SqliteStorage.connect(path, durability);
+                    return (Connection) Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (p, m, a) -> {
+                                Object result;
+                                try {
+                                    result = m.invoke(real, a);
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                                if (!m.getName().equals("prepareStatement")
+                                        || a == null
+                                        || !SqliteStorage.PROMOTE_DUE_DELAYS.equals(a[0])) return result;
+                                PreparedStatement statement = (PreparedStatement) result;
+                                return Proxy.newProxyInstance(
+                                        PreparedStatement.class.getClassLoader(),
+                                        new Class<?>[] {PreparedStatement.class},
+                                        (p2, m2, a2) -> {
+                                            if (m2.getName().equals("executeLargeUpdate")) {
+                                                statement.executeLargeUpdate();
+                                                return promoted;
+                                            }
+                                            if (m2.getName().equals("executeUpdate")) {
+                                                statement.executeUpdate();
+                                                return (int) promoted;
+                                            }
+                                            try {
+                                                return m2.invoke(statement, a2);
+                                            } catch (InvocationTargetException e) {
+                                                throw e.getCause();
+                                            }
+                                        });
+                            });
+                })) {
+            s.declare("q", QueueOptions.defaults());
+            s.publish("q", List.of(message()), Instant.EPOCH);
+            s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH);
+            assertEquals(promoted, s.counts("q").ready());
+            assertEquals(-promoted, s.counts("q").delayed());
         }
     }
 

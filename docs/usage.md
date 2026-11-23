@@ -28,7 +28,7 @@ Queue orders = smq.declare("orders",
 - 같은 옵션으로 다시 선언하면 아무 일도 없고, 옵션이 다르면 `QueueDeclarationConflictException`이다. 그래서 시작할 때마다 선언해도 된다.
 - `maxDeliveries(limit, dlq)`: 전달 횟수를 `limit`번 다 쓴 메시지를 dead letter 큐로 옮긴다. dead letter 큐는 먼저 선언돼 있어야 한다. 기본은 **무제한**이다([ADR 0001](adr/0001-no-default-delivery-limit.md)).
 - `deadLetterQueue(dlq)`: 한도 없이 reject한 메시지만 받을 dead letter 큐를 지정한다.
-- `singleActiveConsumer(true)`: 한 번에 한 청크만 리스되게 한다. 순서가 필요한 소비에 쓴다.
+- `singleActiveConsumer(true)`: 한 번에 한 청크만 리스되게 한다. 순서가 필요한 소비에 쓰며 지연 발행이나 지연 NACK된 메시지 뒤의 메시지는 지연이 끝날 때까지 막는다. 지연 메시지 앞의 준비 메시지는 꺼낼 수 있고, 막힌 준비 메시지도 `counts()`에서 준비로 센다. 뒤를 막고 싶지 않은 지연 작업은 단일 활성 컨슈머가 아닌 큐에 발행한다.
 - `smq.queue(name)`으로 선언된 큐를 가져오고(없으면 `QueueNotFoundException`), `smq.delete(name)`으로 큐를 메시지째 지운다(다른 큐의 dead letter 큐로 쓰이는 중이면 `QueueInUseException`).
 
 ## 발행

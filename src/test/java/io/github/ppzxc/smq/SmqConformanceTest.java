@@ -1457,6 +1457,96 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 단일_활성_컨슈머는_지연된_NACK_앞의_메시지만_꺼낸다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        q.publish(List.of(msg("a"), msg("b"), msg("c")));
+        Chunk first = q.pull(3, Duration.ZERO);
+        var ids = first.messages().stream().map(Message::id).toList();
+        assertTrue(q.settle(first.settle()
+                        .nack(ids.get(0))
+                        .nack(ids.get(1), Duration.ofSeconds(5))
+                        .nack(ids.get(2))
+                        .build())
+                .allOk());
+        Chunk prefix = q.pull(3, Duration.ZERO);
+        assertEquals(
+                List.of("a"),
+                prefix.messages().stream().map(SmqConformanceTest::text).toList());
+        assertTrue(q.settle(prefix.ackAll()).allOk());
+        assertEquals(new QueueCounts(1, 0, 1), q.counts());
+        assertTrue(q.pull(3, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(
+                List.of("b", "c"),
+                q.pull(3, Duration.ZERO).messages().stream()
+                        .map(SmqConformanceTest::text)
+                        .toList());
+    }
+
+    @Test
+    void 지연_발행은_단일_활성_큐의_뒤만_막는다() throws Exception {
+        Smq smq = open();
+        Queue serial = smq.declare("serial", QueueOptions.defaults().singleActiveConsumer(true));
+        Queue plain = smq.declare("plain", QueueOptions.defaults());
+        for (Queue q : List.of(serial, plain)) {
+            q.publish(msg("before"));
+            q.publish(msg("delayed").withDelay(Duration.ofSeconds(5)));
+            q.publish(msg("after"));
+        }
+        Chunk prefix = serial.pull(3, Duration.ZERO);
+        assertEquals(
+                List.of("before"),
+                prefix.messages().stream().map(SmqConformanceTest::text).toList());
+        assertTrue(serial.settle(prefix.ackAll()).allOk());
+        assertEquals(new QueueCounts(1, 0, 1), serial.counts());
+        assertTrue(serial.pull(3, Duration.ofMillis(30)).isEmpty());
+        assertEquals(
+                List.of("before", "after"),
+                plain.pull(3, Duration.ZERO).messages().stream()
+                        .map(SmqConformanceTest::text)
+                        .toList());
+        var result = new java.util.concurrent.CompletableFuture<Chunk>();
+        Thread waiter = new Thread(() -> {
+            try {
+                result.complete(serial.pull(3, Duration.ofSeconds(2)));
+            } catch (InterruptedException e) {
+                result.completeExceptionally(e);
+            }
+        });
+        waiter.start();
+        clock.advance(Duration.ofSeconds(5));
+        assertEquals(
+                List.of("delayed", "after"),
+                result.get(1, java.util.concurrent.TimeUnit.SECONDS).messages().stream()
+                        .map(SmqConformanceTest::text)
+                        .toList());
+        waiter.join();
+    }
+
+    @Test
+    void 지연_뒤의_소진_메시지도_dead_letter로_옮긴다() throws Exception {
+        Smq smq = open();
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare(
+                "q", QueueOptions.defaults().maxDeliveries(1, "dead").singleActiveConsumer(true));
+        q.publish(msg("delayed").withDelay(Duration.ofSeconds(10)));
+        q.publish(msg("exhausted"));
+        clock.advance(Duration.ofSeconds(10));
+        Chunk both = q.pull(2, Duration.ZERO);
+        var ids = both.messages().stream().map(Message::id).toList();
+        assertTrue(q.settle(both.settle()
+                        .nack(ids.get(0), Duration.ofSeconds(5))
+                        .nack(ids.get(1))
+                        .build())
+                .allOk());
+        assertTrue(q.pull(2, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(1, 0, 0), dead.counts());
+        clock.advance(Duration.ofSeconds(5));
+        assertTrue(q.pull(2, Duration.ZERO).isEmpty());
+        assertEquals(new QueueCounts(2, 0, 0), dead.counts());
+    }
+
+    @Test
     void 단일_활성_컨슈머_큐는_리스_중인_청크가_있으면_같은_컨슈머가_다시_꺼내도_빈_청크다() throws Exception {
         Queue q = open(Duration.ofSeconds(10))
                 .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
@@ -1682,7 +1772,7 @@ abstract class SmqConformanceTest {
     }
 
     @Test
-    void 단일_활성_컨슈머_큐는_지연_NACK_직후에도_리스가_풀려_다음_꺼내기가_허용된다() throws Exception {
+    void 단일_활성_컨슈머_큐는_지연_NACK_후_지연이_끝나면_다시_꺼낸다() throws Exception {
         Queue q = open(Duration.ofSeconds(10))
                 .declare("q", QueueOptions.defaults().singleActiveConsumer(true));
         q.publish(List.of(msg("a"), msg("b")));
@@ -1690,8 +1780,10 @@ abstract class SmqConformanceTest {
         Chunk first = q.pull(1, Duration.ZERO);
         assertTrue(q.settle(first.nackAll(Duration.ofSeconds(5))).allOk());
 
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        clock.advance(Duration.ofSeconds(5));
         Chunk next = q.pull(1, Duration.ZERO);
-        assertEquals("b", text(next.messages().getFirst()));
+        assertEquals("a", text(next.messages().getFirst()));
     }
 
     @Test
@@ -1702,11 +1794,10 @@ abstract class SmqConformanceTest {
                 "q", QueueOptions.defaults().maxDeliveries(1, "dead").singleActiveConsumer(true));
         MessageId x = q.publish(msg("x"));
         q.publish(msg("y"));
-        assertTrue(q.settle(q.pull(1, Duration.ZERO).nackAll(Duration.ofSeconds(5)))
+        Chunk holding = q.pull(2, Duration.ZERO);
+        assertTrue(q.settle(holding.settle().nack(x, Duration.ofSeconds(5)).build())
                 .allOk());
-        // x는 지연 중이라 y가 리스를 받는다(10초).
-        Chunk holding = q.pull(1, Duration.ZERO);
-        assertEquals("y", text(holding.messages().getFirst()));
+        // x는 지연 중이고 y는 같은 청크의 리스를 유지한다(10초).
 
         // 지연이 끝나 x는 도달한 준비 메시지지만, y의 리스가 살아 있으므로 빈 청크이고 옮기지 않는다.
         clock.advance(Duration.ofSeconds(6));

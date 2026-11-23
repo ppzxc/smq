@@ -101,8 +101,8 @@ class SqliteStorageTest {
     void pullQueriesSeekByStoredStateAndDeadline() {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             for (String sql : List.of(SqliteStorage.SELECT_PULLABLE, SqliteStorage.SELECT_PULLABLE_STATE)) {
-                String plan = explain(s, sql, 1L, 3, 10);
-                assertSearchesIndex(plan, "message_stored_ready", "(queue_id=?)");
+                String plan = explain(s, sql, 1L, 3, Long.MAX_VALUE, 10);
+                assertSearchesIndex(plan, "message_stored_ready", "(queue_id=? AND id<?)");
             }
             String exhausted = explain(s, SqliteStorage.SELECT_EXHAUSTED, 1L, 3, 10);
             assertSearchesIndex(exhausted, "message_redelivered_ready", "(queue_id=? AND delivery_count>?)");

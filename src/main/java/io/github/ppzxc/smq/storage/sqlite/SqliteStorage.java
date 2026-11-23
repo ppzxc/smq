@@ -82,7 +82,7 @@ public final class SqliteStorage implements Storage {
 
     private static final String STORED_READY_FROM_WHERE = " FROM message WHERE queue_id = ? AND " + STORED_READY;
     private static final String PULLABLE_FROM_WHERE =
-            STORED_READY_FROM_WHERE + " AND delivery_count < ? ORDER BY id LIMIT ?";
+            STORED_READY_FROM_WHERE + " AND delivery_count < ? AND id <= ? ORDER BY id LIMIT ?";
 
     static final String SELECT_PULLABLE = "SELECT id" + PULLABLE_FROM_WHERE;
     static final String SELECT_PULLABLE_STATE = "SELECT lease_token IS NOT NULL" + PULLABLE_FROM_WHERE;
@@ -522,13 +522,29 @@ public final class SqliteStorage implements Storage {
                     int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
                     boolean deadLettersRemain = options.maxDeliveries().isPresent()
                             && moveExhausted(c, tx, queue, queueId, options, limit, now);
+                    long barrier = Long.MAX_VALUE;
+                    if (options.singleActiveConsumer()) {
+                        try (PreparedStatement ps = c.prepareStatement(
+                                "SELECT MIN(id) FROM message WHERE queue_id = ? AND available_at IS NOT NULL")) {
+                            ps.setLong(1, queueId);
+                            try (ResultSet rs = ps.executeQuery()) {
+                                if (rs.next()) {
+                                    long id = rs.getLong(1);
+                                    if (!rs.wasNull()) {
+                                        barrier = id - 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // 꺼낼 대상을 저장된 상태와 함께 먼저 읽는다. 아래 UPDATE가 같은 트랜잭션에서 같은 행을 고른다.
                     long fromReady = 0;
                     long picked = 0;
                     try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE_STATE)) {
                         peek.setLong(1, queueId);
                         peek.setInt(2, limit);
-                        peek.setInt(3, max);
+                        peek.setLong(3, barrier);
+                        peek.setInt(4, max);
                         try (ResultSet rs = peek.executeQuery()) {
                             while (rs.next()) {
                                 picked++;
@@ -564,7 +580,8 @@ public final class SqliteStorage implements Storage {
                         ps.setLong(2, toNanos(deadline));
                         ps.setLong(3, queueId);
                         ps.setInt(4, limit);
-                        ps.setInt(5, max);
+                        ps.setLong(5, barrier);
+                        ps.setInt(6, max);
                         try (ResultSet rs = ps.executeQuery()) {
                             while (rs.next()) {
                                 messages.add(new Message(

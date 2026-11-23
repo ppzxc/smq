@@ -196,11 +196,15 @@ public final class MemoryStorage implements Storage {
             List<Entry> picked = new ArrayList<>();
             List<Entry> exhausted = new ArrayList<>();
             boolean deadLettersRemain = false;
+            boolean blocked = false;
             boolean moves = options.maxDeliveries().isPresent();
             for (Entry e : entries.values()) {
                 // 소진 메시지를 옮기려면 청크가 차도 끝까지 훑어야 한다. 옮길 일이 없는 큐는 청크가 차면 멈춘다.
                 if (picked.size() == max && !moves) {
                     break;
+                }
+                if (options.singleActiveConsumer() && isDelayed(e, now)) {
+                    blocked = true;
                 }
                 if (!isReady(e, now)) {
                     continue;
@@ -211,7 +215,7 @@ public final class MemoryStorage implements Storage {
                     } else {
                         deadLettersRemain = true;
                     }
-                } else if (picked.size() < max) {
+                } else if (!blocked && picked.size() < max) {
                     picked.add(e);
                 }
             }

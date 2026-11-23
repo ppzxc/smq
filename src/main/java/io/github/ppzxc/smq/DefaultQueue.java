@@ -89,7 +89,7 @@ final class DefaultQueue implements Queue {
             throw new IllegalArgumentException("wait must not be negative: " + wait);
         }
         Validation.positive(leaseDuration, "leaseDuration");
-        long deadline = System.nanoTime() + wait.toNanos();
+        long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         return waiter.await(
                 wait,
                 () -> {

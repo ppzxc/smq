@@ -106,6 +106,63 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 매우_긴_대기에도_메시지를_꺼낸다() throws Exception {
+        Queue q = open().declare("long-wait", QueueOptions.defaults());
+        q.publish(msg("ready"));
+        assertEquals(
+                "ready",
+                text(q.pull(1, Duration.ofSeconds(Long.MAX_VALUE)).messages().getFirst()));
+    }
+
+    @Test
+    void 백년을_넘는_발행_지연은_거부한다() {
+        Duration tooLong = Duration.ofDays(36_500).plusNanos(1);
+        assertThrows(IllegalArgumentException.class, () -> msg("x").withDelay(tooLong));
+    }
+
+    @Test
+    void 백년_한도와_거부된_연산의_상태() throws Exception {
+        Duration limit = Duration.ofDays(36_500);
+        Duration tooLong = limit.plusNanos(1);
+        assertThrows(IllegalArgumentException.class, () -> new OutgoingMessage(new byte[0], Map.of(), tooLong));
+        assertThrows(IllegalArgumentException.class, () -> Smq.inMemory().leaseDuration(tooLong));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> Smq.sqlite(dir.resolve("unused.db")).leaseDuration(tooLong));
+        Queue q = open(limit).declare("limits", QueueOptions.defaults());
+        q.publish(msg("delayed").withDelay(limit));
+        MessageId id = q.publish(msg("ready"));
+        assertThrows(IllegalArgumentException.class, () -> q.pull(1, Duration.ZERO, tooLong));
+        Chunk c = q.pull(1, Duration.ZERO, limit);
+        assertEquals(id, c.messages().getFirst().id());
+        assertThrows(IllegalArgumentException.class, () -> q.extend(c, tooLong));
+        assertTrue(q.extend(c, limit).outcomes().allOk());
+        Settlement.Builder builder = c.settle();
+        assertThrows(IllegalArgumentException.class, () -> builder.nack(id, tooLong));
+        assertThrows(IllegalArgumentException.class, () -> builder.nackRest(tooLong));
+        assertTrue(q.settle(builder.nack(id, limit).build()).allOk());
+        assertTrue(q.pull(1, Duration.ZERO).isEmpty());
+        clock.advance(limit);
+        assertEquals(2, q.pull(2, Duration.ZERO).messages().size());
+    }
+
+    @Test
+    void 빈_큐의_매우_긴_대기는_발행하면_깨어난다() throws Exception {
+        Queue q = open().declare("wait-empty", QueueOptions.defaults());
+        try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var future = executor.submit(() -> q.pull(1, Duration.ofSeconds(Long.MAX_VALUE)));
+            Thread.sleep(100);
+            assertFalse(future.isDone());
+            q.publish(msg("wake"));
+            assertEquals(
+                    "wake",
+                    text(future.get(5, java.util.concurrent.TimeUnit.SECONDS)
+                            .messages()
+                            .getFirst()));
+        }
+    }
+
+    @Test
     void 열고_try_with_resources로_닫을_수_있다() {
         try (Smq smq = openWith(new BuilderSettings())) {
             assertNotNull(smq);

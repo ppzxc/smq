@@ -23,7 +23,8 @@ final class Comparator {
 
     static final double REGRESSION = 0.20;
     static final double RATIO = 0.70;
-    private static final Set<RunSpec.QueueKind> ENABLED_QUEUE_KIND_CHECKS = Set.of(RunSpec.QueueKind.LEASED_HEAD);
+    private static final Set<RunSpec.QueueKind> ENABLED_QUEUE_KIND_CHECKS = Set.of(
+            RunSpec.QueueKind.MAX_DELIVERIES, RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER, RunSpec.QueueKind.LEASED_HEAD);
     private static final double EPS = 1e-9;
 
     enum Status {

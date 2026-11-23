@@ -37,7 +37,7 @@ class ComparatorTest {
     }
 
     @Test
-    void leasedHeadEnforcesMedianRatioWhileOtherNewQueueKindsRecordIt() {
+    void allQueueKindsEnforceMedianRatio() {
         for (String kind : List.of("MAX_DELIVERIES", "SINGLE_ACTIVE_CONSUMER", "LEASED_HEAD")) {
             String prefix = "sqlite/S1/P1/PROCESS_CRASH/";
             Check c = find(
@@ -47,7 +47,7 @@ class ComparatorTest {
                                     prefix + "1m/" + kind + ":msgPerSec", List.of(10.0, 30.0, 20.0)),
                             Map.of()),
                     "depth S1 P1 PROCESS_CRASH " + kind + " 1m >= 70% of empty");
-            assertEquals(kind.equals("LEASED_HEAD") ? Status.FAIL : Status.SKIP, c.status());
+            assertEquals(Status.FAIL, c.status());
             assertTrue(c.detail().contains("20.0%"));
         }
     }

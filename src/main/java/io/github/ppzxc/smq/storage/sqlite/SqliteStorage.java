@@ -88,9 +88,11 @@ public final class SqliteStorage implements Storage {
     static final String SELECT_PULLABLE_STATE = "SELECT lease_token IS NOT NULL" + PULLABLE_FROM_WHERE;
 
     /** 최대 전달 횟수에 도달한 준비 메시지. dead letter 큐로 옮길 대상이다. */
+    // Pull only delivers below the limit, so exhausted messages all have the same delivery count.
+    // Ordering by delivery count and id therefore preserves id order while avoiding a temporary sort.
     static final String SELECT_EXHAUSTED = "SELECT id, payload, headers, delivery_count, lease_token IS NOT NULL"
             + STORED_READY_FROM_WHERE
-            + " AND delivery_count >= ? ORDER BY id LIMIT ?";
+            + " AND delivery_count > 0 AND delivery_count >= ? ORDER BY delivery_count, id LIMIT ?";
 
     private static final SqliteSchema SCHEMA = new SqliteSchema(SCHEMA_VERSION, Map.of(1, SqliteSchema::upgradeV1ToV2));
 
@@ -387,9 +389,10 @@ public final class SqliteStorage implements Storage {
         }
     }
 
+    static final String SELECT_ACTIVE_LEASE = "SELECT 1 FROM message WHERE queue_id = ? AND lease_deadline > ? LIMIT 1";
+
     private static boolean hasActiveLease(Connection c, long queueId, Instant now) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement(
-                "SELECT 1 FROM message WHERE queue_id = ? AND lease_token IS NOT NULL AND lease_deadline > ? LIMIT 1")) {
+        try (PreparedStatement ps = c.prepareStatement(SELECT_ACTIVE_LEASE)) {
             ps.setLong(1, queueId);
             ps.setLong(2, toNanos(now));
             try (ResultSet rs = ps.executeQuery()) {

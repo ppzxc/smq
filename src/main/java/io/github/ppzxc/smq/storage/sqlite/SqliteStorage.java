@@ -84,6 +84,9 @@ public final class SqliteStorage implements Storage {
     private static final String PULLABLE_FROM_WHERE =
             STORED_READY_FROM_WHERE + " AND delivery_count < ? AND id <= ? ORDER BY id LIMIT ?";
 
+    static final String SELECT_DELAY_BARRIER =
+            "SELECT MIN(id) FROM message INDEXED BY message_available_at WHERE queue_id = ? AND available_at IS NOT NULL";
+
     static final String SELECT_PULLABLE = "SELECT id" + PULLABLE_FROM_WHERE;
     static final String SELECT_PULLABLE_STATE = "SELECT lease_token IS NOT NULL" + PULLABLE_FROM_WHERE;
 
@@ -528,8 +531,7 @@ public final class SqliteStorage implements Storage {
                             : new MoveResult(false, false);
                     long barrier = Long.MAX_VALUE;
                     if (options.singleActiveConsumer()) {
-                        try (PreparedStatement ps = c.prepareStatement(
-                                "SELECT MIN(id) FROM message WHERE queue_id = ? AND available_at IS NOT NULL")) {
+                        try (PreparedStatement ps = c.prepareStatement(SELECT_DELAY_BARRIER)) {
                             ps.setLong(1, queueId);
                             try (ResultSet rs = ps.executeQuery()) {
                                 if (rs.next()) {

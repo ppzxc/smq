@@ -108,6 +108,11 @@ class SqliteStorageTest {
             String exhausted = explain(s, SqliteStorage.SELECT_EXHAUSTED, 1L, 3, 10);
             assertSearchesIndex(exhausted, "message_redelivered_ready", "(queue_id=? AND delivery_count>?)");
 
+            assertSearchesIndex(
+                    explain(s, SqliteStorage.SELECT_DELAY_BARRIER, 1L),
+                    "message_available_at",
+                    "(queue_id=? AND available_at>?)");
+
             String active = explain(s, SqliteStorage.SELECT_ACTIVE_LEASE, 1L, 0L);
             assertSearchesIndex(active, "message_lease_deadline", "(queue_id=? AND lease_deadline>?)");
             assertTrue(active.contains("USING COVERING INDEX"), active);

@@ -180,10 +180,10 @@ abstract class StorageContractTest {
     void 메시지를_꺼내면서_이동하면_이동_표시가_참이다() {
         storage.declare("dead", QueueOptions.defaults());
         storage.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
-        storage.publish("q", List.of(message(1)), T0);
-        assertFalse(storage.pull("q", 1, LEASE, T0).deadLettersMoved());
-        storage.publish("q", List.of(message(2)), T0);
-        PullResult result = storage.pull("q", 1, LEASE, T0.plus(LEASE));
+        storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
+        assertFalse(storage.pull("q", 1, LEASE, InstantSource.fixed(T0)).deadLettersMoved());
+        storage.publish("q", List.of(message(2)), InstantSource.fixed(T0));
+        PullResult result = storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plus(LEASE)));
         assertEquals(1, result.messages().size());
         assertTrue(result.deadLettersMoved());
     }

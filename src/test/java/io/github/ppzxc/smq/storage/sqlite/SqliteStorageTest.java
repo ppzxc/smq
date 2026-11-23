@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.QueueOptions;
+import io.github.ppzxc.smq.SmqStorageException;
 import io.github.ppzxc.smq.storage.NewMessage;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -13,10 +16,12 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,6 +36,23 @@ class SqliteStorageTest {
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("PRAGMA " + name)) {
             return rs.getString(1);
+        }
+    }
+
+    @Test
+    void 열기에서_Error가_나면_락을_놓고_같은_파일을_다시_연다() {
+        Path db = dir.resolve("error.db");
+        Error failure = new LinkageError("injected");
+        assertSame(
+                failure,
+                assertThrows(
+                        LinkageError.class,
+                        () -> SqliteStorage.open(
+                                db, Durability.POWER_LOSS, Deadline.DEFAULT_LOCK_WAIT_FLOOR, (p, d) -> {
+                                    throw failure;
+                                })));
+        try (SqliteStorage ignored = SqliteStorage.open(db, Durability.POWER_LOSS)) {
+            assertNotNull(ignored);
         }
     }
 
@@ -143,6 +165,63 @@ class SqliteStorageTest {
             var bad = new io.github.ppzxc.smq.storage.NewMessage(null, java.util.Map.of());
             assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), Instant.EPOCH));
             assertEquals(0, s.counts("q").ready());
+        }
+    }
+
+    @Test
+    void 큐_존재와_옵션_조회는_쓰기_트랜잭션을_열지_않는다() {
+        AtomicInteger begins = new AtomicInteger();
+        try (SqliteStorage s = SqliteStorage.open(
+                dir.resolve("read.db"), Durability.POWER_LOSS, Deadline.DEFAULT_LOCK_WAIT_FLOOR, (path, durability) -> {
+                    Connection real = SqliteStorage.connect(path, durability);
+                    return (Connection) Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (p, m, a) -> {
+                                Object result;
+                                try {
+                                    result = m.invoke(real, a);
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                                if (!m.getName().equals("createStatement")) return result;
+                                Statement st = (Statement) result;
+                                return Proxy.newProxyInstance(
+                                        Statement.class.getClassLoader(),
+                                        new Class<?>[] {Statement.class},
+                                        (p2, m2, a2) -> {
+                                            if (m2.getName().equals("execute")
+                                                    && a2 != null
+                                                    && a2.length > 0
+                                                    && "BEGIN IMMEDIATE".equals(a2[0])) begins.incrementAndGet();
+                                            try {
+                                                return m2.invoke(st, a2);
+                                            } catch (InvocationTargetException e) {
+                                                throw e.getCause();
+                                            }
+                                        });
+                            });
+                })) {
+            s.declare("q", QueueOptions.defaults());
+            int before = begins.get();
+            assertTrue(s.exists("q"));
+            assertTrue(s.options("q").isPresent());
+            assertFalse(s.exists("missing"));
+            assertTrue(s.options("missing").isEmpty());
+            assertEquals(before, begins.get());
+        }
+    }
+
+    @Test
+    void 손상된_헤더는_꺼내기에서_저장소_오류다() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("bad.db"), Durability.POWER_LOSS)) {
+            s.declare("q", QueueOptions.defaults());
+            s.publish("q", List.of(message()), Instant.EPOCH);
+            s.inTransaction(c -> {
+                try (Statement st = c.createStatement()) {
+                    st.execute("UPDATE message SET headers = X'000000017fffffff'");
+                }
+                return null;
+            });
+            assertThrows(SmqStorageException.class, () -> s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH));
         }
     }
 

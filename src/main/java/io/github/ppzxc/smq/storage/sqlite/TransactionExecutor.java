@@ -75,6 +75,7 @@ final class TransactionExecutor {
     private final WalSizeReader walSizeReader;
 
     private final ReentrantLock lock = new ReentrantLock();
+    private @Nullable Throwable failure;
 
     /** WAL 파일 크기 읽기. 테스트가 실패를 주입할 수 있게 갈라 둔다. */
     @FunctionalInterface
@@ -113,8 +114,17 @@ final class TransactionExecutor {
 
     /** 마감 안에 lock을 잡지 못하면 {@link Deadline.Expired}를 던진다. 아무것도 읽지 않았다. */
     boolean anyOrUncertain(ReadProbe probe, Deadline deadline) {
+        return read(probe::apply, deadline);
+    }
+
+    <T> T read(TxBody<T> probe) {
+        return read(probe, Deadline.NONE);
+    }
+
+    private <T> T read(TxBody<T> probe, Deadline deadline) {
         acquire(deadline);
         try {
+            checkFailure();
             return probe.apply(connection);
         } catch (SQLException e) {
             throw new SmqStorageException("sqlite operation failed", e);
@@ -169,7 +179,12 @@ final class TransactionExecutor {
                 s.execute("COMMIT");
             }
         } catch (Throwable t) {
-            rollbackQuietly();
+            try {
+                rollback();
+            } catch (Throwable rollbackFailure) {
+                failure = t;
+                t.addSuppressed(rollbackFailure);
+            }
             throw t;
         }
         // 커밋이 확정됐다. 이 아래의 어떤 실패도 롤백이나 호출자의 실패로 이어지면 안 된다.
@@ -326,11 +341,15 @@ final class TransactionExecutor {
         return NO_WAL;
     }
 
-    private void rollbackQuietly() {
+    private void rollback() throws SQLException {
         try (Statement s = connection.createStatement()) {
             s.execute("ROLLBACK");
-        } catch (SQLException ignored) {
-            // 트랜잭션이 이미 끝났을 수 있다.
+        }
+    }
+
+    private void checkFailure() {
+        if (failure != null) {
+            throw new SmqStorageException("sqlite executor is unusable after rollback failure", failure);
         }
     }
 
@@ -347,6 +366,7 @@ final class TransactionExecutor {
     private <T> T runLocked(SqlAction<T> action, Deadline deadline) {
         acquire(deadline);
         try {
+            checkFailure();
             return action.run();
         } catch (SQLException e) {
             throw new SmqStorageException("sqlite operation failed", e);

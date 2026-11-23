@@ -85,6 +85,31 @@ class TransactionExecutorTest {
         assertEquals(1, count());
     }
 
+    @Test
+    void 롤백이_실패하면_이후_모든_연산이_처음_원인으로_실패한다() {
+        SQLException rollbackFailure = new SQLException("rollback failed");
+        TransactionExecutor ex = new TransactionExecutor(failingQuery(connection, "ROLLBACK", () -> rollbackFailure));
+        SQLException original = new SQLException("body failed");
+        assertThrows(
+                SmqStorageException.class,
+                () -> ex.execute(c -> {
+                    throw original;
+                }));
+        assertSame(
+                original,
+                assertThrows(SmqStorageException.class, () -> ex.execute(c -> 1))
+                        .getCause());
+        assertSame(
+                original,
+                assertThrows(SmqStorageException.class, () -> ex.anyOrUncertain(c -> true))
+                        .getCause());
+        assertSame(
+                original,
+                assertThrows(SmqStorageException.class, () -> ex.executeOutsideTransaction(() -> 1))
+                        .getCause());
+        ex.close();
+    }
+
     /** WAL이 한도(8MB)를 넘으면 커밋 몇 번 뒤에 되감는다(ADR-0017). 되감은 뒤의 쓰기는 WAL의 앞에서 다시 시작한다. */
     @Test
     void WAL이_한도를_넘으면_되감겨_WAL이_계속_자라지_않는다() throws Exception {
@@ -540,7 +565,12 @@ class TransactionExecutorTest {
                     Statement st = (Statement) result;
                     return Proxy.newProxyInstance(
                             Statement.class.getClassLoader(), new Class<?>[] {Statement.class}, (p, m, a) -> {
-                                if (m.getName().equals("executeQuery") && ((String) a[0]).contains(fragment)) {
+                                if ((m.getName().equals("executeQuery")
+                                                || m.getName().equals("execute"))
+                                        && a != null
+                                        && a.length > 0
+                                        && a[0] instanceof String
+                                        && ((String) a[0]).contains(fragment)) {
                                     Throwable t = failure.get();
                                     if (t != null) {
                                         throw t;

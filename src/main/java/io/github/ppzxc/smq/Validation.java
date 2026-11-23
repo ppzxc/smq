@@ -5,6 +5,7 @@ import java.util.regex.Pattern;
 
 final class Validation {
 
+    static final Duration MAX_DELAY_OR_LEASE = Duration.ofDays(36_500);
     private static final Pattern QUEUE_NAME = Pattern.compile("[A-Za-z0-9._-]{1,200}");
 
     private Validation() {}
@@ -16,9 +17,17 @@ final class Validation {
         return name;
     }
 
+    static long saturatedWaitNanos(Duration wait) {
+        Duration max = Duration.ofNanos(Long.MAX_VALUE / 2);
+        return wait.compareTo(max) > 0 ? Long.MAX_VALUE / 2 : wait.toNanos();
+    }
+
     static Duration positive(Duration d, String what) {
         if (d == null || d.isZero() || d.isNegative()) {
             throw new IllegalArgumentException(what + " must be positive: " + d);
+        }
+        if (d.compareTo(MAX_DELAY_OR_LEASE) > 0) {
+            throw new IllegalArgumentException(what + " must not exceed 36500 days: " + d);
         }
         return d;
     }

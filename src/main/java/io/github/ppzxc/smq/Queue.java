@@ -25,7 +25,7 @@ public interface Queue {
     MessageId publish(OutgoingMessage message);
 
     /**
-     * 메시지가 하나라도 있으면 바로, 없으면 {@code wait}까지 기다려 최대 max개를 id 순서로 돌려준다. 없으면 빈 청크다.
+     * 메시지가 하나라도 있으면 바로, 없으면 {@code wait}까지 기다려 최대 max개를 id 순서로 돌려준다. 없으면 빈 청크다. 대기 시간에는 상한이 없다.
      *
      * <p>SQLite 저장소에서 {@code wait}는 저장소의 lock을 기다리는 시간도 한정한다.
      * 같은 {@code Smq}의 다른 연산이 오래 걸리면 {@code wait} 안에 꺼내지 못하고 빈 청크로 돌아온다.
@@ -36,6 +36,7 @@ public interface Queue {
      */
     Chunk pull(int max, Duration wait) throws InterruptedException;
 
+    /** 리스 기간은 양수이며 최대 36,500일(100년)이다. */
     Chunk pull(int max, Duration wait, Duration leaseDuration) throws InterruptedException;
 
     /** 이 큐에서 꺼낸 청크로 만든 정산만 반영한다. 다른 큐의 청크로 만든 정산은 {@code IllegalArgumentException}이다. */
@@ -46,7 +47,7 @@ public interface Queue {
      * 않았다면 {@code OK}이고, 다른 리스가 가져갔거나 이미 정산된 메시지는 효력 없이 {@code STALE}이다. 단, 단일 활성
      * 컨슈머 큐에서는 기한이 지난 리스를 연장할 수 없다. 그 사이 다른 청크가 꺼냈을 수 있어, 되살리면 리스가 둘이 되기
      * 때문이며 아무도 다시 꺼내지 않았어도 {@code STALE}이다. 기한 판정 시각은 저장소가 연장을 처리하는 시점이다.
-     * 다른 큐의 청크는 {@code IllegalArgumentException}이다.
+     * 리스 기간은 양수이며 최대 36,500일(100년)이다. 다른 큐의 청크는 {@code IllegalArgumentException}이다.
      */
     Extension extend(Chunk chunk, Duration leaseDuration);
 }

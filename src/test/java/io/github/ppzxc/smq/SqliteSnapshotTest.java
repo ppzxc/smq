@@ -337,7 +337,7 @@ class SqliteSnapshotTest {
         smq.close();
         Set<String> before = names(dir);
 
-        assertThrows(Exception.class, () -> smq.snapshot(target));
+        assertThrows(IllegalStateException.class, () -> smq.snapshot(target));
 
         assertFalse(Files.exists(target));
         assertEquals(before, names(dir));

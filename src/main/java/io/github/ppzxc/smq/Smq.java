@@ -7,7 +7,13 @@ import java.time.Duration;
 import java.time.InstantSource;
 import java.util.Objects;
 
-/** smq 진입점. 스레드 안전하고, 닫을 때 정산하지 않은 리스는 그대로 둔다. */
+/**
+ * smq 진입점. 스레드 안전하고, 닫을 때 정산하지 않은 리스는 그대로 둔다.
+ * 닫은 뒤 선언, 조회, 삭제, 스냅샷과 큐의 발행, 정산, 연장, 개수 조회는
+ * {@link IllegalStateException}을 던진다. 꺼내기는 빈 청크를 돌려주며, 기다리던 꺼내기도 빈 청크로 끝난다.
+ * 꺼내기의 인자 검증은 닫힌 뒤에도 먼저 한다. 닫는 도중 이미 저장소에 들어간 연산의 결과는 보장하지 않는다.
+ * {@link #close()}는 여러 번 호출해도 된다.
+ */
 public interface Smq extends AutoCloseable {
 
     static SqliteBuilder sqlite(Path path) {

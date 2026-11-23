@@ -27,6 +27,7 @@ final class DefaultSmq implements Smq {
         if (options.deadLetterQueue().filter(name::equals).isPresent()) {
             throw new IllegalArgumentException("a queue cannot be its own dead letter queue: " + name);
         }
+        waiter.requireOpen();
         storage.declare(name, options);
         return new DefaultQueue(storage, clock, leaseDuration, waiter, name, options);
     }
@@ -34,6 +35,7 @@ final class DefaultSmq implements Smq {
     @Override
     public Queue queue(String name) {
         Validation.queueName(name);
+        waiter.requireOpen();
         QueueOptions options = storage.options(name).orElseThrow(() -> new QueueNotFoundException(name));
         return new DefaultQueue(storage, clock, leaseDuration, waiter, name, options);
     }
@@ -41,12 +43,14 @@ final class DefaultSmq implements Smq {
     @Override
     public boolean delete(String name) {
         Validation.queueName(name);
+        waiter.requireOpen();
         return storage.delete(name);
     }
 
     @Override
     public void snapshot(Path target) {
         Objects.requireNonNull(target, "target");
+        waiter.requireOpen();
         storage.snapshot(target);
     }
 

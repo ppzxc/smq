@@ -55,6 +55,7 @@ abstract class StorageContractTest {
         PullResult exact = pullAfterExhausting("exact", cap);
         assertTrue(exact.messages().isEmpty());
         assertFalse(exact.deadLettersRemain());
+        assertTrue(exact.deadLettersMoved());
         assertEquals(cap, storage.counts("dead-exact").ready());
         assertEquals(0, storage.counts("exact").ready());
     }
@@ -65,6 +66,7 @@ abstract class StorageContractTest {
         PullResult over = pullAfterExhausting("over", cap + 1);
         assertTrue(over.messages().isEmpty());
         assertTrue(over.deadLettersRemain());
+        assertTrue(over.deadLettersMoved());
         assertEquals(cap, storage.counts("dead-over").ready());
     }
 
@@ -76,6 +78,18 @@ abstract class StorageContractTest {
         assertTrue(next.messages().isEmpty());
         assertFalse(next.deadLettersRemain());
         assertEquals(cap + 1, storage.counts("dead-over").ready());
+    }
+
+    @Test
+    void 메시지를_꺼내면서_이동하면_이동_표시가_참이다() {
+        storage.declare("dead", QueueOptions.defaults());
+        storage.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+        storage.publish("q", List.of(message(1)), T0);
+        assertFalse(storage.pull("q", 1, LEASE, T0).deadLettersMoved());
+        storage.publish("q", List.of(message(2)), T0);
+        PullResult result = storage.pull("q", 1, LEASE, T0.plus(LEASE));
+        assertEquals(1, result.messages().size());
+        assertTrue(result.deadLettersMoved());
     }
 
     @Test
@@ -103,6 +117,7 @@ abstract class StorageContractTest {
         assertNull(empty.token());
         assertNull(empty.leaseDeadline());
         assertFalse(empty.deadLettersRemain());
+        assertFalse(empty.deadLettersMoved());
     }
 
     @Test

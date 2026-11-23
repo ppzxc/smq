@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -1157,6 +1159,23 @@ abstract class SmqConformanceTest {
         assertEquals(0, duplicates.get());
         assertEquals(total, seen.size());
         assertEquals(new QueueCounts(0, 0, 0), q.counts());
+    }
+
+    @Test
+    void 최대_전달_횟수_이동은_dead_letter_꺼내기를_깨운다() throws Exception {
+        Smq smq = open(Duration.ofSeconds(10));
+        Queue dead = smq.declare("dead", QueueOptions.defaults());
+        Queue q = smq.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+        q.publish(msg("poison"));
+        q.pull(1, Duration.ZERO);
+        clock.advance(Duration.ofSeconds(10));
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var waiting = executor.submit(() -> dead.pull(1, Duration.ofSeconds(5)));
+            Thread.sleep(1050); // 폴링 간격이 상한에 도달한 뒤 이동한다.
+            q.pull(1, Duration.ZERO);
+            Chunk received = waiting.get(150, TimeUnit.MILLISECONDS);
+            assertEquals("poison", text(received.messages().getFirst()));
+        }
     }
 
     @Test

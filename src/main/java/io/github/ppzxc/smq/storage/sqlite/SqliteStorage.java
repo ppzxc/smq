@@ -520,8 +520,9 @@ public final class SqliteStorage implements Storage {
                     }
                     promote(c, tx, queueId, toNanos(now));
                     int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
-                    boolean deadLettersRemain = options.maxDeliveries().isPresent()
-                            && moveExhausted(c, tx, queue, queueId, options, limit, now);
+                    MoveResult moved = options.maxDeliveries().isPresent()
+                            ? moveExhausted(c, tx, queue, queueId, options, limit, now)
+                            : new MoveResult(false, false);
                     long barrier = Long.MAX_VALUE;
                     if (options.singleActiveConsumer()) {
                         try (PreparedStatement ps = c.prepareStatement(
@@ -556,7 +557,9 @@ public final class SqliteStorage implements Storage {
                         }
                     }
                     if (picked == 0) {
-                        return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
+                        return moved.remain()
+                                ? PullResult.emptyDeadLettersRemain(moved.moved())
+                                : PullResult.empty(moved.moved());
                     }
                     tx.ready(queueId, -fromReady);
                     tx.leased(queueId, fromReady);
@@ -594,7 +597,7 @@ public final class SqliteStorage implements Storage {
                         }
                     }
                     messages.sort((a, b) -> a.id().compareTo(b.id()));
-                    return PullResult.of(new LeaseToken(token), deadline, messages);
+                    return PullResult.of(new LeaseToken(token), deadline, messages, moved.moved());
                 },
                 waitDeadline);
     }
@@ -619,9 +622,9 @@ public final class SqliteStorage implements Storage {
      * 최대 전달 횟수에 도달한 준비 메시지를 id 순서로 dead letter 큐에 새 메시지로 옮긴다(꺼내기 트랜잭션 안).
      * 한 번에 옮기는 개수에는 상한이 있다.
      *
-     * @return 상한에 걸려 남은 도달 메시지가 더 있으면 true
+     * @return 이동 여부와 상한에 걸려 남은 도달 메시지 여부
      */
-    private static boolean moveExhausted(
+    private static MoveResult moveExhausted(
             Connection c, QueueCounters.Tx tx, String queue, long queueId, QueueOptions options, int limit, Instant now)
             throws SQLException {
         long dlqId = requireQueue(c, options.deadLetterQueue().orElseThrow());
@@ -670,8 +673,10 @@ public final class SqliteStorage implements Storage {
                 tx.ready(dlqId, 1);
             }
         }
-        return deadLettersRemain;
+        return new MoveResult(deadLettersRemain, !moving.isEmpty());
     }
+
+    private record MoveResult(boolean remain, boolean moved) {}
 
     /** dead letter 큐로 옮길 도달 메시지 한 건. */
     // payload 배열은 JDBC에서 읽어 즉시 SQL 바인딩에만 사용한다.

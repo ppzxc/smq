@@ -229,7 +229,9 @@ public final class MemoryStorage implements Storage {
                 }
             }
             if (picked.isEmpty()) {
-                return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
+                return deadLettersRemain
+                        ? PullResult.emptyDeadLettersRemain(!exhausted.isEmpty())
+                        : PullResult.empty(!exhausted.isEmpty());
             }
             long token = nextLeaseToken++;
             Instant deadline = now.plus(lease);
@@ -240,7 +242,7 @@ public final class MemoryStorage implements Storage {
                 e.deliveryCount++;
                 messages.add(new Message(e.id, e.payload, e.headers, e.deliveryCount, e.publishedAt));
             }
-            return PullResult.of(new LeaseToken(token), deadline, messages);
+            return PullResult.of(new LeaseToken(token), deadline, messages, !exhausted.isEmpty());
         } finally {
             lock.unlock();
         }

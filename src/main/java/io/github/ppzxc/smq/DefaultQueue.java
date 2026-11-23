@@ -96,6 +96,9 @@ final class DefaultQueue implements Queue {
                     // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
                     Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
                     PullResult r = storage.pull(name, max, leaseDuration, clock, remaining);
+                    if (r.deadLettersMoved()) {
+                        waiter.wake();
+                    }
                     if (!r.messages().isEmpty()) {
                         return PullWaiter.Attempt.found(new Chunk(
                                 name,

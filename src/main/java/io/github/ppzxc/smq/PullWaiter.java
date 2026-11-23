@@ -77,11 +77,16 @@ final class PullWaiter {
         }
     }
 
+    @FunctionalInterface
+    interface InterruptibleAttempt<T> {
+        Attempt<T> get() throws InterruptedException;
+    }
+
     /**
      * @param attempt 한 번 꺼내 본다
      * @param empty 시간이 다했거나 닫혔을 때의 빈 결과
      */
-    <T> T await(Duration wait, Supplier<Attempt<T>> attempt, Supplier<T> empty) throws InterruptedException {
+    <T> T await(Duration wait, InterruptibleAttempt<T> attempt, Supplier<T> empty) throws InterruptedException {
         long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         long pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
         while (true) {

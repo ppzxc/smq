@@ -386,8 +386,7 @@ final class TransactionExecutor {
                 throw new Deadline.Expired();
             }
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new SmqStorageException("interrupted while waiting for sqlite lock", e);
+            throw new Deadline.Interrupted(e);
         }
     }
 

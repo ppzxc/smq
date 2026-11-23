@@ -500,9 +500,12 @@ public final class SqliteStorage implements Storage {
 
     /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0016). */
     @Override
-    public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait) {
+    public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait)
+            throws InterruptedException {
         try {
             return pull(queue, max, lease, clock, Deadline.after(wait, lockWaitFloor));
+        } catch (Deadline.Interrupted e) {
+            throw (InterruptedException) e.getCause();
         } catch (Deadline.Expired e) {
             return PullResult.empty();
         }

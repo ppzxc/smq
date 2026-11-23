@@ -13,6 +13,8 @@
 
 ### Changed
 
+- **SPI 호환 파괴**: 대기 시간을 받는 저장소 꺼내기가 `InterruptedException`을 선언한다. SQLite lock 대기 중 interrupt되면 `SmqStorageException` 대신 이 예외가 `Queue.pull` 호출자에게 전달된다. (#171)
+
 - **호환 파괴**: SQLite 스키마를 버전 2로 올렸다. 꺼내기는 저장된 준비 상태를 인덱스로 찾는다. 버전 1 파일은 처음 열 때 인덱스 네 개를 만드는 만큼 시간이 더 걸린다. 업그레이드한 파일은 옛 버전으로 열 수 없다. (#168)
 - 닫힌 `Smq`의 선언, 조회, 삭제, 발행, 정산, 연장, 개수 조회, 스냅샷은 저장소와 상관없이 `IllegalStateException`을 던진다. 꺼내기는 빈 청크를 돌려준다. (#174)
 - **SPI 호환 파괴**: 저장소의 발행·꺼내기·정산이 `Instant` 대신 `InstantSource`를 받아 락 안에서 시각을 읽는다. (#170)

@@ -11,6 +11,23 @@ class AggregatorTest {
     private static final long SEC = 1_000_000_000L;
 
     @Test
+    void queueKindsHaveSeparateThroughputEntriesAndRepeatedSamples() {
+        for (RunSpec.QueueKind kind : List.of(
+                RunSpec.QueueKind.MAX_DELIVERIES,
+                RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
+                RunSpec.QueueKind.LEASED_HEAD)) {
+            RunSpec spec = RunSpec.s1(kind, RunSpec.DEEP, 1000, 0);
+            Map<String, Double> first =
+                    Aggregator.aggregate(spec, List.of(new ChildResult("WORKER", 500, SEC, new long[0])));
+            String key = "sqlite/S1/P1/PROCESS_CRASH/1m/" + kind + ":msgPerSec";
+            assertEquals(Map.of(key, 500.0), first);
+            Report report = Aggregator.report(Map.of(), Aggregator.samples(List.of(first, Map.of(key, 300.0))));
+            assertEquals(400.0, report.entries().get(key));
+            assertEquals(List.of(500.0, 300.0), report.samples().get(key));
+        }
+    }
+
+    @Test
     void s2UsesTheSameThroughputMetric() {
         RunSpec spec = RunSpec.s2(Storage.SQLITE, Profile.P3, 1000, 0);
         Map<String, Double> m = Aggregator.aggregate(spec, List.of(new ChildResult("WORKER", 500, SEC, new long[0])));

@@ -3,7 +3,7 @@ package io.github.ppzxc.smq;
 import java.time.Duration;
 import java.util.Map;
 
-/** 발행할 메시지. {@code delay}가 {@link Duration#ZERO}이면 지연 없이 바로 꺼낼 수 있다. */
+/** 발행할 메시지. {@code delay}가 {@link Duration#ZERO}이면 지연 없이 바로 꺼낼 수 있다. 지연의 상한은 36,500일(100년)이며 상한을 포함한다. */
 // 배열은 생성자와 접근자에서 복사해 공개 API의 불변성 계약을 보장한다.
 @SuppressWarnings("ArrayRecordComponent")
 public record OutgoingMessage(byte[] payload, Map<String, String> headers, Duration delay) {
@@ -11,8 +11,8 @@ public record OutgoingMessage(byte[] payload, Map<String, String> headers, Durat
     public OutgoingMessage {
         payload = payload.clone();
         headers = Map.copyOf(headers);
-        if (delay == null || delay.isNegative()) {
-            throw new IllegalArgumentException("delay must not be negative: " + delay);
+        if (delay == null || delay.isNegative() || delay.compareTo(Validation.MAX_DELAY_OR_LEASE) > 0) {
+            throw new IllegalArgumentException("delay must be between zero and 36500 days: " + delay);
         }
     }
 

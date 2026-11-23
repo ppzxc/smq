@@ -70,6 +70,7 @@ public interface Smq extends AutoCloseable {
             return this;
         }
 
+        /** 기본 리스 기간을 정한다. 양수이며 최대 36,500일(100년)이다. */
         public Builder leaseDuration(Duration leaseDuration) {
             settings.leaseDuration(leaseDuration);
             return this;
@@ -127,6 +128,7 @@ public interface Smq extends AutoCloseable {
             return this;
         }
 
+        /** 기본 리스 기간을 정한다. 양수이며 최대 36,500일(100년)이다. */
         public SqliteBuilder leaseDuration(Duration leaseDuration) {
             settings.leaseDuration(leaseDuration);
             return this;

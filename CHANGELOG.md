@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- 긴 꺼내기 대기 시간을 허용하고 발행·NACK 지연과 리스 기간을 최대 36,500일로 제한한다.
+
 ### Added
 
 - 벤치마크 하네스 `randomBench`에 `--durability <POWER_LOSS|PROCESS_CRASH>` 옵션을 추가했다. 주지 않으면 시드에서 무작위로 고르던 대로이고, 주면 그 수준으로 고정한다. (#156)

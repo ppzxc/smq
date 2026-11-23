@@ -9,6 +9,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +47,87 @@ class SqliteSmqTest extends SmqConformanceTest {
         Smq smq = builder().clock(clock).leaseDuration(lease).open();
         direct.add(smq);
         return smq;
+    }
+
+    @Test
+    void lock을_기다리는_꺼내기를_interrupt하면_메시지는_준비_상태로_남는다() throws Exception {
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean hold = new AtomicBoolean();
+        try (Smq smq = builder()
+                .durability(durability)
+                .clock(() -> {
+                    if (hold.get()) {
+                        locked.countDown();
+                        try {
+                            release.await();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    return T0;
+                })
+                .open()) {
+            Queue q = smq.declare("q", QueueOptions.defaults());
+            q.publish(msg("a"));
+            hold.set(true);
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            AtomicBoolean interrupted = new AtomicBoolean(true);
+            try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+                Future<?> holder = executor.submit(() -> q.publish(msg("b")));
+                assertTrue(locked.await(5, TimeUnit.SECONDS));
+                Thread puller = new Thread(() -> {
+                    try {
+                        q.pull(1, Duration.ofSeconds(30));
+                    } catch (Throwable e) {
+                        failure.set(e);
+                        interrupted.set(Thread.currentThread().isInterrupted());
+                    }
+                });
+                try {
+                    puller.start();
+                    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                    while (puller.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < deadline)
+                        Thread.onSpinWait();
+                    assertEquals(Thread.State.TIMED_WAITING, puller.getState());
+                    puller.interrupt();
+                    puller.join(5000);
+                    assertFalse(puller.isAlive());
+                    assertInstanceOf(InterruptedException.class, failure.get());
+                    assertFalse(interrupted.get());
+                } finally {
+                    hold.set(false);
+                    release.countDown();
+                }
+                holder.get(5, TimeUnit.SECONDS);
+            }
+            assertEquals(new QueueCounts(2, 0, 0), q.counts());
+            assertEquals(2, q.pull(2, Duration.ZERO).messages().size());
+        }
+    }
+
+    @Test
+    void 리스하는_동안_interrupt되어도_청크를_돌려준다() throws Exception {
+        AtomicInteger reads = new AtomicInteger();
+        AtomicBoolean pulling = new AtomicBoolean();
+        try (Smq smq = builder()
+                .durability(durability)
+                .clock(() -> {
+                    if (pulling.get() && reads.incrementAndGet() == 2)
+                        Thread.currentThread().interrupt();
+                    return T0;
+                })
+                .open()) {
+            Queue q = smq.declare("q", QueueOptions.defaults());
+            q.publish(msg("a"));
+            pulling.set(true);
+            try {
+                assertEquals(1, q.pull(1, Duration.ofSeconds(30)).messages().size());
+                assertTrue(Thread.currentThread().isInterrupted());
+            } finally {
+                Thread.interrupted();
+            }
+        }
     }
 
     @Test

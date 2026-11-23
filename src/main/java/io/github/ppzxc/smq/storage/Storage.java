@@ -41,9 +41,11 @@ public interface Storage extends AutoCloseable {
 
     /**
      * {@code wait} 안에서만 저장소의 lock과 쓰기 경합을 기다린다. 그 안에 꺼내지 못하면 아무것도 반영하지 않고 빈
-     * 결과를 돌려준다. 기본 구현은 한도를 두지 않는 {@link #pull(String, int, Duration, InstantSource)}다.
+     * 결과를 돌려준다. interrupt에 반응하는 구현은 lock 대기 중 interrupt되면 아무것도 반영하지 않고 {@link InterruptedException}을 던진다.
+     * 기본 구현은 한도를 두지 않는 {@link #pull(String, int, Duration, InstantSource)}다.
      */
-    default PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait) {
+    default PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait)
+            throws InterruptedException {
         return pull(queue, max, lease, clock);
     }
 

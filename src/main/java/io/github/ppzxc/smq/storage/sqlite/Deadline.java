@@ -15,6 +15,12 @@ final class Deadline {
         }
     }
 
+    static final class Interrupted extends RuntimeException {
+        Interrupted(InterruptedException cause) {
+            super(cause);
+        }
+    }
+
     /**
      * lock을 기다리는 시간의 기본 하한. 정상적인 직렬화(다른 스레드의 트랜잭션 하나)는 이 안에 끝나므로, {@code wait}가
      * 0이어도 메시지가 있는데 빈 결과를 돌려주지 않는다. 다른 스레드가 lock을 오래 쥘 때만 넘는다.

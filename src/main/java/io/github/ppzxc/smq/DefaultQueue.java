@@ -65,7 +65,7 @@ final class DefaultQueue implements Queue {
         if (converted.isEmpty()) {
             return List.of();
         }
-        List<MessageId> ids = storage.publish(name, converted, clock.instant());
+        List<MessageId> ids = storage.publish(name, converted, clock);
         waiter.wake();
         return ids;
     }
@@ -95,7 +95,7 @@ final class DefaultQueue implements Queue {
                 () -> {
                     // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
                     Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
-                    PullResult r = storage.pull(name, max, leaseDuration, clock.instant(), remaining);
+                    PullResult r = storage.pull(name, max, leaseDuration, clock, remaining);
                     if (!r.messages().isEmpty()) {
                         return PullWaiter.Attempt.found(new Chunk(
                                 name,
@@ -121,7 +121,7 @@ final class DefaultQueue implements Queue {
         for (Result r : storage.settle(
                 Objects.requireNonNull(settlement.token(), "non-empty settlement must have a lease token"),
                 settlement.items(),
-                clock.instant())) {
+                clock)) {
             byMessage.put(r.id(), r.outcome());
         }
         // NACK은 메시지를 다시 준비로 돌릴 수 있다. 깨우기는 저장소가 아니라 코어가 맡는다.

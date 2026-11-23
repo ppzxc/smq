@@ -5,14 +5,12 @@ import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.InstantSource;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * 큐 연산 단위의 저장소 SPI(내부 계약). 각 연산의 원자성은 저장소가 책임지고, 시각은 코어가 {@code now}로 넘긴다. 예외는
- * {@link #extend}로, 저장소가 lock 안에서 시각을 읽는다. 인스턴스 하나는 스레드 안전하다.
+ * 큐 연산 단위의 저장소 SPI(내부 계약). 각 연산의 원자성은 저장소가 책임지고, 시각은 저장소가 연산의 lock 안에서 시계로 읽는다. 인스턴스 하나는 스레드 안전하다.
  */
 public interface Storage extends AutoCloseable {
 
@@ -36,21 +34,21 @@ public interface Storage extends AutoCloseable {
     QueueCounts counts(String queue);
 
     /** 전부 아니면 전무. */
-    List<MessageId> publish(String queue, List<NewMessage> batch, Instant now);
+    List<MessageId> publish(String queue, List<NewMessage> batch, InstantSource clock);
 
     /** 기다리지 않는다. 준비 메시지가 없으면 빈 결과다. */
-    PullResult pull(String queue, int max, Duration lease, Instant now);
+    PullResult pull(String queue, int max, Duration lease, InstantSource clock);
 
     /**
      * {@code wait} 안에서만 저장소의 lock과 쓰기 경합을 기다린다. 그 안에 꺼내지 못하면 아무것도 반영하지 않고 빈
-     * 결과를 돌려준다. 기본 구현은 한도를 두지 않는 {@link #pull(String, int, Duration, Instant)}다.
+     * 결과를 돌려준다. 기본 구현은 한도를 두지 않는 {@link #pull(String, int, Duration, InstantSource)}다.
      */
-    default PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
-        return pull(queue, max, lease, now);
+    default PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait) {
+        return pull(queue, max, lease, clock);
     }
 
     /** 한 트랜잭션으로 반영하고 메시지별 결과를 돌려준다. */
-    List<Result> settle(LeaseToken token, List<Disposition> items, Instant now);
+    List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock);
 
     /**
      * 리스를 "처리하는 시각 + {@code d}"로 바꾼다. 정산과 같은 토큰 일치 기준으로 메시지별 결과를 돌려준다.

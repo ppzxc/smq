@@ -161,9 +161,10 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public List<MessageId> publish(String queue, List<NewMessage> batch, Instant now) {
+    public List<MessageId> publish(String queue, List<NewMessage> batch, InstantSource clock) {
         lock.lock();
         try {
+            Instant now = clock.instant();
             TreeMap<Long, Entry> messages = require(queue);
             // 항목을 모두 만든 뒤에 반영해서, 중간에 실패해도 일부만 들어가지 않게 한다.
             List<Entry> entries = new ArrayList<>(batch.size());
@@ -184,9 +185,10 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public PullResult pull(String queue, int max, Duration lease, Instant now) {
+    public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
         lock.lock();
         try {
+            Instant now = clock.instant();
             TreeMap<Long, Entry> entries = require(queue);
             QueueOptions options = requireOptions(queue);
             // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
@@ -243,9 +245,10 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {
+    public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
         lock.lock();
         try {
+            Instant now = clock.instant();
             requireDeadLetterQueues(token, items);
             List<Result> results = new ArrayList<>(items.size());
             for (Disposition d : items) {

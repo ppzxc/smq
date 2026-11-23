@@ -434,8 +434,9 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public List<MessageId> publish(String queue, List<NewMessage> batch, Instant now) {
+    public List<MessageId> publish(String queue, List<NewMessage> batch, InstantSource clock) {
         return inCountingTransaction((c, tx) -> {
+            Instant now = clock.instant();
             long queueId = requireQueue(c, queue);
             List<MessageId> ids = new ArrayList<>(batch.size());
             try (PreparedStatement ps = c.prepareStatement(
@@ -471,9 +472,10 @@ public final class SqliteStorage implements Storage {
      * 던진다)다.
      * SQL 오류는 true가 아니라 예외다.
      */
-    private boolean anyReady(String queue, Instant now, Deadline waitDeadline) {
+    private boolean anyReady(String queue, InstantSource clock, Deadline waitDeadline) {
         return executor.anyOrUncertain(
                 connection -> {
+                    Instant now = clock.instant();
                     try (PreparedStatement ps = connection.prepareStatement(ANY_READY)) {
                         long nowNanos = toNanos(now);
                         ps.setString(1, queue);
@@ -492,26 +494,27 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public PullResult pull(String queue, int max, Duration lease, Instant now) {
-        return pull(queue, max, lease, now, Deadline.NONE);
+    public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
+        return pull(queue, max, lease, clock, Deadline.NONE);
     }
 
     /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0016). */
     @Override
-    public PullResult pull(String queue, int max, Duration lease, Instant now, Duration wait) {
+    public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait) {
         try {
-            return pull(queue, max, lease, now, Deadline.after(wait, lockWaitFloor));
+            return pull(queue, max, lease, clock, Deadline.after(wait, lockWaitFloor));
         } catch (Deadline.Expired e) {
             return PullResult.empty();
         }
     }
 
-    private PullResult pull(String queue, int max, Duration lease, Instant now, Deadline waitDeadline) {
-        if (!anyReady(queue, now, waitDeadline)) {
+    private PullResult pull(String queue, int max, Duration lease, InstantSource clock, Deadline waitDeadline) {
+        if (!anyReady(queue, clock, waitDeadline)) {
             return PullResult.empty();
         }
         return inCountingTransaction(
                 (c, tx) -> {
+                    Instant now = clock.instant();
                     long queueId = requireQueue(c, queue);
                     QueueOptions options = readOptions(c, queue);
                     // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
@@ -662,8 +665,9 @@ public final class SqliteStorage implements Storage {
     private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount, boolean leased) {}
 
     @Override
-    public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {
+    public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
         return inCountingTransaction((c, tx) -> {
+            Instant now = clock.instant();
             List<Result> results = new ArrayList<>(items.size());
             try (PreparedStatement ack = c.prepareStatement("DELETE FROM message WHERE id = ? AND lease_token = ?");
                     PreparedStatement ackFrom = c.prepareStatement(

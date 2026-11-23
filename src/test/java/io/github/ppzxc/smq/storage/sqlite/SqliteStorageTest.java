@@ -19,6 +19,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -168,7 +169,8 @@ class SqliteStorageTest {
             s.declare("q", QueueOptions.defaults());
             var ok = new io.github.ppzxc.smq.storage.NewMessage(new byte[] {1}, java.util.Map.of());
             var bad = new io.github.ppzxc.smq.storage.NewMessage(null, java.util.Map.of());
-            assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), Instant.EPOCH));
+            assertThrows(
+                    RuntimeException.class, () -> s.publish("q", List.of(ok, bad), InstantSource.fixed(Instant.EPOCH)));
             assertEquals(0, s.counts("q").ready());
         }
     }
@@ -257,8 +259,8 @@ class SqliteStorageTest {
                             });
                 })) {
             s.declare("q", QueueOptions.defaults());
-            s.publish("q", List.of(message()), Instant.EPOCH);
-            s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH);
+            s.publish("q", List.of(message()), InstantSource.fixed(Instant.EPOCH));
+            s.pull("q", 1, Duration.ofSeconds(1), InstantSource.fixed(Instant.EPOCH));
             assertEquals(promoted, s.counts("q").ready());
             assertEquals(-promoted, s.counts("q").delayed());
         }
@@ -268,14 +270,16 @@ class SqliteStorageTest {
     void 손상된_헤더는_꺼내기에서_저장소_오류다() {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("bad.db"), Durability.POWER_LOSS)) {
             s.declare("q", QueueOptions.defaults());
-            s.publish("q", List.of(message()), Instant.EPOCH);
+            s.publish("q", List.of(message()), InstantSource.fixed(Instant.EPOCH));
             s.inTransaction(c -> {
                 try (Statement st = c.createStatement()) {
                     st.execute("UPDATE message SET headers = X'000000017fffffff'");
                 }
                 return null;
             });
-            assertThrows(SmqStorageException.class, () -> s.pull("q", 1, Duration.ofSeconds(1), Instant.EPOCH));
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> s.pull("q", 1, Duration.ofSeconds(1), InstantSource.fixed(Instant.EPOCH)));
         }
     }
 
@@ -304,7 +308,7 @@ class SqliteStorageTest {
             assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
         }
         try (SqliteStorage s = SqliteStorage.open(db, durability)) {
-            s.publish("q", List.of(message()), Instant.EPOCH);
+            s.publish("q", List.of(message()), InstantSource.fixed(Instant.EPOCH));
             assertFalse(Files.exists(shm), "다시 열어도 -shm이 생기면 안 된다");
             String expected = durability == Durability.POWER_LOSS ? "2" : "1";
             assertEquals(expected, s.inTransaction(c -> pragma(c, "synchronous")));

@@ -3,6 +3,10 @@ package io.github.ppzxc.smq;
 import java.time.Duration;
 import java.util.List;
 
+/**
+ * 큐 연산의 발행 시각, 지연, 리스 기한은 저장소가 각 연산을 처리할 때 읽은 벽시계를 기준으로 한다.
+ * 시스템 시계가 앞뒤로 바뀌면 지연과 리스의 실제 경과 시간도 달라질 수 있다.
+ */
 public interface Queue {
 
     String name();

@@ -37,6 +37,22 @@ class ComparatorTest {
     }
 
     @Test
+    void newQueueKindsRecordMedianRatiosWithoutFailing() {
+        for (String kind : List.of("MAX_DELIVERIES", "SINGLE_ACTIVE_CONSUMER", "LEASED_HEAD")) {
+            String prefix = "sqlite/S1/P1/PROCESS_CRASH/";
+            Check c = find(
+                    Comparator.compare(
+                            Map.of(
+                                    prefix + "empty/" + kind + ":msgPerSec", List.of(100.0, 100.0, 100.0),
+                                    prefix + "1m/" + kind + ":msgPerSec", List.of(10.0, 30.0, 20.0)),
+                            Map.of()),
+                    "depth S1 P1 PROCESS_CRASH " + kind + " 1m >= 70% of empty");
+            assertEquals(Status.SKIP, c.status());
+            assertTrue(c.detail().contains("20.0%"));
+        }
+    }
+
+    @Test
     void ratioIsJudgedByTheMedianOfPerRoundRatios() {
         // 바퀴별 비율 60%, 74%, 80%: 중앙값 74%. 한 바퀴가 하한 아래여도 PASS.
         Check c = ratioCheck(List.of(6000.0, 7400.0, 8000.0), List.of(10000.0, 10000.0, 10000.0));

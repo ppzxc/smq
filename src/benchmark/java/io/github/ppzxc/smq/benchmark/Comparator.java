@@ -4,6 +4,7 @@ import io.github.ppzxc.smq.Durability;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -22,6 +23,7 @@ final class Comparator {
 
     static final double REGRESSION = 0.20;
     static final double RATIO = 0.70;
+    private static final Set<RunSpec.QueueKind> ENABLED_QUEUE_KIND_CHECKS = Set.of();
     private static final double EPS = 1e-9;
 
     enum Status {
@@ -74,7 +76,22 @@ final class Comparator {
                     out,
                     name,
                     r.get(Keys.throughput(key(Profile.P1, d, RunSpec.DEEP))),
-                    r.get(Keys.throughput(key(Profile.P1, d, 0))));
+                    r.get(Keys.throughput(key(Profile.P1, d, 0))),
+                    true);
+        }
+        for (RunSpec.QueueKind kind : List.of(
+                RunSpec.QueueKind.MAX_DELIVERIES,
+                RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
+                RunSpec.QueueKind.LEASED_HEAD)) {
+            String name = "depth S1 P1 PROCESS_CRASH " + kind + " 1m >= 70% of empty";
+            String deep = RunSpec.s1(kind, RunSpec.DEEP, 0, 0).key();
+            String empty = RunSpec.s1(kind, 0, 0, 0).key();
+            ratio(
+                    out,
+                    name,
+                    r.get(Keys.throughput(deep)),
+                    r.get(Keys.throughput(empty)),
+                    ENABLED_QUEUE_KIND_CHECKS.contains(kind));
         }
     }
 
@@ -83,7 +100,8 @@ final class Comparator {
      * 표본이 하나면 단발 비율이고 detail도 단발 출력과 같다. 한쪽이라도 표본이 없으면 SKIP이다. 양쪽이 둘 이상인데 개수가 다르면
      * 바퀴가 어긋난 것이므로 FAIL이다.
      */
-    private static void ratio(List<Check> out, String name, List<Double> values, List<Double> references) {
+    private static void ratio(
+            List<Check> out, String name, List<Double> values, List<Double> references, boolean enabled) {
         if (values == null || references == null || values.isEmpty() || references.isEmpty()) {
             out.add(notMeasured(name));
             return;
@@ -91,7 +109,8 @@ final class Comparator {
         // 한쪽이 단일 표본(단발 측정)이면 첫 바퀴끼리 짝짓는 것이 합법이다. 그 밖의 길이 불일치는 바퀴가 어긋난 것이라 숨기지 않는다.
         boolean singleSide = values.size() == 1 || references.size() == 1;
         if (!singleSide && values.size() != references.size()) {
-            out.add(fail(name, "표본 수가 다르다: " + values.size() + "개 / " + references.size() + "개"));
+            String detail = "표본 수가 다르다: " + values.size() + "개 / " + references.size() + "개";
+            out.add(enabled ? fail(name, detail) : new Check(name, Status.SKIP, detail));
             return;
         }
         int rounds = singleSide ? 1 : values.size();
@@ -113,7 +132,10 @@ final class Comparator {
                 sb.append(i > 0 ? "; " : "").append(i + 1).append("회 ").append(parts.get(i));
             detail = sb.toString();
         }
-        out.add(Aggregator.median(ratios) >= RATIO - EPS ? pass(name, detail) : fail(name, detail));
+        out.add(
+                !enabled
+                        ? new Check(name, Status.SKIP, detail)
+                        : Aggregator.median(ratios) >= RATIO - EPS ? pass(name, detail) : fail(name, detail));
     }
 
     private static void latency(Map<String, Double> r, List<Check> out) {

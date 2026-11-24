@@ -209,6 +209,25 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    void 자동_회수_옵션은_새_DB에만_적용된다() throws Exception {
+        var path = dir.resolve("vacuum-option.db");
+        Smq.sqlite(path).autoVacuum(false).open().close();
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + path);
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("PRAGMA auto_vacuum")) {
+            assertTrue(result.next());
+            assertEquals(0, result.getInt(1));
+        }
+        Smq.sqlite(path).autoVacuum(true).open().close();
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + path);
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("PRAGMA auto_vacuum")) {
+            assertTrue(result.next());
+            assertEquals(0, result.getInt(1));
+        }
+    }
+
+    @Test
     void SQLite_빌더의_공개_옵션에_lock_대기_하한이_없다() {
         // 0.1.0 호환 파괴(#155): 하한은 내부 상수(기본 100ms)이고, 테스트만 같은 패키지에서 조정한다.
         // 저장소 구현(storage.sqlite)은 module-info가 내보내지 않으므로 빌더가 유일한 공개 경로다.
@@ -217,7 +236,7 @@ class SqliteSmqTest extends SmqConformanceTest {
                 .filter(method -> method.getDeclaringClass() == Smq.SqliteBuilder.class)
                 .map(Method::getName)
                 .collect(Collectors.toSet());
-        assertEquals(Set.of("durability", "clock", "leaseDuration", "open"), publicMethods);
+        assertEquals(Set.of("durability", "clock", "leaseDuration", "autoVacuum", "open"), publicMethods);
         assertEquals(0, Smq.SqliteBuilder.class.getFields().length);
     }
 

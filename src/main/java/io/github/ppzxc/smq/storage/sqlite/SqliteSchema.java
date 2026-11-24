@@ -64,6 +64,25 @@ final class SqliteSchema {
         return targetVersion;
     }
 
+    /** 빈 파일에만 첫 테이블을 만들기 전에 자동 회수 방식을 설정한다. */
+    static void configureNewDatabase(Connection c, boolean autoVacuum) throws SQLException {
+        if (pragmaInt(c, "application_id") != 0) {
+            return;
+        }
+        try (Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
+            if (!rs.next()) {
+                throw new SQLException("schema count row missing");
+            }
+            if (rs.getInt(1) != 0) {
+                return;
+            }
+        }
+        try (Statement s = c.createStatement()) {
+            s.execute("PRAGMA auto_vacuum = " + (autoVacuum ? "FULL" : "NONE"));
+        }
+    }
+
     private static void createV1(Connection c) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute("""

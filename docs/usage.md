@@ -8,12 +8,15 @@ smq 공개 API의 사용법 레퍼런스다. 개요와 빠른 시작은 [README]
 // SQLite: 파일 하나. 없으면 만들고, 있으면 열면서 스키마를 필요 시 업그레이드한다.
 Smq smq = Smq.sqlite(Path.of("smq.db"))
         .durability(Durability.PROCESS_CRASH)   // 기본값. 생략 가능. 전원·OS 장애까지 견디려면 POWER_LOSS
+        .autoVacuum(true)                      // 새 DB의 빈 페이지를 자동 회수. 기본값
         .leaseDuration(Duration.ofSeconds(30))  // 기본값. 생략 가능
         .open();
 
 // 인메모리: 프로세스 안에서만, 종료하면 사라진다. 테스트에 알맞다.
 Smq mem = Smq.inMemory().open();
 ```
+
+새 SQLite DB는 기본적으로 `auto_vacuum=FULL`을 사용해 삭제된 공간을 자동으로 회수한다. 쓰기 비용을 줄이고 빈 페이지를 파일 안에서 재사용하려면 `.autoVacuum(false)`를 지정한다. 기존 DB를 열 때는 이 옵션과 관계없이 DB에 저장된 설정을 유지한다.
 
 `Smq`는 스레드 안전하다. 닫을 때 정산하지 않은 리스는 그대로 두고, 기한이 지나면 다시 꺼낼 수 있게 된다(프로세스가 죽은 경우와 같다). 테스트에서는 `.clock(InstantSource)`로 시계를 주입할 수 있다.
 

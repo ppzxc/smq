@@ -44,6 +44,40 @@ class SqliteStorageTest {
     }
 
     @Test
+    void 새_DB는_FULL을_사용하고_기존_NONE_DB는_유지한다() throws Exception {
+        Path fresh = dir.resolve("fresh.db");
+        try (SqliteStorage ignored = SqliteStorage.open(fresh, Durability.PROCESS_CRASH)) {
+            assertNotNull(ignored);
+        }
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + fresh)) {
+            assertEquals("1", pragma(c, "auto_vacuum"));
+        }
+
+        Path existing = dir.resolve("existing.db");
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + existing)) {
+            try (Statement s = c.createStatement()) {
+                s.execute("PRAGMA auto_vacuum = NONE");
+                SqliteSchema.configureNewDatabase(c, true);
+                s.execute("BEGIN IMMEDIATE");
+                new SqliteSchema(2, Map.of(1, SqliteSchema::upgradeV1ToV2)).establish(c);
+                s.execute("COMMIT");
+            }
+        }
+        // 새 DB 생성 규칙을 거치지 않은 기존 파일의 모드를 만든다.
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + existing);
+                Statement s = c.createStatement()) {
+            s.execute("PRAGMA auto_vacuum = NONE");
+            s.execute("VACUUM");
+        }
+        try (SqliteStorage ignored = SqliteStorage.open(existing, Durability.PROCESS_CRASH)) {
+            assertNotNull(ignored);
+        }
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + existing)) {
+            assertEquals("0", pragma(c, "auto_vacuum"));
+        }
+    }
+
+    @Test
     void 두_dead_letter_이동_경로가_커밋된_목적지를_알린다() throws Exception {
         InstantSource clock = InstantSource.fixed(Instant.EPOCH);
         Duration wait = Duration.ofSeconds(1);

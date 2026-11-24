@@ -96,6 +96,7 @@ public interface Smq extends AutoCloseable {
         private final BuilderSettings settings = new BuilderSettings();
         private final Path path;
         private Durability durability = Durability.PROCESS_CRASH;
+        private boolean autoVacuum = true;
         private Duration lockWaitFloor = Duration.ofMillis(100);
 
         SqliteBuilder(Path path) {
@@ -108,6 +109,16 @@ public interface Smq extends AutoCloseable {
          */
         public SqliteBuilder durability(Durability durability) {
             this.durability = Objects.requireNonNull(durability, "durability");
+            return this;
+        }
+
+        /**
+         * 새 SQLite DB에서 빈 페이지를 자동 회수할지 정한다. 기본은 {@code true}(FULL)다.
+         * {@code false}면 NONE을 사용해 빈 페이지를 재사용한다. 기존 DB는 저장된 설정을 유지한다.
+         * FULL은 삭제 시 파일을 줄이지만 쓰기 비용이 늘 수 있다.
+         */
+        public SqliteBuilder autoVacuum(boolean enabled) {
+            this.autoVacuum = enabled;
             return this;
         }
 
@@ -146,7 +157,7 @@ public interface Smq extends AutoCloseable {
          * @throws StorageLockedException 파일을 다른 프로세스, 같은 JVM의 다른 인스턴스, 외부 SQLite 도구가 쥐고 있을 때
          */
         public Smq open() {
-            return settings.open(SqliteStorage.open(path, durability, lockWaitFloor));
+            return settings.open(SqliteStorage.open(path, durability, lockWaitFloor, autoVacuum));
         }
     }
 }

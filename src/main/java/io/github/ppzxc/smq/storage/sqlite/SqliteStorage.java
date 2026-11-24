@@ -133,7 +133,11 @@ public final class SqliteStorage implements Storage {
      *     0 이상이다. 공개 설정이 아니므로({@code Smq}의 빌더는 기본 100ms를 쓴다) 이 값을 바꿔 쓰는 곳은 테스트다.
      */
     public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
-        return open(path, durability, lockWaitFloor, SqliteStorage::connect);
+        return open(path, durability, lockWaitFloor, true);
+    }
+
+    public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor, boolean autoVacuum) {
+        return open(path, durability, lockWaitFloor, SqliteStorage::connect, autoVacuum);
     }
 
     @FunctionalInterface
@@ -142,6 +146,11 @@ public final class SqliteStorage implements Storage {
     }
 
     static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor, Connector connector) {
+        return open(path, durability, lockWaitFloor, connector, true);
+    }
+
+    private static SqliteStorage open(
+            Path path, Durability durability, Duration lockWaitFloor, Connector connector, boolean autoVacuum) {
         if (lockWaitFloor.isNegative()) {
             throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
         }
@@ -150,6 +159,7 @@ public final class SqliteStorage implements Storage {
         boolean success = false;
         try {
             connection = StatementCachingConnection.wrap(connector.connect(path, durability));
+            SqliteSchema.configureNewDatabase(connection, autoVacuum);
             TransactionExecutor executor = new TransactionExecutor(connection);
             executor.execute(c -> {
                 int version = SCHEMA.establish(c);

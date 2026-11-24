@@ -172,6 +172,14 @@ tasks.register<FullBenchmark>("benchmark") {
     doFirst { repeat.orNull?.let { args("--repeat", it) } }
 }
 
+tasks.register<JavaExec>("backlogBench") {
+    description = "발행량을 줄여 적체가 회복되는지 측정한다."
+    benchmarkRunner(layout.buildDirectory.dir("backlog-bench").get().asFile.path,
+            main = "io.github.ppzxc.smq.benchmark.BacklogBench")
+    args((findProperty("backlog.args") as String? ?: "100000 10000 5000 2000 30 180")
+            .split(" ").filter(String::isNotBlank))
+}
+
 // 무작위 블랙박스 하네스. 옵션은 `./gradlew randomBench --seed 42 --budget 10m`처럼 태스크 옵션으로 준다.
 abstract class RandomBench : JavaExec() {
     @get:Input

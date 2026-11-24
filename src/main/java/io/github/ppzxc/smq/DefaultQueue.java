@@ -93,7 +93,7 @@ final class DefaultQueue implements Queue {
         long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         return waiter.await(
                 name,
-                wait,
+                deadline,
                 () -> {
                     // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
                     Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));

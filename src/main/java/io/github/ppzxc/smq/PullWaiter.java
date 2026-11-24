@@ -126,13 +126,13 @@ final class PullWaiter {
      * @param empty 시간이 다했거나 닫혔을 때의 빈 결과
      */
     <T> T await(Duration wait, InterruptibleAttempt<T> attempt, Supplier<T> empty) throws InterruptedException {
-        return await(hint, wait, attempt, empty);
+        return await(hint, System.nanoTime() + Validation.saturatedWaitNanos(wait), attempt, empty);
     }
 
-    <T> T await(String queue, Duration wait, InterruptibleAttempt<T> attempt, Supplier<T> empty)
+    <T> T await(String queue, long deadline, InterruptibleAttempt<T> attempt, Supplier<T> empty)
             throws InterruptedException {
         if (!scoped) {
-            return await(wait, attempt, empty);
+            return await(hint, deadline, attempt, empty);
         }
         QueueSignal signal;
         synchronized (queues) {
@@ -140,7 +140,7 @@ final class PullWaiter {
             signal.users++;
         }
         try {
-            return await(signal.hint, wait, attempt, empty);
+            return await(signal.hint, deadline, attempt, empty);
         } finally {
             synchronized (queues) {
                 if (--signal.users == 0) {
@@ -150,9 +150,8 @@ final class PullWaiter {
         }
     }
 
-    private <T> T await(ChangeHint hint, Duration wait, InterruptibleAttempt<T> attempt, Supplier<T> empty)
+    private <T> T await(ChangeHint hint, long deadline, InterruptibleAttempt<T> attempt, Supplier<T> empty)
             throws InterruptedException {
-        long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         long pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
         while (true) {
             // 버전을 먼저 읽고 그다음 닫힘을 본다. 닫힘 확인 뒤에 close()가 끝나도 버전이 이미 올라가 있어

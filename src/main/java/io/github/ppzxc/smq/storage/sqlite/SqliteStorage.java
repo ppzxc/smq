@@ -551,6 +551,10 @@ public final class SqliteStorage implements Storage {
                         WITH candidates AS (
                           SELECT
                             q.single_active_consumer AS serial,
+                            CASE WHEN q.single_active_consumer AND q.max_deliveries IS NOT NULL THEN
+                              (SELECT MIN(available_at) FROM message
+                               WHERE queue_id = q.id AND available_at > ?1 AND delivery_count >= q.max_deliveries)
+                            END AS exhausted_delay,
                             (SELECT MIN(lease_deadline) FROM message
                              WHERE queue_id = q.id AND lease_deadline > ?1) AS first_lease,
                             (SELECT MAX(lease_deadline) FROM message
@@ -566,9 +570,9 @@ public final class SqliteStorage implements Storage {
                         )
                         SELECT CASE
                           WHEN serial AND last_lease IS NOT NULL THEN last_lease
-                          WHEN first_lease IS NULL THEN delay
-                          WHEN delay IS NULL THEN first_lease
-                          ELSE MIN(first_lease, delay)
+                          ELSE (SELECT MIN(at) FROM (
+                            SELECT first_lease AS at UNION ALL SELECT delay UNION ALL SELECT exhausted_delay
+                          ))
                         END FROM candidates""")) {
                             ps.setLong(1, now);
                             ps.setString(2, queue);

@@ -18,6 +18,7 @@ class PullWaiterTest {
     /** 호출을 기록하고 기다리지 않고 바로 돌아오는 힌트. {@code beforeVersion}은 버전을 읽기 직전에 실행한다. */
     private static final class RecordingHint implements ChangeHint {
         long version;
+        long versionSeenAtWait;
         final List<Duration> awaits = new ArrayList<>();
         Runnable beforeVersion = () -> {};
 
@@ -29,6 +30,7 @@ class PullWaiterTest {
 
         @Override
         public void await(long seen, Duration timeout) {
+            versionSeenAtWait = seen;
             awaits.add(timeout);
         }
 
@@ -36,6 +38,28 @@ class PullWaiterTest {
         public void wake() {
             version++;
         }
+    }
+
+    @Test
+    void 빈_꺼내기_중에_온_깨움은_대기할_때_이미_다른_버전이다() throws Exception {
+        RecordingHint hint = new RecordingHint();
+        PullWaiter waiter = new PullWaiter(hint, true);
+        AtomicInteger calls = new AtomicInteger();
+
+        assertEquals(
+                "found",
+                waiter.await(
+                        Duration.ofSeconds(30),
+                        () -> {
+                            if (calls.getAndIncrement() == 0) {
+                                waiter.wake();
+                                return Attempt.empty();
+                            }
+                            return Attempt.found("found");
+                        },
+                        () -> "empty"));
+        assertEquals(0, hint.versionSeenAtWait);
+        assertEquals(1, hint.version());
     }
 
     @Test

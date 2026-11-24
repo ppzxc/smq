@@ -6,6 +6,7 @@ import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.SmqStorageException;
+import io.github.ppzxc.smq.storage.Disposition;
 import io.github.ppzxc.smq.storage.NewMessage;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
@@ -23,6 +24,7 @@ import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -38,6 +40,54 @@ class SqliteStorageTest {
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("PRAGMA " + name)) {
             return rs.getString(1);
+        }
+    }
+
+    @Test
+    void 두_dead_letter_이동_경로가_커밋된_목적지를_알린다() throws Exception {
+        InstantSource clock = InstantSource.fixed(Instant.EPOCH);
+        Duration wait = Duration.ofSeconds(1);
+        List<Optional<String>> destinations = new ArrayList<>();
+        try (SqliteStorage storage = SqliteStorage.open(dir.resolve("dead-notice.db"), Durability.PROCESS_CRASH)) {
+            storage.declare("dead", QueueOptions.defaults());
+            storage.declare("q", QueueOptions.defaults().maxDeliveries(1, "dead"));
+            var message = new NewMessage(new byte[0], Map.of());
+            var ids = storage.publish("q", List.of(message, message), clock);
+            var chunk = storage.pull("q", 2, wait, clock);
+            storage.settle(
+                    java.util.Objects.requireNonNull(chunk.token()),
+                    List.of(
+                            new Disposition(ids.get(0), Disposition.Kind.REJECT),
+                            new Disposition(ids.get(1), Disposition.Kind.NACK)),
+                    clock,
+                    destinations::add);
+            assertEquals(List.of(Optional.of("dead")), destinations);
+            storage.pull("q", 1, wait, clock, wait, destinations::add);
+            assertEquals(List.of(Optional.of("dead"), Optional.of("dead")), destinations);
+            assertEquals(2, storage.pull("dead", 2, wait, clock).messages().size());
+        }
+    }
+
+    @Test
+    void 단일_활성_큐는_앞선_지연_메시지_뒤에서도_소진된_메시지를_먼저_옮긴다() throws Exception {
+        InstantSource clock = InstantSource.fixed(Instant.EPOCH);
+        try (SqliteStorage storage = SqliteStorage.open(dir.resolve("serial-ready.db"), Durability.PROCESS_CRASH)) {
+            storage.declare("dead", QueueOptions.defaults());
+            storage.declare(
+                    "q", QueueOptions.defaults().singleActiveConsumer(true).maxDeliveries(1, "dead"));
+            var message = new NewMessage(new byte[0], Map.of());
+            var ids = storage.publish("q", List.of(message, message), clock);
+            var chunk = storage.pull("q", 2, Duration.ofSeconds(30), clock);
+            storage.settle(
+                    java.util.Objects.requireNonNull(chunk.token()),
+                    List.of(
+                            new Disposition(ids.get(0), Disposition.Kind.NACK, Duration.ofSeconds(10)),
+                            new Disposition(ids.get(1), Disposition.Kind.NACK, Duration.ofSeconds(2))),
+                    clock);
+
+            assertEquals(
+                    Instant.EPOCH.plusSeconds(2),
+                    storage.nextReadyAt("q", clock, Duration.ofSeconds(1)).orElseThrow());
         }
     }
 

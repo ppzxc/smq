@@ -51,7 +51,10 @@ public interface Storage extends AutoCloseable {
         return pull(queue, max, lease, clock);
     }
 
-    /** 꺼내기 중 이동한 dead letter의 목적지를 알린다. 목적지를 모르면 빈 값을 알린다. */
+    /**
+     * 꺼내기 중 이동한 dead letter의 목적지를 알린다. 목적지를 모르면 빈 값을 알린다.
+     * 알림은 변경이 커밋되고 저장소의 lock을 놓은 뒤 전달한다. 콜백은 예외를 던지지 않아야 한다.
+     */
     default PullResult pull(
             String queue,
             int max,
@@ -81,7 +84,10 @@ public interface Storage extends AutoCloseable {
     /** 한 트랜잭션으로 반영하고 메시지별 결과를 돌려준다. */
     List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock);
 
-    /** 정산 중 이동한 dead letter의 목적지를 알린다. 목적지를 모르면 빈 값을 알린다. */
+    /**
+     * 정산 중 이동한 dead letter의 목적지를 알린다. 목적지를 모르면 빈 값을 알린다.
+     * 알림은 변경이 커밋되고 저장소의 lock을 놓은 뒤 전달한다. 콜백은 예외를 던지지 않아야 한다.
+     */
     default List<Result> settle(
             LeaseToken token, List<Disposition> items, InstantSource clock, Consumer<Optional<String>> deadLetter) {
         List<Result> results = settle(token, items, clock);

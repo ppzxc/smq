@@ -121,7 +121,7 @@ final class TransactionExecutor {
         return read(probe, Deadline.NONE);
     }
 
-    private <T> T read(TxBody<T> probe, Deadline deadline) {
+    <T> T read(TxBody<T> probe, Deadline deadline) {
         acquire(deadline);
         try {
             checkFailure();

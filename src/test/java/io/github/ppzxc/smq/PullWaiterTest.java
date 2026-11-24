@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.ppzxc.smq.PullWaiter.Attempt;
 import io.github.ppzxc.smq.storage.ChangeHint;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -18,6 +19,7 @@ class PullWaiterTest {
     /** 호출을 기록하고 기다리지 않고 바로 돌아오는 힌트. {@code beforeVersion}은 버전을 읽기 직전에 실행한다. */
     private static final class RecordingHint implements ChangeHint {
         long version;
+        long versionSeenAtWait;
         final List<Duration> awaits = new ArrayList<>();
         Runnable beforeVersion = () -> {};
 
@@ -29,6 +31,7 @@ class PullWaiterTest {
 
         @Override
         public void await(long seen, Duration timeout) {
+            versionSeenAtWait = seen;
             awaits.add(timeout);
         }
 
@@ -36,6 +39,72 @@ class PullWaiterTest {
         public void wake() {
             version++;
         }
+    }
+
+    @Test
+    void 큐별_깨움은_다른_큐에_전달되지_않고_전체_깨움은_둘_다에_전달된다() throws Exception {
+        RecordingHint first = new RecordingHint();
+        RecordingHint second = new RecordingHint();
+        var hints = new ArrayDeque<ChangeHint>(List.of(first, second));
+        PullWaiter waiter = new PullWaiter(new RecordingHint(), false, true, hints::removeFirst);
+        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+
+        String result = waiter.await(
+                "first",
+                deadline,
+                () -> Attempt.found(waiter.await(
+                        "second",
+                        deadline,
+                        () -> {
+                            waiter.wake("first");
+                            assertEquals(1, first.version());
+                            assertEquals(0, second.version());
+                            waiter.wake();
+                            assertEquals(2, first.version());
+                            assertEquals(1, second.version());
+                            return Attempt.found("found");
+                        },
+                        () -> "empty")),
+                () -> "empty");
+        assertEquals("found", result);
+    }
+
+    @Test
+    void 빈_꺼내기_중에_온_깨움은_대기할_때_이미_다른_버전이다() throws Exception {
+        RecordingHint hint = new RecordingHint();
+        PullWaiter waiter = new PullWaiter(hint, true);
+        AtomicInteger calls = new AtomicInteger();
+
+        assertEquals(
+                "found",
+                waiter.await(
+                        Duration.ofSeconds(30),
+                        () -> {
+                            if (calls.getAndIncrement() == 0) {
+                                waiter.wake();
+                                return Attempt.empty();
+                            }
+                            return Attempt.found("found");
+                        },
+                        () -> "empty"));
+        assertEquals(0, hint.versionSeenAtWait);
+        assertEquals(1, hint.version());
+    }
+
+    @Test
+    void 준비_시각이_폴링보다_가까우면_그_간격만_기다린다() throws Exception {
+        RecordingHint hint = new RecordingHint();
+        PullWaiter waiter = new PullWaiter(hint, true);
+        AtomicInteger calls = new AtomicInteger();
+        Duration delay = Duration.ofMillis(40);
+
+        assertEquals(
+                "found",
+                waiter.await(
+                        Duration.ofSeconds(30),
+                        () -> calls.getAndIncrement() == 0 ? Attempt.empty(delay) : Attempt.found("found"),
+                        () -> "empty"));
+        assertEquals(List.of(delay), hint.awaits);
     }
 
     @Test

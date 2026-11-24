@@ -5,9 +5,11 @@ import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.InstantSource;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * 큐 연산 단위의 저장소 SPI(내부 계약). 각 연산의 원자성은 저장소가 책임지고, 시각은 저장소가 연산의 lock 안에서 시계로 읽는다. 인스턴스 하나는 스레드 안전하다.
@@ -49,8 +51,51 @@ public interface Storage extends AutoCloseable {
         return pull(queue, max, lease, clock);
     }
 
+    /**
+     * 꺼내기 중 이동한 dead letter의 목적지를 알린다. 목적지를 모르면 빈 값을 알린다.
+     * 알림은 변경이 커밋되고 저장소의 lock을 놓은 뒤 전달한다. 콜백은 예외를 던지지 않아야 한다.
+     */
+    default PullResult pull(
+            String queue,
+            int max,
+            Duration lease,
+            InstantSource clock,
+            Duration wait,
+            Consumer<Optional<String>> deadLetter)
+            throws InterruptedException {
+        PullResult result = pull(queue, max, lease, clock, wait);
+        if (result.deadLettersMoved()) {
+            deadLetter.accept(Optional.empty());
+        }
+        return result;
+    }
+
+    /** 코어가 프로세스 내부 변경 알림을 큐별로 보낼 수 있는지 나타낸다. */
+    default boolean supportsQueueWakeups() {
+        return false;
+    }
+
+    /** 빈 꺼내기 뒤 시간 경과로 결과가 달라질 수 있는 시각. 알 수 없으면 빈 값이다. */
+    default Optional<Instant> nextReadyAt(String queue, InstantSource clock, Duration wait)
+            throws InterruptedException {
+        return Optional.empty();
+    }
+
     /** 한 트랜잭션으로 반영하고 메시지별 결과를 돌려준다. */
     List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock);
+
+    /**
+     * 정산 중 이동한 dead letter의 목적지를 알린다. 목적지를 모르면 빈 값을 알린다.
+     * 알림은 변경이 커밋되고 저장소의 lock을 놓은 뒤 전달한다. 콜백은 예외를 던지지 않아야 한다.
+     */
+    default List<Result> settle(
+            LeaseToken token, List<Disposition> items, InstantSource clock, Consumer<Optional<String>> deadLetter) {
+        List<Result> results = settle(token, items, clock);
+        if (items.stream().anyMatch(item -> item.kind() == Disposition.Kind.REJECT)) {
+            deadLetter.accept(Optional.empty());
+        }
+        return results;
+    }
 
     /**
      * 리스를 "처리하는 시각 + {@code d}"로 바꾼다. 정산과 같은 토큰 일치 기준으로 메시지별 결과를 돌려준다.

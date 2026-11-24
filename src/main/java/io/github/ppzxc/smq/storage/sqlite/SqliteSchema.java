@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * 열 때의 스키마 판정. 빈 파일이면 만들고, smq 파일이 아니면 거부하고, 더 높은 버전이면 거부하고,
  * 낮은 버전이면 한 단계씩 올린다. 첫 생성 DDL과 {@code application_id}도 여기 있다. 상태가 없다.
- * 목표 버전과 업그레이드 단계 목록은 주입받는다. 운영 코드는 목표 버전 1과 빈 목록을 쓴다.
+ * 목표 버전과 업그레이드 단계 목록은 주입받는다.
  */
 final class SqliteSchema {
 
@@ -42,10 +42,14 @@ final class SqliteSchema {
         boolean empty;
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
+            if (!rs.next()) {
+                throw new SQLException("schema count row missing");
+            }
             empty = rs.getInt(1) == 0;
         }
         if (empty && applicationId == 0) {
-            create(c);
+            createV1(c);
+            upgrade(c, 1);
             return targetVersion;
         }
         if (applicationId != APPLICATION_ID) {
@@ -60,7 +64,7 @@ final class SqliteSchema {
         return targetVersion;
     }
 
-    private void create(Connection c) throws SQLException {
+    private static void createV1(Connection c) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute("""
                     CREATE TABLE queue (
@@ -86,7 +90,36 @@ final class SqliteSchema {
             s.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)");
             s.execute("INSERT INTO meta(key, value) VALUES ('lease_seq', 0)");
             s.execute("PRAGMA application_id = " + APPLICATION_ID);
-            s.execute("PRAGMA user_version = " + targetVersion);
+            s.execute("PRAGMA user_version = 1");
+        }
+    }
+
+    static void upgradeV1ToV2(Connection c) throws SQLException {
+        try (Statement s = c.createStatement()) {
+            s.execute("""
+                    CREATE INDEX message_stored_ready ON message(queue_id, id)
+                      WHERE lease_deadline IS NULL AND available_at IS NULL""");
+            s.execute("""
+                    CREATE INDEX message_lease_deadline ON message(queue_id, lease_deadline)
+                      WHERE lease_deadline IS NOT NULL""");
+            s.execute("""
+                    CREATE INDEX message_available_at ON message(queue_id, available_at)
+                      WHERE available_at IS NOT NULL""");
+            s.execute("""
+                    CREATE INDEX message_redelivered_ready ON message(queue_id, delivery_count, id)
+                      WHERE lease_deadline IS NULL AND available_at IS NULL AND delivery_count > 0""");
+            s.execute("""
+                    UPDATE message SET available_at = NULL
+                      WHERE lease_token IS NOT NULL AND available_at IS NOT NULL""");
+        }
+    }
+
+    // Schema v2 files created before this index was introduced remain compatible.
+    static void ensureDelayedIdIndex(Connection c) throws SQLException {
+        try (Statement s = c.createStatement()) {
+            s.execute("""
+                    CREATE INDEX IF NOT EXISTS message_delayed_id ON message(queue_id, id)
+                      WHERE available_at IS NOT NULL""");
         }
     }
 
@@ -120,6 +153,9 @@ final class SqliteSchema {
     static int pragmaInt(Connection c, String name) throws SQLException {
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("PRAGMA " + name)) {
+            if (!rs.next()) {
+                throw new SQLException("pragma row missing: " + name);
+            }
             return rs.getInt(1);
         }
     }

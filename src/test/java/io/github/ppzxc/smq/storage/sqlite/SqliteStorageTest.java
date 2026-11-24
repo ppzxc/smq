@@ -5,18 +5,25 @@ import static org.junit.jupiter.api.Assertions.*;
 import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
 import io.github.ppzxc.smq.QueueOptions;
+import io.github.ppzxc.smq.SmqStorageException;
 import io.github.ppzxc.smq.storage.NewMessage;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -35,12 +42,29 @@ class SqliteStorageTest {
     }
 
     @Test
-    void 새_파일에_스키마_v1과_표식을_기록한다() throws Exception {
+    void 열기에서_Error가_나면_락을_놓고_같은_파일을_다시_연다() {
+        Path db = dir.resolve("error.db");
+        Error failure = new LinkageError("injected");
+        assertSame(
+                failure,
+                assertThrows(
+                        LinkageError.class,
+                        () -> SqliteStorage.open(
+                                db, Durability.POWER_LOSS, Deadline.DEFAULT_LOCK_WAIT_FLOOR, (p, d) -> {
+                                    throw failure;
+                                })));
+        try (SqliteStorage ignored = SqliteStorage.open(db, Durability.POWER_LOSS)) {
+            assertNotNull(ignored);
+        }
+    }
+
+    @Test
+    void 새_파일에_스키마_v2와_표식을_기록한다() throws Exception {
         Path db = dir.resolve("smq.db");
         SqliteStorage.open(db, Durability.POWER_LOSS).close();
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db)) {
             assertEquals(String.valueOf(SqliteStorage.APPLICATION_ID), pragma(c, "application_id"));
-            assertEquals("1", pragma(c, "user_version"));
+            assertEquals("2", pragma(c, "user_version"));
             assertEquals("wal", pragma(c, "journal_mode"));
         }
     }
@@ -75,31 +99,89 @@ class SqliteStorageTest {
     }
 
     @Test
-    void 꺼내기가_쓰는_쿼리는_인덱스를_탄다() throws Exception {
-        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
-            for (String sql : List.of(SqliteStorage.SELECT_PULLABLE, SqliteStorage.SELECT_EXHAUSTED)) {
-                List<String> plan = s.inTransaction(c -> {
-                    List<String> rows = new ArrayList<>();
-                    try (var ps = c.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
-                        ps.setLong(1, 1);
-                        ps.setLong(2, 0);
-                        ps.setLong(3, 0);
-                        ps.setInt(4, 3);
-                        ps.setInt(5, 10);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                rows.add(rs.getString("detail"));
-                            }
-                        }
-                    }
-                    return rows;
-                });
-                String joined = String.join("\n", plan);
-                assertTrue(joined.contains("USING INDEX") || joined.contains("USING COVERING INDEX"), joined);
-                assertFalse(joined.contains("TEMP B-TREE"), joined);
-                assertFalse(joined.contains("SCAN message"), joined);
+    void existingV2SampleInstallsDelayedIndexAtomically() throws Exception {
+        Path db = dir.resolve("v2.db");
+        try (var sample = getClass().getResourceAsStream("/schema-samples/schema-v2-before-delayed-index.db")) {
+            assertNotNull(sample);
+            Files.copy(sample, db);
+        }
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db)) {
+            c.setAutoCommit(false);
+            SqliteSchema.ensureDelayedIdIndex(c);
+            c.rollback();
+            try (Statement st = c.createStatement();
+                    ResultSet rs =
+                            st.executeQuery("SELECT count(*) FROM sqlite_schema WHERE name = 'message_delayed_id'")) {
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
             }
         }
+        try (SqliteStorage storage = SqliteStorage.open(db, Durability.POWER_LOSS)) {
+            assertSearchesIndex(
+                    explain(storage, SqliteStorage.SELECT_DELAY_BARRIER, 1L), "message_delayed_id", "(queue_id=?)");
+            assertEquals("2", storage.inTransaction(c -> pragma(c, "user_version")));
+        }
+    }
+
+    @Test
+    void pullQueriesSeekByStoredStateAndDeadline() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
+            for (String sql : List.of(SqliteStorage.SELECT_PULLABLE, SqliteStorage.SELECT_PULLABLE_STATE)) {
+                String plan = explain(s, sql, 1L, 3, Long.MAX_VALUE, 10);
+                assertSearchesIndex(plan, "message_stored_ready", "(queue_id=? AND id<?)");
+            }
+            String exhausted = explain(s, SqliteStorage.SELECT_EXHAUSTED, 1L, 3, 10);
+            assertSearchesIndex(exhausted, "message_redelivered_ready", "(queue_id=? AND delivery_count>?)");
+
+            assertSearchesIndex(
+                    explain(s, SqliteStorage.SELECT_DELAY_BARRIER, 1L), "message_delayed_id", "(queue_id=?)");
+
+            String active = explain(s, SqliteStorage.SELECT_ACTIVE_LEASE, 1L, 0L);
+            assertSearchesIndex(active, "message_lease_deadline", "(queue_id=? AND lease_deadline>?)");
+            assertTrue(active.contains("USING COVERING INDEX"), active);
+
+            assertSearchesIndex(
+                    explain(s, SqliteStorage.PROMOTE_EXPIRED_LEASES, 1L, 0L),
+                    "message_lease_deadline",
+                    "(queue_id=? AND lease_deadline<?)");
+            assertSearchesIndex(
+                    explain(s, SqliteStorage.PROMOTE_DUE_DELAYS, 1L, 0L),
+                    "message_available_at",
+                    "(queue_id=? AND available_at<?)");
+
+            String read = explain(s, SqliteStorage.ANY_READY, "q", "q", 0L, "q", 0L, "q");
+            assertSearchesIndex(read, "message_stored_ready", "(queue_id=?)");
+            assertSearchesIndex(read, "message_lease_deadline", "(queue_id=? AND lease_deadline<?)");
+            assertSearchesIndex(read, "message_available_at", "(queue_id=? AND available_at<?)");
+        }
+    }
+
+    private static String explain(SqliteStorage storage, String sql, Object... bindings) {
+        return storage.inTransaction(c -> {
+            List<String> rows = new ArrayList<>();
+            try (var ps = c.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
+                for (int i = 0; i < bindings.length; i++) {
+                    ps.setObject(i + 1, bindings[i]);
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        rows.add(rs.getString("detail"));
+                    }
+                }
+            }
+            String plan = String.join("\n", rows);
+            assertFalse(plan.contains("SCAN message"), plan);
+            assertFalse(plan.contains("TEMP B-TREE"), plan);
+            return plan;
+        });
+    }
+
+    private static void assertSearchesIndex(String plan, String index, String constraints) {
+        assertTrue(
+                plan.lines()
+                        .anyMatch(row -> row.startsWith("SEARCH message USING ")
+                                && row.endsWith("INDEX " + index + " " + constraints)),
+                plan);
     }
 
     @Test
@@ -115,8 +197,117 @@ class SqliteStorageTest {
             s.declare("q", QueueOptions.defaults());
             var ok = new io.github.ppzxc.smq.storage.NewMessage(new byte[] {1}, java.util.Map.of());
             var bad = new io.github.ppzxc.smq.storage.NewMessage(null, java.util.Map.of());
-            assertThrows(RuntimeException.class, () -> s.publish("q", List.of(ok, bad), Instant.EPOCH));
+            assertThrows(
+                    RuntimeException.class, () -> s.publish("q", List.of(ok, bad), InstantSource.fixed(Instant.EPOCH)));
             assertEquals(0, s.counts("q").ready());
+        }
+    }
+
+    @Test
+    void 큐_존재와_옵션_조회는_쓰기_트랜잭션을_열지_않는다() {
+        AtomicInteger begins = new AtomicInteger();
+        try (SqliteStorage s = SqliteStorage.open(
+                dir.resolve("read.db"), Durability.POWER_LOSS, Deadline.DEFAULT_LOCK_WAIT_FLOOR, (path, durability) -> {
+                    Connection real = SqliteStorage.connect(path, durability);
+                    return (Connection) Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (p, m, a) -> {
+                                Object result;
+                                try {
+                                    result = m.invoke(real, a);
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                                if (!m.getName().equals("createStatement")) return result;
+                                Statement st = (Statement) result;
+                                return Proxy.newProxyInstance(
+                                        Statement.class.getClassLoader(),
+                                        new Class<?>[] {Statement.class},
+                                        (p2, m2, a2) -> {
+                                            if (m2.getName().equals("execute")
+                                                    && a2 != null
+                                                    && a2.length > 0
+                                                    && "BEGIN IMMEDIATE".equals(a2[0])) begins.incrementAndGet();
+                                            try {
+                                                return m2.invoke(st, a2);
+                                            } catch (InvocationTargetException e) {
+                                                throw e.getCause();
+                                            }
+                                        });
+                            });
+                })) {
+            s.declare("q", QueueOptions.defaults());
+            int before = begins.get();
+            assertTrue(s.exists("q"));
+            assertTrue(s.options("q").isPresent());
+            assertFalse(s.exists("missing"));
+            assertTrue(s.options("missing").isEmpty());
+            assertEquals(before, begins.get());
+        }
+    }
+
+    @Test
+    void pullTransfersLargePromotionCountWithoutOverflow() {
+        long promoted = (long) Integer.MAX_VALUE + 1;
+        try (SqliteStorage s = SqliteStorage.open(
+                dir.resolve("large-count.db"),
+                Durability.POWER_LOSS,
+                Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                (path, durability) -> {
+                    Connection real = SqliteStorage.connect(path, durability);
+                    return (Connection) Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (p, m, a) -> {
+                                Object result;
+                                try {
+                                    result = m.invoke(real, a);
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                                if (!m.getName().equals("prepareStatement")
+                                        || a == null
+                                        || !SqliteStorage.PROMOTE_DUE_DELAYS.equals(a[0])) return result;
+                                PreparedStatement statement = (PreparedStatement) result;
+                                return Proxy.newProxyInstance(
+                                        PreparedStatement.class.getClassLoader(),
+                                        new Class<?>[] {PreparedStatement.class},
+                                        (p2, m2, a2) -> {
+                                            if (m2.getName().equals("executeLargeUpdate")) {
+                                                statement.executeLargeUpdate();
+                                                return promoted;
+                                            }
+                                            if (m2.getName().equals("executeUpdate")) {
+                                                statement.executeUpdate();
+                                                return (int) promoted;
+                                            }
+                                            try {
+                                                return m2.invoke(statement, a2);
+                                            } catch (InvocationTargetException e) {
+                                                throw e.getCause();
+                                            }
+                                        });
+                            });
+                })) {
+            s.declare("q", QueueOptions.defaults());
+            s.publish("q", List.of(message()), InstantSource.fixed(Instant.EPOCH));
+            s.pull("q", 1, Duration.ofSeconds(1), InstantSource.fixed(Instant.EPOCH));
+            assertEquals(promoted, s.counts("q").ready());
+            assertEquals(-promoted, s.counts("q").delayed());
+        }
+    }
+
+    @Test
+    void 손상된_헤더는_꺼내기에서_저장소_오류다() {
+        try (SqliteStorage s = SqliteStorage.open(dir.resolve("bad.db"), Durability.POWER_LOSS)) {
+            s.declare("q", QueueOptions.defaults());
+            s.publish("q", List.of(message()), InstantSource.fixed(Instant.EPOCH));
+            s.inTransaction(c -> {
+                try (Statement st = c.createStatement()) {
+                    st.execute("UPDATE message SET headers = X'000000017fffffff'");
+                }
+                return null;
+            });
+            assertThrows(
+                    SmqStorageException.class,
+                    () -> s.pull("q", 1, Duration.ofSeconds(1), InstantSource.fixed(Instant.EPOCH)));
         }
     }
 
@@ -145,7 +336,7 @@ class SqliteStorageTest {
             assertEquals("wal", s.inTransaction(c -> pragma(c, "journal_mode")));
         }
         try (SqliteStorage s = SqliteStorage.open(db, durability)) {
-            s.publish("q", List.of(message()), Instant.EPOCH);
+            s.publish("q", List.of(message()), InstantSource.fixed(Instant.EPOCH));
             assertFalse(Files.exists(shm), "다시 열어도 -shm이 생기면 안 된다");
             String expected = durability == Durability.POWER_LOSS ? "2" : "1";
             assertEquals(expected, s.inTransaction(c -> pragma(c, "synchronous")));

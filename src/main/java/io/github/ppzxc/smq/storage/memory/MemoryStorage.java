@@ -161,9 +161,10 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public List<MessageId> publish(String queue, List<NewMessage> batch, Instant now) {
+    public List<MessageId> publish(String queue, List<NewMessage> batch, InstantSource clock) {
         lock.lock();
         try {
+            Instant now = clock.instant();
             TreeMap<Long, Entry> messages = require(queue);
             // 항목을 모두 만든 뒤에 반영해서, 중간에 실패해도 일부만 들어가지 않게 한다.
             List<Entry> entries = new ArrayList<>(batch.size());
@@ -184,9 +185,10 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public PullResult pull(String queue, int max, Duration lease, Instant now) {
+    public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
         lock.lock();
         try {
+            Instant now = clock.instant();
             TreeMap<Long, Entry> entries = require(queue);
             QueueOptions options = requireOptions(queue);
             // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
@@ -196,11 +198,15 @@ public final class MemoryStorage implements Storage {
             List<Entry> picked = new ArrayList<>();
             List<Entry> exhausted = new ArrayList<>();
             boolean deadLettersRemain = false;
+            boolean blocked = false;
             boolean moves = options.maxDeliveries().isPresent();
             for (Entry e : entries.values()) {
                 // 소진 메시지를 옮기려면 청크가 차도 끝까지 훑어야 한다. 옮길 일이 없는 큐는 청크가 차면 멈춘다.
                 if (picked.size() == max && !moves) {
                     break;
+                }
+                if (options.singleActiveConsumer() && isDelayed(e, now)) {
+                    blocked = true;
                 }
                 if (!isReady(e, now)) {
                     continue;
@@ -211,7 +217,7 @@ public final class MemoryStorage implements Storage {
                     } else {
                         deadLettersRemain = true;
                     }
-                } else if (picked.size() < max) {
+                } else if (!blocked && picked.size() < max) {
                     picked.add(e);
                 }
             }
@@ -225,7 +231,9 @@ public final class MemoryStorage implements Storage {
                 }
             }
             if (picked.isEmpty()) {
-                return deadLettersRemain ? PullResult.emptyDeadLettersRemain() : PullResult.empty();
+                return deadLettersRemain
+                        ? PullResult.emptyDeadLettersRemain(!exhausted.isEmpty())
+                        : PullResult.empty(!exhausted.isEmpty());
             }
             long token = nextLeaseToken++;
             Instant deadline = now.plus(lease);
@@ -236,16 +244,17 @@ public final class MemoryStorage implements Storage {
                 e.deliveryCount++;
                 messages.add(new Message(e.id, e.payload, e.headers, e.deliveryCount, e.publishedAt));
             }
-            return PullResult.of(new LeaseToken(token), deadline, messages);
+            return PullResult.of(new LeaseToken(token), deadline, messages, !exhausted.isEmpty());
         } finally {
             lock.unlock();
         }
     }
 
     @Override
-    public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {
+    public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
         lock.lock();
         try {
+            Instant now = clock.instant();
             requireDeadLetterQueues(token, items);
             List<Result> results = new ArrayList<>(items.size());
             for (Disposition d : items) {

@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * 커밋된 {@code schema-v1.db} 견본(재생성 방법은 같은 폴더의 README)을 복사해 연다. 공개 API로만 보존을 확인하고,
- * 파일 조작은 {@code user_version}을 올린 복사본을 만들 때만 JDBC를 쓴다.
+ * JDBC는 별도 파일 상태를 꾸미는 데만 쓴다.
  */
 class SchemaV1SampleTest {
 
@@ -56,10 +57,19 @@ class SchemaV1SampleTest {
 
     @Test
     void 견본을_열면_메시지_id_전달_횟수_헤더가_보존되고_리스_기한에_재전달된다() throws Exception {
+        Path copy = StorageFactory.copyV1Sample(dir.resolve("smq.db"));
+        // 버전 1은 지연이 끝난 메시지를 리스하면서도 꺼낼 시각을 남겼다.
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy);
+                PreparedStatement ps = c.prepareStatement("""
+                        UPDATE message SET published_at = published_at - 2, available_at = published_at - 1
+                        WHERE id = ?
+                        """)) {
+            ps.setLong(1, IDS_M1);
+            ps.executeUpdate();
+        }
+
         MutableClock clock = new MutableClock(T0);
-        try (Smq smq = Smq.sqlite(StorageFactory.copyV1Sample(dir.resolve("smq.db")))
-                .clock(clock)
-                .open()) {
+        try (Smq smq = Smq.sqlite(copy).clock(clock).open()) {
             Queue orders = smq.queue("v1-orders");
 
             // 준비 상태 메시지
@@ -88,6 +98,7 @@ class SchemaV1SampleTest {
                     redelivered.messages().getFirst().headers());
             assertEquals(
                     new MessageId(IDS_M1), redelivered.messages().getFirst().id());
+            assertEquals(T0.minusNanos(2), redelivered.messages().getFirst().publishedAt());
 
             // 지연됨 메시지는 지연 시간이 지나야 나온다
             assertEquals(new QueueCounts(0, 2, 1), orders.counts());

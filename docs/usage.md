@@ -28,7 +28,7 @@ Queue orders = smq.declare("orders",
 - 같은 옵션으로 다시 선언하면 아무 일도 없고, 옵션이 다르면 `QueueDeclarationConflictException`이다. 그래서 시작할 때마다 선언해도 된다.
 - `maxDeliveries(limit, dlq)`: 전달 횟수를 `limit`번 다 쓴 메시지를 dead letter 큐로 옮긴다. dead letter 큐는 먼저 선언돼 있어야 한다. 기본은 **무제한**이다([ADR 0001](adr/0001-no-default-delivery-limit.md)).
 - `deadLetterQueue(dlq)`: 한도 없이 reject한 메시지만 받을 dead letter 큐를 지정한다.
-- `singleActiveConsumer(true)`: 한 번에 한 청크만 리스되게 한다. 순서가 필요한 소비에 쓴다.
+- `singleActiveConsumer(true)`: 한 번에 한 청크만 리스되게 한다. 순서가 필요한 소비에 쓰며 지연 발행이나 지연 NACK된 메시지 뒤의 메시지는 지연이 끝날 때까지 막는다. 지연 메시지 앞의 준비 메시지는 꺼낼 수 있고, 막힌 준비 메시지도 `counts()`에서 준비로 센다. 뒤를 막고 싶지 않은 지연 작업은 단일 활성 컨슈머가 아닌 큐에 발행한다.
 - `smq.queue(name)`으로 선언된 큐를 가져오고(없으면 `QueueNotFoundException`), `smq.delete(name)`으로 큐를 메시지째 지운다(다른 큐의 dead letter 큐로 쓰이는 중이면 `QueueInUseException`).
 
 ## 발행
@@ -139,3 +139,6 @@ if (!ext.outcomes().allOk()) { /* 일부는 이미 다른 리스로 넘어갔거
 - **SQLite 파일을 디버깅 도구로 열기**: smq가 멈춰 있을 때는 sqlite3 CLI 같은 도구로 열어도 된다. 단 도구를 띄워 둔 채 smq를 시작하면 도구의 공유 락 때문에 smq가 `StorageLockedException`으로 못 열 수 있으니 도구를 닫고 시작한다. smq가 실행 중일 때는 `EXCLUSIVE` 모드라 외부 연결이 읽을 수 없다. 비상용으로 URI `file:<경로>?immutable=1`로 읽을 수는 있지만 파일이 바뀌면 결과가 틀리거나 `SQLITE_CORRUPT`가 날 수 있어 안전하지 않다. 실행 중에는 `Smq.snapshot(Path)`가 안전하다. `VACUUM INTO`로 일관된 사본을 만들며, 그동안 다른 연산이 DB 크기에 비례해 멈추고, 대상은 새 경로여야 하며 같은 파일시스템에 하드 링크가 가능해야 한다([ADR 0013](adr/0013-snapshot-via-vacuum-into-under-the-java-lock.md)). SQLite 전용이다.
 - **스키마 업그레이드**: 파일을 열 때 스키마 버전이 낮으면 자동으로 올린다. 버전이 더 높거나 smq 파일이 아니면 `IncompatibleStorageException`으로 거부한다([ADR 0015](adr/0015-schema-is-upgraded-automatically-when-opened.md)).
 - **스레드 안전**: `Smq`와 `Queue`, 불변 값인 `Chunk`와 `Settlement`는 여러 스레드에서 써도 된다.
+
+발행과 NACK의 지연 및 기본·꺼내기·연장 리스 기간은 최대 36,500일(100년)이며 상한을 포함한다. 더 긴 값은 `IllegalArgumentException`이다. 꺼내기 대기 시간에는 상한이 없다.
+발행 시각과 발행·NACK 지연, 꺼내기와 연장의 리스 기한은 저장소가 연산을 처리할 때 읽은 벽시계를 기준으로 한다. 락 대기 시간은 리스나 지연을 미리 소모하지 않는다. 시스템 시계가 바뀌면 실제 경과 시간도 달라질 수 있다.

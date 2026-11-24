@@ -8,6 +8,7 @@ import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ class StorageFactoryTest {
 
     private static void publishOne(Storage s) {
         s.declare("extra", QueueOptions.defaults());
-        s.publish("extra", List.of(new NewMessage(new byte[] {1}, Map.of())), T0);
+        s.publish("extra", List.of(new NewMessage(new byte[] {1}, Map.of())), InstantSource.fixed(T0));
     }
 
     @Test

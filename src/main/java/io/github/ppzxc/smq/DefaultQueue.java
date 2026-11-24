@@ -48,12 +48,14 @@ final class DefaultQueue implements Queue {
 
     @Override
     public QueueCounts counts() {
+        waiter.requireOpen();
         return storage.counts(name);
     }
 
     @Override
     public List<MessageId> publish(List<OutgoingMessage> batch) {
         Objects.requireNonNull(batch, "batch");
+        waiter.requireOpen();
         List<NewMessage> converted = batch.stream()
                 .map(m -> {
                     Objects.requireNonNull(m, "batch element");
@@ -63,7 +65,7 @@ final class DefaultQueue implements Queue {
         if (converted.isEmpty()) {
             return List.of();
         }
-        List<MessageId> ids = storage.publish(name, converted, clock.instant());
+        List<MessageId> ids = storage.publish(name, converted, clock);
         waiter.wake();
         return ids;
     }
@@ -87,13 +89,16 @@ final class DefaultQueue implements Queue {
             throw new IllegalArgumentException("wait must not be negative: " + wait);
         }
         Validation.positive(leaseDuration, "leaseDuration");
-        long deadline = System.nanoTime() + wait.toNanos();
+        long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         return waiter.await(
                 wait,
                 () -> {
                     // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
                     Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
-                    PullResult r = storage.pull(name, max, leaseDuration, clock.instant(), remaining);
+                    PullResult r = storage.pull(name, max, leaseDuration, clock, remaining);
+                    if (r.deadLettersMoved()) {
+                        waiter.wake();
+                    }
                     if (!r.messages().isEmpty()) {
                         return PullWaiter.Attempt.found(new Chunk(
                                 name,
@@ -111,6 +116,7 @@ final class DefaultQueue implements Queue {
     public Outcomes settle(Settlement settlement) {
         Objects.requireNonNull(settlement, "settlement");
         requireOwn(settlement.queue(), "settlement");
+        waiter.requireOpen();
         if (settlement.items().isEmpty()) {
             return new Outcomes(Map.of());
         }
@@ -118,7 +124,7 @@ final class DefaultQueue implements Queue {
         for (Result r : storage.settle(
                 Objects.requireNonNull(settlement.token(), "non-empty settlement must have a lease token"),
                 settlement.items(),
-                clock.instant())) {
+                clock)) {
             byMessage.put(r.id(), r.outcome());
         }
         // NACK은 메시지를 다시 준비로 돌릴 수 있다. 깨우기는 저장소가 아니라 코어가 맡는다.
@@ -131,6 +137,7 @@ final class DefaultQueue implements Queue {
         Objects.requireNonNull(chunk, "chunk");
         Validation.positive(leaseDuration, "leaseDuration");
         requireOwn(chunk.queue(), "chunk");
+        waiter.requireOpen();
         if (chunk.isEmpty()) {
             return new Extension(null, new Outcomes(Map.of()));
         }

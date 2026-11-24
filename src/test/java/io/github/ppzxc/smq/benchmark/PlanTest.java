@@ -19,7 +19,10 @@ class PlanTest {
         List<RunSpec> plan = Plan.full(Storage.SQLITE);
         Set<String> k = keys(plan);
         assertEquals(plan.size(), k.size(), "키가 겹치면 안 된다");
-        assertEquals(27, plan.size());
+        assertEquals(33, plan.size());
+        for (String kind : List.of("MAX_DELIVERIES", "SINGLE_ACTIVE_CONSUMER", "LEASED_HEAD"))
+            for (String depth : List.of("empty", "1m"))
+                assertTrue(k.contains("sqlite/S1/P1/PROCESS_CRASH/" + depth + "/" + kind));
         // S1: 묶음 프로파일(P1, P3, P5, P7) x {POWER_LOSS, PROCESS_CRASH}
         for (String p : List.of("P1", "P3", "P5", "P7"))
             for (String d : List.of("POWER_LOSS", "PROCESS_CRASH"))
@@ -55,7 +58,7 @@ class PlanTest {
         assertEquals(plan, rounds.get(0));
         List<RunSpec> ratio = rounds.get(1);
         assertEquals(ratio, rounds.get(2));
-        assertEquals(4, ratio.size(), "depth의 분자와 분모가 되는 S1 조건은 P1 빈 큐와 100만 건 x 두 내구성");
+        assertEquals(10, ratio.size(), "depth의 분자와 분모가 되는 S1 조건은 P1 빈 큐와 100만 건 x 두 내구성");
         assertTrue(ratio.stream().allMatch(s -> s.scenario() == Scenario.S1));
         Set<String> k = keys(ratio);
         assertTrue(k.contains("sqlite/S1/P1/POWER_LOSS/1m"));
@@ -97,6 +100,20 @@ class PlanTest {
         List<RunSpec> plan = Plan.smoke(Storage.SQLITE);
         assertTrue(plan.size() >= 4 && plan.size() <= 8);
         assertTrue(plan.stream().allMatch(s -> s.durationMs() <= 3000 && s.depth() <= 10_000));
+    }
+
+    @Test
+    void newKindsRoundTripAndOldJsonDefaultsToStandardQueue() {
+        for (RunSpec.QueueKind kind : List.of(
+                RunSpec.QueueKind.MAX_DELIVERIES,
+                RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
+                RunSpec.QueueKind.LEASED_HEAD)) {
+            RunSpec s = RunSpec.s1(kind, 5000, 10, 1);
+            assertEquals(s, RunSpec.fromArg(s.toArg()));
+            assertTrue(keys(Plan.smoke(Storage.SQLITE)).contains(s.key()));
+        }
+        RunSpec old = RunSpec.s1(Storage.SQLITE, Profile.P1, Durability.PROCESS_CRASH, 0, 10, 1);
+        assertEquals(old, RunSpec.fromJson(old.toJson().replace(",\"queueKind\":\"DEFAULT\"", "")));
     }
 
     @Test

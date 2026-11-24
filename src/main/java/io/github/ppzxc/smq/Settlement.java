@@ -57,7 +57,7 @@ public final class Settlement {
             return put(new Disposition(id, Disposition.Kind.NACK));
         }
 
-        /** {@code delay}가 지난 뒤에야 다시 꺼낼 수 있게 NACK한다. 지나면 메시지는 자기 id 자리로 돌아간다. */
+        /** {@code delay}가 지난 뒤에야 다시 꺼낼 수 있게 NACK한다. 지나면 메시지는 자기 id 자리로 돌아간다. 지연은 최대 36,500일(100년)이다. */
         public Builder nack(MessageId id, Duration delay) {
             return put(new Disposition(id, Disposition.Kind.NACK, Validation.positive(delay, "delay")));
         }
@@ -85,7 +85,7 @@ public final class Settlement {
             return build();
         }
 
-        /** 아직 처리 결과를 고르지 않은 나머지 메시지를 모두 {@code delay} 지연 NACK하고 마무리한다. */
+        /** 아직 처리 결과를 고르지 않은 나머지 메시지를 모두 {@code delay} 지연 NACK하고 마무리한다. 지연은 최대 36,500일(100년)이다. */
         public Settlement nackRest(Duration delay) {
             Validation.positive(delay, "delay");
             for (MessageId id : chunkIds) {

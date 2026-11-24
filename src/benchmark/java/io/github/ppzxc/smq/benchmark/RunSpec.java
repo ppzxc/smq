@@ -16,22 +16,37 @@ record RunSpec(
         Profile profile,
         Durability durability,
         int depth,
+        QueueKind queueKind,
         long durationMs,
         long warmupMs) {
+
+    enum QueueKind {
+        DEFAULT,
+        MAX_DELIVERIES,
+        SINGLE_ACTIVE_CONSUMER,
+        LEASED_HEAD
+    }
 
     static final int DEEP = 1_000_000;
 
     static RunSpec s1(
             Storage storage, Profile profile, Durability durability, int depth, long durationMs, long warmupMs) {
-        return new RunSpec(storage, Scenario.S1, profile, durability, depth, durationMs, warmupMs);
+        return new RunSpec(storage, Scenario.S1, profile, durability, depth, QueueKind.DEFAULT, durationMs, warmupMs);
+    }
+
+    static RunSpec s1(QueueKind kind, int depth, long durationMs, long warmupMs) {
+        return new RunSpec(
+                Storage.SQLITE, Scenario.S1, Profile.P1, Durability.PROCESS_CRASH, depth, kind, durationMs, warmupMs);
     }
 
     static RunSpec s2(Storage storage, Profile profile, long durationMs, long warmupMs) {
-        return new RunSpec(storage, Scenario.S2, profile, defaultDurability(storage), 0, durationMs, warmupMs);
+        return new RunSpec(
+                storage, Scenario.S2, profile, defaultDurability(storage), 0, QueueKind.DEFAULT, durationMs, warmupMs);
     }
 
     static RunSpec s3(Storage storage, Profile profile, long durationMs, long warmupMs) {
-        return new RunSpec(storage, Scenario.S3, profile, defaultDurability(storage), 0, durationMs, warmupMs);
+        return new RunSpec(
+                storage, Scenario.S3, profile, defaultDurability(storage), 0, QueueKind.DEFAULT, durationMs, warmupMs);
     }
 
     private static Durability defaultDurability(Storage storage) {
@@ -40,7 +55,8 @@ record RunSpec(
 
     /** 결과와 기준선에서 이 조건을 가리키는 키. 예: {@code sqlite/S1/P1/POWER_LOSS/1m}. */
     String key() {
-        return Keys.of(storage, scenario, profile, durability == null ? "none" : durability.name(), depth);
+        String key = Keys.of(storage, scenario, profile, durability == null ? "none" : durability.name(), depth);
+        return queueKind == QueueKind.DEFAULT ? key : key + "/" + queueKind;
     }
 
     String toJson() {
@@ -50,6 +66,7 @@ record RunSpec(
         m.put("profile", profile.name());
         m.put("durability", durability == null ? null : durability.name());
         m.put("depth", depth);
+        m.put("queueKind", queueKind.name());
         m.put("durationMs", durationMs);
         m.put("warmupMs", warmupMs);
         return Json.write(m);
@@ -76,6 +93,7 @@ record RunSpec(
                 Profile.valueOf((String) m.get("profile")),
                 d == null ? null : Durability.valueOf((String) d),
                 ((Double) m.get("depth")).intValue(),
+                m.get("queueKind") == null ? QueueKind.DEFAULT : QueueKind.valueOf((String) m.get("queueKind")),
                 ((Double) m.get("durationMs")).longValue(),
                 ((Double) m.get("warmupMs")).longValue());
     }

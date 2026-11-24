@@ -43,7 +43,7 @@ class DefaultQueueTest {
         }
 
         @Override
-        public PullResult pull(String queue, int max, Duration lease, Instant now) {
+        public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
             if (++pulls > MAX_PULL_CALLS) {
                 throw new AssertionError("꺼내기를 " + MAX_PULL_CALLS + "번 넘게 되풀이했다");
             }
@@ -82,12 +82,12 @@ class DefaultQueueTest {
         }
 
         @Override
-        public List<MessageId> publish(String queue, List<NewMessage> batch, Instant now) {
+        public List<MessageId> publish(String queue, List<NewMessage> batch, InstantSource clock) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public List<Result> settle(LeaseToken token, List<Disposition> items, Instant now) {
+        public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
             throw new UnsupportedOperationException();
         }
 

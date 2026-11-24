@@ -41,6 +41,12 @@ final class PullWaiter {
         hint.wake();
     }
 
+    void requireOpen() {
+        if (closed.get()) {
+            throw new IllegalStateException("Smq is closed");
+        }
+    }
+
     /** 닫히면 대기자는 빈 결과로 깨어난다. */
     void close() {
         closed.set(true);
@@ -71,12 +77,17 @@ final class PullWaiter {
         }
     }
 
+    @FunctionalInterface
+    interface InterruptibleAttempt<T> {
+        Attempt<T> get() throws InterruptedException;
+    }
+
     /**
      * @param attempt 한 번 꺼내 본다
      * @param empty 시간이 다했거나 닫혔을 때의 빈 결과
      */
-    <T> T await(Duration wait, Supplier<Attempt<T>> attempt, Supplier<T> empty) throws InterruptedException {
-        long deadline = System.nanoTime() + wait.toNanos();
+    <T> T await(Duration wait, InterruptibleAttempt<T> attempt, Supplier<T> empty) throws InterruptedException {
+        long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         long pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
         while (true) {
             // 버전을 먼저 읽고 그다음 닫힘을 본다. 닫힘 확인 뒤에 close()가 끝나도 버전이 이미 올라가 있어

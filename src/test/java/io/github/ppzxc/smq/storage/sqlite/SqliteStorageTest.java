@@ -42,6 +42,25 @@ class SqliteStorageTest {
     }
 
     @Test
+    void 다음_준비_시각은_지연_종료와_리스_만료_중_이른_쪽이다() throws Exception {
+        Instant now = Instant.EPOCH;
+        InstantSource clock = InstantSource.fixed(now);
+        Duration wait = Duration.ofSeconds(1);
+        try (SqliteStorage storage = SqliteStorage.open(dir.resolve("ready-at.db"), Durability.PROCESS_CRASH)) {
+            storage.declare("q", QueueOptions.defaults());
+            storage.publish("q", List.of(new NewMessage(new byte[0], Map.of(), Duration.ZERO)), clock);
+            storage.pull("q", 1, Duration.ofSeconds(3), clock);
+            storage.publish("q", List.of(new NewMessage(new byte[0], Map.of(), Duration.ofSeconds(2))), clock);
+            assertEquals(
+                    now.plusSeconds(2), storage.nextReadyAt("q", clock, wait).orElseThrow());
+            assertEquals(
+                    now.plusSeconds(3),
+                    storage.nextReadyAt("q", InstantSource.fixed(now.plusSeconds(2)), wait)
+                            .orElseThrow());
+        }
+    }
+
+    @Test
     void 열기에서_Error가_나면_락을_놓고_같은_파일을_다시_연다() {
         Path db = dir.resolve("error.db");
         Error failure = new LinkageError("injected");

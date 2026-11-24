@@ -38,11 +38,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
+import java.util.function.Consumer;
 import org.jspecify.annotations.Nullable;
 import org.sqlite.SQLiteConfig;
 import org.sqlite.SQLiteErrorCode;
@@ -502,15 +505,30 @@ public final class SqliteStorage implements Storage {
 
     @Override
     public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
-        return pull(queue, max, lease, clock, Deadline.NONE);
+        return pull(queue, max, lease, clock, Deadline.NONE, new HashSet<>());
     }
 
     /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0016). */
     @Override
     public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait)
             throws InterruptedException {
+        return pull(queue, max, lease, clock, wait, _ -> {});
+    }
+
+    @Override
+    public PullResult pull(
+            String queue,
+            int max,
+            Duration lease,
+            InstantSource clock,
+            Duration wait,
+            Consumer<Optional<String>> deadLetter)
+            throws InterruptedException {
         try {
-            return pull(queue, max, lease, clock, Deadline.after(wait, lockWaitFloor));
+            Set<String> destinations = new HashSet<>();
+            PullResult result = pull(queue, max, lease, clock, Deadline.after(wait, lockWaitFloor), destinations);
+            destinations.forEach(name -> deadLetter.accept(Optional.of(name)));
+            return result;
         } catch (Deadline.Interrupted e) {
             throw (InterruptedException) e.getCause();
         } catch (Deadline.Expired e) {
@@ -518,7 +536,66 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private PullResult pull(String queue, int max, Duration lease, InstantSource clock, Deadline waitDeadline) {
+    @Override
+    public boolean supportsQueueWakeups() {
+        return true;
+    }
+
+    @Override
+    public Optional<Instant> nextReadyAt(String queue, InstantSource clock, Duration wait) throws InterruptedException {
+        try {
+            return executor.read(
+                    c -> {
+                        long now = toNanos(clock.instant());
+                        try (PreparedStatement ps = c.prepareStatement("""
+                        WITH candidates AS (
+                          SELECT
+                            q.single_active_consumer AS serial,
+                            (SELECT MIN(lease_deadline) FROM message
+                             WHERE queue_id = q.id AND lease_deadline > ?1) AS first_lease,
+                            (SELECT MAX(lease_deadline) FROM message
+                             WHERE queue_id = q.id AND lease_deadline > ?1) AS last_lease,
+                            CASE WHEN q.single_active_consumer THEN
+                              (SELECT available_at FROM message INDEXED BY message_delayed_id
+                               WHERE queue_id = q.id AND available_at IS NOT NULL ORDER BY id LIMIT 1)
+                            ELSE
+                              (SELECT MIN(available_at) FROM message
+                               WHERE queue_id = q.id AND available_at > ?1)
+                            END AS delay
+                          FROM queue q WHERE q.name = ?2
+                        )
+                        SELECT CASE
+                          WHEN serial AND last_lease IS NOT NULL THEN last_lease
+                          WHEN first_lease IS NULL THEN delay
+                          WHEN delay IS NULL THEN first_lease
+                          ELSE MIN(first_lease, delay)
+                        END FROM candidates""")) {
+                            ps.setLong(1, now);
+                            ps.setString(2, queue);
+                            try (ResultSet rs = ps.executeQuery()) {
+                                if (!rs.next()) {
+                                    return Optional.<Instant>empty();
+                                }
+                                long value = rs.getLong(1);
+                                return rs.wasNull() ? Optional.<Instant>empty() : Optional.of(fromNanos(value));
+                            }
+                        }
+                    },
+                    Deadline.after(wait, Duration.ZERO));
+        } catch (Deadline.Interrupted e) {
+            throw (InterruptedException) e.getCause();
+        } catch (Deadline.Expired e) {
+            return Optional.empty();
+        }
+    }
+
+    private PullResult pull(
+            String queue,
+            int max,
+            Duration lease,
+            InstantSource clock,
+            Deadline waitDeadline,
+            Set<String> destinations) {
         if (!anyReady(queue, clock, waitDeadline)) {
             return PullResult.empty();
         }
@@ -536,6 +613,9 @@ public final class SqliteStorage implements Storage {
                     MoveResult moved = options.maxDeliveries().isPresent()
                             ? moveExhausted(c, tx, queue, queueId, options, limit, now)
                             : new MoveResult(false, false);
+                    if (moved.moved()) {
+                        destinations.add(options.deadLetterQueue().orElseThrow());
+                    }
                     long barrier = Long.MAX_VALUE;
                     if (options.singleActiveConsumer()) {
                         try (PreparedStatement ps = c.prepareStatement(SELECT_DELAY_BARRIER)) {
@@ -697,15 +777,23 @@ public final class SqliteStorage implements Storage {
 
     @Override
     public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
-        return inCountingTransaction((c, tx) -> {
+        return settle(token, items, clock, _ -> {});
+    }
+
+    @Override
+    public List<Result> settle(
+            LeaseToken token, List<Disposition> items, InstantSource clock, Consumer<Optional<String>> deadLetter) {
+        Set<String> destinations = new HashSet<>();
+        List<Result> settled = inCountingTransaction((c, tx) -> {
             Instant now = clock.instant();
             List<Result> results = new ArrayList<>(items.size());
             try (PreparedStatement ack = c.prepareStatement("DELETE FROM message WHERE id = ? AND lease_token = ?");
                     PreparedStatement ackFrom = c.prepareStatement(
                             "DELETE FROM message WHERE id = ? AND lease_token = ? RETURNING queue_id");
                     PreparedStatement find = c.prepareStatement("""
-                            SELECT m.queue_id, q.name, q.dead_letter_queue_id, m.payload, m.headers, m.delivery_count
+                            SELECT m.queue_id, q.name, q.dead_letter_queue_id, m.payload, m.headers, m.delivery_count, dlq.name
                             FROM message m JOIN queue q ON q.id = m.queue_id
+                            LEFT JOIN queue dlq ON dlq.id = q.dead_letter_queue_id
                             WHERE m.id = ? AND m.lease_token = ?""");
                     PreparedStatement insert = c.prepareStatement("""
                             INSERT INTO message(queue_id, payload, headers, delivery_count, published_at)
@@ -745,7 +833,7 @@ public final class SqliteStorage implements Storage {
                                 }
                             }
                         }
-                        case REJECT -> updated = reject(find, insert, ack, tx, token, d, now);
+                        case REJECT -> updated = reject(find, insert, ack, tx, token, d, now, destinations);
                         default -> throw new IllegalStateException("unknown disposition: " + d.kind());
                     }
                     results.add(new Result(d.id(), updated == 1 ? Outcome.OK : Outcome.STALE));
@@ -753,6 +841,8 @@ public final class SqliteStorage implements Storage {
             }
             return results;
         });
+        destinations.forEach(name -> deadLetter.accept(Optional.of(name)));
+        return settled;
     }
 
     /** 이동은 dead letter 큐에 새 메시지를 넣고 원래 메시지를 지우는 일이다. 예외는 트랜잭션 전체를 되돌린다. */
@@ -763,12 +853,14 @@ public final class SqliteStorage implements Storage {
             QueueCounters.Tx tx,
             LeaseToken token,
             Disposition d,
-            Instant now)
+            Instant now,
+            Set<String> destinations)
             throws SQLException {
         find.setLong(1, d.id().value());
         find.setLong(2, token.value());
         long sourceId;
         String queueName;
+        String destination;
         long dlqId;
         byte[] payload;
         Map<String, String> headers;
@@ -786,6 +878,7 @@ public final class SqliteStorage implements Storage {
             payload = rs.getBytes(4);
             headers = decodeHeaders(rs.getBytes(5));
             deliveryCount = rs.getInt(6);
+            destination = rs.getString(7);
         }
         insert.setLong(1, dlqId);
         insert.setBytes(2, payload);
@@ -801,6 +894,7 @@ public final class SqliteStorage implements Storage {
         delete.setLong(2, token.value());
         int deleted = delete.executeUpdate();
         if (deleted == 1) {
+            destinations.add(destination);
             tx.leased(sourceId, -1);
             tx.ready(dlqId, 1);
         }

@@ -17,7 +17,7 @@ final class DefaultSmq implements Smq {
         this.storage = storage;
         this.clock = clock;
         this.leaseDuration = leaseDuration;
-        this.waiter = new PullWaiter(storage.changeHint());
+        this.waiter = new PullWaiter(storage.changeHint(), storage.supportsQueueWakeups());
     }
 
     @Override

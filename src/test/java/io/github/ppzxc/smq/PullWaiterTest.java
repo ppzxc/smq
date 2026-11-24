@@ -39,6 +39,22 @@ class PullWaiterTest {
     }
 
     @Test
+    void 준비_시각이_폴링보다_가까우면_그_간격만_기다린다() throws Exception {
+        RecordingHint hint = new RecordingHint();
+        PullWaiter waiter = new PullWaiter(hint, true);
+        AtomicInteger calls = new AtomicInteger();
+        Duration delay = Duration.ofMillis(40);
+
+        assertEquals(
+                "found",
+                waiter.await(
+                        Duration.ofSeconds(30),
+                        () -> calls.getAndIncrement() == 0 ? Attempt.empty(delay) : Attempt.found("found"),
+                        () -> "empty"));
+        assertEquals(List.of(delay), hint.awaits);
+    }
+
+    @Test
     void 버전을_읽는_사이에_닫혀도_깨움을_놓치지_않고_기다리지_않는다() throws Exception {
         RecordingHint hint = new RecordingHint();
         PullWaiter waiter = new PullWaiter(hint, true);

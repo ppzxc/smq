@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 final class DefaultQueue implements Queue {
 
@@ -66,7 +67,7 @@ final class DefaultQueue implements Queue {
             return List.of();
         }
         List<MessageId> ids = storage.publish(name, converted, clock);
-        waiter.wake();
+        waiter.wake(name);
         return ids;
     }
 
@@ -91,14 +92,12 @@ final class DefaultQueue implements Queue {
         Validation.positive(leaseDuration, "leaseDuration");
         long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         return waiter.await(
+                name,
                 wait,
                 () -> {
                     // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
                     Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
-                    PullResult r = storage.pull(name, max, leaseDuration, clock, remaining);
-                    if (r.deadLettersMoved()) {
-                        waiter.wake();
-                    }
+                    PullResult r = storage.pull(name, max, leaseDuration, clock, remaining, this::wakeDeadLetter);
                     if (!r.messages().isEmpty()) {
                         return PullWaiter.Attempt.found(new Chunk(
                                 name,
@@ -107,7 +106,16 @@ final class DefaultQueue implements Queue {
                                 Objects.requireNonNull(r.token(), "non-empty pull must have a lease token")));
                     }
                     // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다(닫힘과 interrupt는 대기 루프가 확인한다).
-                    return r.deadLettersRemain() ? PullWaiter.Attempt.retryNow() : PullWaiter.Attempt.empty();
+                    if (r.deadLettersRemain()) {
+                        return PullWaiter.Attempt.retryNow();
+                    }
+                    long nanos = deadline - System.nanoTime();
+                    if (nanos <= 0) {
+                        return PullWaiter.Attempt.empty();
+                    }
+                    return PullWaiter.Attempt.empty(storage.nextReadyAt(name, clock, Duration.ofNanos(nanos))
+                            .map(at -> Duration.between(clock.instant(), at))
+                            .orElse(Duration.ZERO));
                 },
                 () -> new Chunk(name, List.of(), null, null));
     }
@@ -124,11 +132,12 @@ final class DefaultQueue implements Queue {
         for (Result r : storage.settle(
                 Objects.requireNonNull(settlement.token(), "non-empty settlement must have a lease token"),
                 settlement.items(),
-                clock)) {
+                clock,
+                this::wakeDeadLetter)) {
             byMessage.put(r.id(), r.outcome());
         }
         // NACK은 메시지를 다시 준비로 돌릴 수 있다. 깨우기는 저장소가 아니라 코어가 맡는다.
-        waiter.wake();
+        waiter.wake(name);
         return new Outcomes(byMessage);
     }
 
@@ -150,7 +159,12 @@ final class DefaultQueue implements Queue {
         for (Result r : extended.results()) {
             byMessage.put(r.id(), r.outcome());
         }
+        waiter.wake(name);
         return new Extension(extended.leaseDeadline(), new Outcomes(byMessage));
+    }
+
+    private void wakeDeadLetter(Optional<String> destination) {
+        destination.ifPresentOrElse(waiter::wake, waiter::wake);
     }
 
     /** 정산과 연장은 이 큐에서 꺼낸 청크로만 할 수 있다. 큐 이름이 다르면 호출자의 실수이므로 저장소에 가기 전에 거부한다. */

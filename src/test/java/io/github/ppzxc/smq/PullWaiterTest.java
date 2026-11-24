@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.ppzxc.smq.PullWaiter.Attempt;
 import io.github.ppzxc.smq.storage.ChangeHint;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,6 +39,34 @@ class PullWaiterTest {
         public void wake() {
             version++;
         }
+    }
+
+    @Test
+    void 큐별_깨움은_다른_큐에_전달되지_않고_전체_깨움은_둘_다에_전달된다() throws Exception {
+        RecordingHint first = new RecordingHint();
+        RecordingHint second = new RecordingHint();
+        var hints = new ArrayDeque<ChangeHint>(List.of(first, second));
+        PullWaiter waiter = new PullWaiter(new RecordingHint(), false, true, hints::removeFirst);
+        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+
+        String result = waiter.await(
+                "first",
+                deadline,
+                () -> Attempt.found(waiter.await(
+                        "second",
+                        deadline,
+                        () -> {
+                            waiter.wake("first");
+                            assertEquals(1, first.version());
+                            assertEquals(0, second.version());
+                            waiter.wake();
+                            assertEquals(2, first.version());
+                            assertEquals(1, second.version());
+                            return Attempt.found("found");
+                        },
+                        () -> "empty")),
+                () -> "empty");
+        assertEquals("found", result);
     }
 
     @Test

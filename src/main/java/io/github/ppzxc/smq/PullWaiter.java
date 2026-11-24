@@ -28,10 +28,16 @@ final class PullWaiter {
     private final ChangeHint hint;
     private final boolean storageHint;
     private final boolean scoped;
+    private final Supplier<ChangeHint> newQueueHint;
     private final Map<String, QueueSignal> queues = new HashMap<>();
 
     private static final class QueueSignal {
-        private final ChangeHint hint = new ConditionChangeHint();
+        private final ChangeHint hint;
+
+        private QueueSignal(ChangeHint hint) {
+            this.hint = hint;
+        }
+
         private int users;
     }
 
@@ -42,17 +48,18 @@ final class PullWaiter {
     }
 
     PullWaiter(Optional<ChangeHint> hint, boolean scoped) {
-        this(hint.orElseGet(ConditionChangeHint::new), hint.isPresent(), scoped);
+        this(hint.orElseGet(ConditionChangeHint::new), hint.isPresent(), scoped, ConditionChangeHint::new);
     }
 
     PullWaiter(ChangeHint hint, boolean storageHint) {
-        this(hint, storageHint, false);
+        this(hint, storageHint, false, ConditionChangeHint::new);
     }
 
-    private PullWaiter(ChangeHint hint, boolean storageHint, boolean scoped) {
+    PullWaiter(ChangeHint hint, boolean storageHint, boolean scoped, Supplier<ChangeHint> newQueueHint) {
         this.hint = hint;
         this.storageHint = storageHint;
         this.scoped = scoped && !storageHint;
+        this.newQueueHint = newQueueHint;
     }
 
     /** 같은 프로세스 안의 변경을 알려 기다리던 꺼내기를 깨운다. 저장소와 상관없이 코어가 부른다. */
@@ -136,7 +143,7 @@ final class PullWaiter {
         }
         QueueSignal signal;
         synchronized (queues) {
-            signal = queues.computeIfAbsent(queue, _ -> new QueueSignal());
+            signal = queues.computeIfAbsent(queue, _ -> new QueueSignal(newQueueHint.get()));
             signal.users++;
         }
         try {

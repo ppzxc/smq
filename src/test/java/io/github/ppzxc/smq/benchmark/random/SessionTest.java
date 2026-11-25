@@ -159,6 +159,19 @@ class SessionTest {
     }
 
     @Test
+    void rerunningTheSameFailedSeedPreservesTheFirstFailure() throws IOException {
+        Session s = session(fake(p -> RunResult.error(p, new IllegalStateException("attempt-" + executed.size()))));
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(9L).iterator(), Long.MAX_VALUE));
+        Path first = s.failureDir(9);
+        String firstFailure = Files.readString(first.resolve("violations.txt"));
+
+        assertEquals(Session.EXIT_FAILED, s.run(List.of(9L).iterator(), Long.MAX_VALUE));
+
+        assertEquals(firstFailure, Files.readString(first.resolve("violations.txt")));
+        assertTrue(Files.exists(dir.resolve("failures/9/reruns/2/violations.txt")));
+    }
+
+    @Test
     void rerunHintOmitsDurabilityWhenNotPinned() {
         Session s = session(fake(p -> result(p, Verdict.VIOLATION, 10, null, List.of(LOSS), RunResult.Records.EMPTY)));
         s.run(List.of(4L).iterator(), Long.MAX_VALUE);

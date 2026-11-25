@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -75,6 +76,81 @@ abstract class StorageContractTest {
         storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
         PullResult result = afterLockWait(clock -> storage.pull("q", 1, LEASE, clock));
         assertEquals(T0.plusSeconds(70), result.leaseDeadline());
+    }
+
+    @Test
+    void lock_대기_마감이_끝나면_꺼내기는_상태를_바꾸지_않는다() throws Exception {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<?> holder = executor.submit(() -> storage.publish("q", List.of(), () -> {
+                locked.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                return T0;
+            }));
+            assertTrue(locked.await(5, TimeUnit.SECONDS));
+            Future<PullResult> pull =
+                    executor.submit(() -> storage.pull("q", 1, LEASE, InstantSource.fixed(T0), Duration.ofMillis(50)));
+            PullResult result;
+            try {
+                result = pull.get(1, TimeUnit.SECONDS);
+            } finally {
+                release.countDown();
+            }
+            holder.get(5, TimeUnit.SECONDS);
+            assertTrue(result.messages().isEmpty());
+            assertEquals(new QueueCounts(1, 0, 0), storage.counts("q"));
+        }
+    }
+
+    @Test
+    void lock을_기다리는_꺼내기를_interrupt하면_리스하지_않는다() throws Exception {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            Future<?> holder = executor.submit(() -> storage.publish("q", List.of(), () -> {
+                locked.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                return T0;
+            }));
+            assertTrue(locked.await(5, TimeUnit.SECONDS));
+            Thread pull = new Thread(() -> {
+                try {
+                    storage.pull("q", 1, LEASE, InstantSource.fixed(T0), Duration.ofSeconds(30));
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            });
+            try {
+                pull.start();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (pull.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < deadline)
+                    Thread.onSpinWait();
+                assertEquals(Thread.State.TIMED_WAITING, pull.getState());
+                pull.interrupt();
+                pull.join(5000);
+                assertFalse(pull.isAlive());
+                assertInstanceOf(InterruptedException.class, failure.get());
+            } finally {
+                pull.interrupt();
+                release.countDown();
+            }
+            holder.get(5, TimeUnit.SECONDS);
+            assertEquals(new QueueCounts(1, 0, 0), storage.counts("q"));
+        }
     }
 
     @Test

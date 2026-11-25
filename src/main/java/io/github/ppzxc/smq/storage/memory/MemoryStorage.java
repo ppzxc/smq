@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import org.jspecify.annotations.Nullable;
 
@@ -245,6 +246,25 @@ public final class MemoryStorage implements Storage {
                 messages.add(new Message(e.id, e.payload, e.headers, e.deliveryCount, e.publishedAt));
             }
             return PullResult.of(new LeaseToken(token), deadline, messages, !exhausted.isEmpty());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait)
+            throws InterruptedException {
+        long nanos;
+        try {
+            nanos = wait.toNanos();
+        } catch (ArithmeticException e) {
+            nanos = Long.MAX_VALUE;
+        }
+        if (!lock.tryLock(nanos, TimeUnit.NANOSECONDS)) {
+            return PullResult.empty();
+        }
+        try {
+            return pull(queue, max, lease, clock);
         } finally {
             lock.unlock();
         }

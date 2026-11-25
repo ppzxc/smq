@@ -2,7 +2,7 @@
 
 [ADR 0009](0009-pull-wait-bounds-lock-and-busy-wait.md)를 대체한다.
 
-SQLite 저장소는 연결 하나를 lock 하나로 보호한다(ADR-0007). 어느 연산이든 lock을 쥔 동안 같은 `Smq`의 다른 호출은 기다린다. 꺼내기의 `wait`가 이 대기를 한정한다. `Storage`에 `default pull(queue, max, lease, now, wait)`를 더했고 SQLite 저장소만 구현한다. `wait` 안에 lock을 잡지 못하면 아무것도 반영하지 않고 빈 청크를 돌려준다. 단일 연결과 단일 lock은 그대로라 ADR-0007(문장 캐시)을 다시 열지 않았고, SPI 확장은 ADR-0002의 큐 연산 수준 안이다.
+두 저장소 모두 꺼내기에서 저장소 lock 대기를 `wait`로 제한한다. 만료되면 아무것도 반영하지 않고 빈 청크를 돌려주며, lock 대기 중 인터럽트는 `InterruptedException`으로 전달한다. SQLite는 연결 하나를 lock 하나로 보호한다(ADR-0007); 인메모리는 메모리 상태를 같은 방식으로 보호한다. 어느 연산이든 lock을 쥔 동안 같은 `Smq`의 다른 호출은 기다린다. 단일 연결과 단일 lock은 그대로라 ADR-0007(문장 캐시)을 다시 열지 않았고, SPI 확장은 ADR-0002의 큐 연산 수준 안이다.
 
 lock 대기에는 하한이 있다. 내부 상수 100ms(`Deadline.DEFAULT_LOCK_WAIT_FLOOR`)이고 공개 옵션이 아니다(#141). 남은 `wait`만 기다리게 하면 `wait=0`인 동시 꺼내기가 정상적인 짧은 직렬화조차 기다리지 않아, 메시지가 있는데 빈 청크를 돌려주며 적합성 스위트(여러 스레드가 `pull(max, ZERO)`를 동시에 호출)가 깨진다. 정상 직렬화는 하한 안에 끝난다.
 
@@ -10,7 +10,7 @@ lock 대기에는 하한이 있다. 내부 상수 100ms(`Deadline.DEFAULT_LOCK_W
 
 ## BUSY와 트랜잭션 모드
 
-열린 뒤 실행 중에 나는 `SQLITE_BUSY`는 기다리거나 재시도하지 않는다. 커밋 전의 다른 SQL 오류와 똑같이 `SmqStorageException`이 되고(커밋 뒤 체크포인트의 오류는 예외가 아니라 삼키고 로그만 남긴다, ADR-0017), 꺼내기 판정에도 BUSY 분기가 없다(#138). `busy_timeout`은 0이다. 열 때 나는 BUSY는 `StorageLockedException`이다(ADR-0012). 한 JVM만 파일을 여는 지금, 락 파일을 잡은 뒤의 BUSY는 smq 밖의 도구가 DB를 쥔 것이라 기다려도 풀리지 않는다.
+`wait`는 lock 획득 대기만 제한하며 전체 꺼내기 연산 시간의 상한은 아니다. SQLite에서 열린 뒤 실행 중에 나는 `SQLITE_BUSY`는 기다리거나 재시도하지 않는다. 커밋 전의 다른 SQL 오류와 똑같이 `SmqStorageException`이 되고(커밋 뒤 체크포인트의 오류는 예외가 아니라 삼키고 로그만 남긴다, ADR-0017), 꺼내기 판정에도 BUSY 분기가 없다(#138). `busy_timeout`은 0이다. lock 획득 뒤의 SQL 실행, 파일 I/O, 커밋은 `wait`를 넘을 수 있다. 열 때 나는 BUSY는 `StorageLockedException`이다(ADR-0012). 한 JVM만 파일을 여는 지금, 락 파일을 잡은 뒤의 BUSY는 smq 밖의 도구가 DB를 쥔 것이라 기다려도 풀리지 않는다.
 
 쓰기 트랜잭션은 계속 `BEGIN IMMEDIATE`로 시작한다. 바꿀 동기가 성능뿐이라 범위 밖이고, 읽기에서 쓰기로 승격하는 지점을 없애 준다.
 

@@ -974,7 +974,7 @@ abstract class SmqConformanceTest {
         Queue q = open().declare("q", QueueOptions.defaults());
         MessageId id = q.publish(msg("a"));
         Chunk c = q.pull(1, Duration.ZERO);
-        for (Duration bad : new Duration[] {Duration.ZERO, Duration.ofSeconds(-1), null}) {
+        for (Duration bad : new Duration[] {Duration.ofSeconds(-1), null}) {
             assertThrows(IllegalArgumentException.class, () -> msg("a").withDelay(bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> c.settle().nack(id, bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> c.settle().nackRest(bad), String.valueOf(bad));
@@ -986,9 +986,35 @@ abstract class SmqConformanceTest {
                     () -> new BuilderSettings().leaseDuration(bad),
                     String.valueOf(bad));
         }
+        assertThrows(IllegalArgumentException.class, () -> msg("a").withDelay(Duration.ZERO));
         assertThrows(IllegalArgumentException.class, () -> new OutgoingMessage(new byte[0], Map.of(), null));
         // 잘못된 인자는 아무것도 바꾸지 않는다.
         assertEquals(new QueueCounts(0, 1, 0), q.counts());
+    }
+
+    @Test
+    void 정산_지연은_NACK에만_허용하고_0은_즉시_재전달한다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        MessageId id = q.publish(msg("a"));
+        Chunk chunk = q.pull(1, Duration.ZERO);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new io.github.ppzxc.smq.storage.Disposition(
+                        id, io.github.ppzxc.smq.storage.Disposition.Kind.ACK, Duration.ofSeconds(1)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new io.github.ppzxc.smq.storage.Disposition(
+                        id, io.github.ppzxc.smq.storage.Disposition.Kind.REJECT, Duration.ofSeconds(1)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new io.github.ppzxc.smq.storage.Disposition(
+                        id, io.github.ppzxc.smq.storage.Disposition.Kind.NACK, Duration.ofSeconds(-1)));
+
+        assertTrue(q.settle(chunk.settle().nack(id, Duration.ZERO).build()).allOk());
+        assertEquals(
+                List.of(id),
+                q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
     // ---- 꺼내기 대기와 종료 (#29) ----

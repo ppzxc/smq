@@ -18,6 +18,10 @@ public record Disposition(MessageId id, Kind kind, Duration delay) {
 
     public Disposition {
         Objects.requireNonNull(delay, "delay");
+        Objects.requireNonNull(kind, "kind");
+        if (delay.isNegative() || (kind != Kind.NACK && !delay.isZero())) {
+            throw new IllegalArgumentException("delay is only allowed for NACK and must not be negative: " + delay);
+        }
     }
 
     /** NACK 뒤 다시 꺼낼 수 있게 되는 시각. 지연이 없으면 null이다. */

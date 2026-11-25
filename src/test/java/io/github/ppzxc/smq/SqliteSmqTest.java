@@ -50,6 +50,24 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    void 같은_SQLite_파일을_다시_열면_이전_세션의_청크를_거부한다() throws Exception {
+        Smq first = builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open();
+        Queue original = first.declare("q", QueueOptions.defaults());
+        original.publish(msg("a"));
+        Chunk oldChunk = original.pull(1, Duration.ZERO);
+        Settlement oldSettlement = oldChunk.ackAll();
+        first.close();
+
+        try (Smq reopened =
+                builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open()) {
+            Queue queue = reopened.queue("q");
+            assertThrows(IllegalArgumentException.class, () -> queue.settle(oldSettlement));
+            assertThrows(IllegalArgumentException.class, () -> queue.extend(oldChunk, Duration.ofSeconds(20)));
+            assertEquals(new QueueCounts(0, 1, 0), queue.counts());
+        }
+    }
+
+    @Test
     void lock을_기다리는_꺼내기를_interrupt하면_메시지는_준비_상태로_남는다() throws Exception {
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);

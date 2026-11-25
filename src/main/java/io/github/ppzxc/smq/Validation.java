@@ -31,4 +31,14 @@ final class Validation {
         }
         return d;
     }
+
+    static Duration nonNegative(Duration d, String what) {
+        if (d == null || d.isNegative()) {
+            throw new IllegalArgumentException(what + " must not be negative: " + d);
+        }
+        if (d.compareTo(MAX_DELAY_OR_LEASE) > 0) {
+            throw new IllegalArgumentException(what + " must not exceed 36500 days: " + d);
+        }
+        return d;
+    }
 }

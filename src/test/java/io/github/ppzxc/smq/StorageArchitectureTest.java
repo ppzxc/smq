@@ -7,7 +7,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -15,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 class StorageArchitectureTest {
     private static final Pattern IMPORT = Pattern.compile("import\\s+(?:static\\s+)?([\\w.]+)");
+    private static final Pattern QUALIFIED =
+            Pattern.compile("\\b(?:io\\.github\\.ppzxc\\.smq|java\\.sql|org\\.sqlite)\\.[\\w.]+");
     private static final String CORE = "io.github.ppzxc.smq.";
 
     @Test
@@ -52,6 +56,15 @@ class StorageArchitectureTest {
                         "import io.github.ppzxc.smq.storage.Storage;\n"));
     }
 
+    @Test
+    void import_없이_쓴_전체_클래스명도_금지한다() {
+        assertTrue(violations(
+                        "src/main/java/io/github/ppzxc/smq/DefaultQueue.java",
+                        "io.github.ppzxc.smq.storage.sqlite.SqliteStorage storage;\n")
+                .getFirst()
+                .contains("storage.sqlite.SqliteStorage"));
+    }
+
     private static String read(Path path) {
         try {
             return Files.readString(path);
@@ -66,9 +79,16 @@ class StorageArchitectureTest {
         String implementation =
                 path.contains("/storage/memory/") ? "memory" : path.contains("/storage/sqlite/") ? "sqlite" : "";
         Matcher imports = IMPORT.matcher(source);
-        List<String> violations = new ArrayList<>();
+        Set<String> names = new LinkedHashSet<>();
         while (imports.find()) {
-            String name = imports.group(1);
+            names.add(imports.group(1));
+        }
+        Matcher qualified = QUALIFIED.matcher(source);
+        while (qualified.find()) {
+            names.add(qualified.group());
+        }
+        List<String> violations = new ArrayList<>();
+        for (String name : names) {
             boolean forbidden = core
                     && !assembly
                     && (name.startsWith(CORE + "storage.memory.")

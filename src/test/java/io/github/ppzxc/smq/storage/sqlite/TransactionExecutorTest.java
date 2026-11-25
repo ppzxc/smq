@@ -40,6 +40,17 @@ class TransactionExecutorTest {
 
     private Connection connection;
 
+    @Test
+    void 체크포인트_오류를_기록하지_못해도_커밋_결과는_실패로_바뀌지_않는다() {
+        RuntimeException checkpointFailure = new IllegalStateException("checkpoint failed");
+        RuntimeException loggingFailure = new IllegalStateException("logger failed");
+
+        assertDoesNotThrow(() -> TransactionExecutor.logCheckpointFailure(checkpointFailure, () -> {
+            throw loggingFailure;
+        }));
+        assertSame(loggingFailure, checkpointFailure.getSuppressed()[0]);
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         connection = SqliteStorage.connect(dir.resolve("t.db"), Durability.POWER_LOSS);

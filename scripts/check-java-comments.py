@@ -18,8 +18,10 @@ def comments(source: str) -> list[str]:
 def violations(source: str, approved: list[str]) -> list[str]:
     remaining = list(approved)
     rejected = []
-    for comment in comments(source):
-        preceding = source.split(comment, 1)[0].splitlines()
+    source_without_javadocs = re.sub(r"/\*\*.*?\*/", "", source, flags=re.S)
+    for match in re.finditer(r"//[^\r\n]*|/\*.*?\*/", source_without_javadocs, flags=re.S):
+        comment = match.group()
+        preceding = source_without_javadocs[: match.start()].splitlines()
         if comment.startswith("//") and preceding and "@SuppressWarnings" in preceding[-1] and comment[2:].strip():
             continue
         if comment in remaining:

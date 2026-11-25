@@ -221,7 +221,18 @@ final class TransactionExecutor {
         } catch (Throwable t) {
 
             walSizeAtRestart = 0;
-            LOG.log(System.Logger.Level.WARNING, CHECKPOINT_UNEXPECTED, t);
+            logCheckpointFailure(t, () -> LOG.log(System.Logger.Level.WARNING, CHECKPOINT_UNEXPECTED, t));
+        }
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Suppress self-suppression by comparing Throwable identity.
+    static void logCheckpointFailure(Throwable failure, Runnable log) {
+        try {
+            log.run();
+        } catch (Throwable loggingFailure) {
+            if (loggingFailure != failure) {
+                failure.addSuppressed(loggingFailure);
+            }
         }
     }
 

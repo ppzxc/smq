@@ -81,40 +81,91 @@ abstract class StorageContractTest {
     @Test
     void 가상_시계_명령열은_독립_리스_모델과_만료_정각에도_일치한다() {
         storage.declare("q", QueueOptions.defaults());
-        MessageId first = storage.publish("q", List.of(message(1), message(2)), InstantSource.fixed(T0))
-                .getFirst();
+        var model = new LeaseReferenceModel();
+        var published = storage.publish("q", List.of(message(1), message(2)), InstantSource.fixed(T0));
+        model.publish(published);
 
-        // 독립 모델: 발행된 두 id의 순서, 현재 리스와 기한만 추적한다.
-        var modelReady = new ArrayList<>(List.of(first, new MessageId(first.value() + 1)));
         var oldLease = storage.pull("q", 1, LEASE, InstantSource.fixed(T0));
-        assertEquals(modelReady.removeFirst(), oldLease.messages().getFirst().id());
+        var expectedOld = model.pull(T0, LEASE);
+        assertEquals(
+                expectedOld.messages(),
+                oldLease.messages().stream()
+                        .map(io.github.ppzxc.smq.Message::id)
+                        .toList());
         Instant oldDeadline = T0.plus(LEASE);
 
-        assertEquals(new io.github.ppzxc.smq.QueueCounts(1, 1, 0), storage.counts("q"));
+        assertEquals(model.counts(), storage.counts("q"));
         Instant atDeadline = oldDeadline;
         var redelivery = storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline));
+        var expectedRedelivery = model.pull(atDeadline, LEASE);
         assertEquals(
-                oldLease.messages().getFirst().id(),
-                redelivery.messages().getFirst().id());
-        assertEquals(new io.github.ppzxc.smq.QueueCounts(1, 1, 0), storage.counts("q"));
+                expectedRedelivery.messages(),
+                redelivery.messages().stream()
+                        .map(io.github.ppzxc.smq.Message::id)
+                        .toList());
+        assertEquals(model.counts(), storage.counts("q"));
 
         var stale = storage.settle(
                 oldLease.token(),
                 List.of(new Disposition(oldLease.messages().getFirst().id(), Disposition.Kind.ACK)),
                 InstantSource.fixed(atDeadline));
+        assertEquals(Outcome.STALE, model.settle(oldLease.messages().getFirst().id(), expectedOld.generation()));
         assertEquals(Outcome.STALE, stale.getFirst().outcome());
         var current = storage.settle(
                 redelivery.token(),
                 List.of(new Disposition(redelivery.messages().getFirst().id(), Disposition.Kind.ACK)),
                 InstantSource.fixed(atDeadline));
+        assertEquals(Outcome.OK, model.settle(redelivery.messages().getFirst().id(), expectedRedelivery.generation()));
         assertEquals(Outcome.OK, current.getFirst().outcome());
-        assertEquals(new io.github.ppzxc.smq.QueueCounts(1, 0, 0), storage.counts("q"));
+        assertEquals(model.counts(), storage.counts("q"));
+        var finalPull = storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline));
         assertEquals(
-                modelReady.getFirst(),
-                storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline))
-                        .messages()
-                        .getFirst()
-                        .id());
+                model.pull(atDeadline, LEASE).messages(),
+                finalPull.messages().stream()
+                        .map(io.github.ppzxc.smq.Message::id)
+                        .toList());
+    }
+
+    private static final class LeaseReferenceModel {
+        private final List<MessageId> ready = new ArrayList<>();
+        private final Map<MessageId, Lease> leased = new java.util.LinkedHashMap<>();
+        private long generation;
+
+        void publish(List<MessageId> ids) {
+            ready.addAll(ids);
+        }
+
+        ExpectedPull pull(Instant now, Duration lease) {
+            var expired = leased.entrySet().stream()
+                    .filter(e -> !e.getValue().deadline().isAfter(now))
+                    .map(Map.Entry::getKey)
+                    .toList();
+            for (MessageId id : expired) {
+                leased.remove(id);
+                ready.add(id);
+            }
+            ready.sort(MessageId::compareTo);
+            if (ready.isEmpty()) return new ExpectedPull(List.of(), -1);
+            MessageId id = ready.removeFirst();
+            long leaseGeneration = ++generation;
+            leased.put(id, new Lease(leaseGeneration, now.plus(lease)));
+            return new ExpectedPull(List.of(id), leaseGeneration);
+        }
+
+        Outcome settle(MessageId id, long leaseGeneration) {
+            Lease lease = leased.get(id);
+            if (lease == null || lease.generation() != leaseGeneration) return Outcome.STALE;
+            leased.remove(id);
+            return Outcome.OK;
+        }
+
+        io.github.ppzxc.smq.QueueCounts counts() {
+            return new io.github.ppzxc.smq.QueueCounts(ready.size(), leased.size(), 0);
+        }
+
+        private record Lease(long generation, Instant deadline) {}
+
+        private record ExpectedPull(List<MessageId> messages, long generation) {}
     }
 
     @Test

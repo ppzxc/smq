@@ -30,6 +30,9 @@ jobs:
       - name: ./gradlew check
         run: ./gradlew check --no-daemon --stacktrace
 
+      - name: deliberate required-check failure probe
+        run: exit 1
+
       # 고정 시드/프로파일 실패는 같은 SHA로 한 번 재실행하되 최초 산출물을 보존한다.
       - name: 최초 무작위 스모크
         id: smoke

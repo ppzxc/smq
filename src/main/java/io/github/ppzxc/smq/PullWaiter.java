@@ -161,9 +161,7 @@ final class PullWaiter {
             throws InterruptedException {
         long pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
         while (true) {
-            // 버전을 먼저 읽고 그다음 닫힘을 본다. 닫힘 확인 뒤에 close()가 끝나도 버전이 이미 올라가 있어
-            // 읽은 버전이 낡지 않으므로, 아래 기다림이 그 깨움을 놓치지 않는다. 꺼내기 전에 읽는 것은
-            // 꺼내고 기다리기 사이의 변경을 놓치지 않기 위해서이기도 하다.
+
             long seen = hint.version();
             if (closed.get()) {
                 return empty.get();
@@ -172,7 +170,7 @@ final class PullWaiter {
             try {
                 result = attempt.get();
             } catch (RuntimeException e) {
-                // 닫는 중에 저장소가 먼저 닫혀 꺼내기가 실패한 경우다. 닫힌 뒤의 꺼내기는 빈 결과다.
+
                 if (closed.get()) {
                     return empty.get();
                 }

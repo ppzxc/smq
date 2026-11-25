@@ -23,7 +23,8 @@ class JavaCommentPolicyTest(unittest.TestCase):
     def test_suppression_with_adjacent_reason_is_allowed(self):
         self.assertEqual([], checker.violations('void run() { @SuppressWarnings("rule") // required by API\n }', []))
 
-    def test_repository_matches_baseline(self):
+    def test_repository_matches_empty_baseline(self):
+        self.assertEqual({}, checker.json.loads(checker.BASELINE.read_text(encoding="utf-8")))
         self.assertEqual(0, checker.main())
 
 

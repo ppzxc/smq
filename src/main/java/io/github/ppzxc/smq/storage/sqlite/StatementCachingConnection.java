@@ -20,6 +20,8 @@ import java.util.Map;
  */
 final class StatementCachingConnection {
 
+    private static final System.Logger LOG = System.getLogger(StatementCachingConnection.class.getName());
+
     private StatementCachingConnection() {}
 
     static Connection wrap(Connection connection) {
@@ -89,8 +91,8 @@ final class StatementCachingConnection {
         for (PreparedStatement statement : cache.values()) {
             try {
                 statement.close();
-            } catch (SQLException ignored) {
-                // 닫기 실패는 무시한다. 연결을 닫으면 어차피 정리된다.
+            } catch (SQLException e) {
+                LOG.log(System.Logger.Level.WARNING, "failed to close cached SQLite statement", e);
             }
         }
         cache.clear();

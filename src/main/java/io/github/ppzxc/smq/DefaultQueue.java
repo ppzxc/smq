@@ -95,7 +95,6 @@ final class DefaultQueue implements Queue {
                 name,
                 deadline,
                 () -> {
-                    // 저장소의 lock과 쓰기 경합 대기도 wait 안에서만 한다. 남은 시간이 없어도 한 번은 시도한다.
                     Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
                     PullResult r = storage.pull(name, max, leaseDuration, clock, remaining, this::wakeDeadLetter);
                     if (!r.messages().isEmpty()) {
@@ -105,7 +104,7 @@ final class DefaultQueue implements Queue {
                                 Objects.requireNonNull(r.leaseDeadline(), "non-empty pull must have a lease deadline"),
                                 Objects.requireNonNull(r.token(), "non-empty pull must have a lease token")));
                     }
-                    // 이동 상한에 걸려 빈 결과면 기다리지 않고 바로 다시 꺼낸다(닫힘과 interrupt는 대기 루프가 확인한다).
+
                     if (r.deadLettersRemain()) {
                         return PullWaiter.Attempt.retryNow();
                     }
@@ -136,7 +135,7 @@ final class DefaultQueue implements Queue {
                 this::wakeDeadLetter)) {
             byMessage.put(r.id(), r.outcome());
         }
-        // NACK은 메시지를 다시 준비로 돌릴 수 있다. 깨우기는 저장소가 아니라 코어가 맡는다.
+
         waiter.wake(name);
         return new Outcomes(byMessage);
     }

@@ -79,6 +79,58 @@ abstract class StorageContractTest {
     }
 
     @Test
+    void 꺼내기가_끝난_지연을_준비로_기록하고_집계를_갱신한다() {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish(
+                "q",
+                List.of(
+                        new NewMessage(new byte[] {1}, Map.of(), Duration.ofSeconds(5)),
+                        new NewMessage(new byte[] {2}, Map.of(), Duration.ofSeconds(5))),
+                InstantSource.fixed(T0));
+
+        assertEquals(new QueueCounts(0, 0, 2), storage.counts("q"));
+        assertTrue(storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plusSeconds(4)))
+                .messages()
+                .isEmpty());
+        assertEquals(new QueueCounts(0, 0, 2), storage.counts("q"));
+
+        assertEquals(
+                1,
+                storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plusSeconds(5)))
+                        .messages()
+                        .size());
+        assertEquals(new QueueCounts(1, 1, 0), storage.counts("q"));
+    }
+
+    @Test
+    void 단일_활성_리스가_꺼내기를_막으면_끝난_지연과_만료_리스_집계를_유지한다() {
+        storage.declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+        storage.publish(
+                "q",
+                List.of(
+                        message(1),
+                        new NewMessage(new byte[] {2}, Map.of(), Duration.ofSeconds(5)),
+                        new NewMessage(new byte[] {3}, Map.of(), Duration.ofSeconds(20))),
+                InstantSource.fixed(T0));
+        assertEquals(
+                1,
+                storage.pull("q", 1, LEASE, InstantSource.fixed(T0)).messages().size());
+
+        assertEquals(new QueueCounts(0, 1, 2), storage.counts("q"));
+        assertTrue(storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plusSeconds(5)))
+                .messages()
+                .isEmpty());
+        assertEquals(new QueueCounts(0, 1, 2), storage.counts("q"));
+
+        assertEquals(
+                1,
+                storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plusSeconds(10)))
+                        .messages()
+                        .size());
+        assertEquals(new QueueCounts(1, 1, 1), storage.counts("q"));
+    }
+
+    @Test
     void 가상_시계_명령열은_독립_리스_모델과_만료_정각에도_일치한다() {
         storage.declare("q", QueueOptions.defaults());
         var model = new LeaseReferenceModel();

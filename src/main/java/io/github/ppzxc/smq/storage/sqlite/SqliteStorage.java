@@ -406,7 +406,8 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    static final String SELECT_ACTIVE_LEASE = "SELECT 1 FROM message WHERE queue_id = ? AND lease_deadline > ? LIMIT 1";
+    static final String SELECT_ACTIVE_LEASE = "SELECT 1 FROM message INDEXED BY message_lease_deadline"
+            + " WHERE queue_id = ? AND lease_deadline > ? LIMIT 1";
 
     private static boolean hasActiveLease(Connection c, long queueId, Instant now) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(SELECT_ACTIVE_LEASE)) {
@@ -493,6 +494,23 @@ public final class SqliteStorage implements Storage {
         return executor.anyOrUncertain(
                 connection -> {
                     Instant now = clock.instant();
+                    long queueId = 0;
+                    boolean queueExists = false;
+                    boolean singleActiveConsumer = false;
+                    try (PreparedStatement ps = connection.prepareStatement(
+                            "SELECT id, single_active_consumer FROM queue WHERE name = ?")) {
+                        ps.setString(1, queue);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) {
+                                queueId = rs.getLong(1);
+                                queueExists = true;
+                                singleActiveConsumer = rs.getInt(2) != 0;
+                            }
+                        }
+                    }
+                    if (queueExists && singleActiveConsumer && hasActiveLease(connection, queueId, now)) {
+                        return false;
+                    }
                     try (PreparedStatement ps = connection.prepareStatement(ANY_READY)) {
                         long nowNanos = toNanos(now);
                         ps.setString(1, queue);

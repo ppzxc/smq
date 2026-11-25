@@ -12,6 +12,7 @@ final class DefaultSmq implements Smq {
     private final InstantSource clock;
     private final Duration leaseDuration;
     private final PullWaiter waiter;
+    private final Object session = new Object();
 
     DefaultSmq(Storage storage, InstantSource clock, Duration leaseDuration) {
         this.storage = storage;
@@ -29,7 +30,7 @@ final class DefaultSmq implements Smq {
         }
         waiter.requireOpen();
         storage.declare(name, options);
-        return new DefaultQueue(storage, clock, leaseDuration, waiter, name, options);
+        return new DefaultQueue(storage, clock, leaseDuration, waiter, session, name, options);
     }
 
     @Override
@@ -37,7 +38,7 @@ final class DefaultSmq implements Smq {
         Validation.queueName(name);
         waiter.requireOpen();
         QueueOptions options = storage.options(name).orElseThrow(() -> new QueueNotFoundException(name));
-        return new DefaultQueue(storage, clock, leaseDuration, waiter, name, options);
+        return new DefaultQueue(storage, clock, leaseDuration, waiter, session, name, options);
     }
 
     @Override

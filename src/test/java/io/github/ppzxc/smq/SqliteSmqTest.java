@@ -50,6 +50,24 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    void 같은_SQLite_파일을_다시_열면_이전_세션의_청크를_거부한다() throws Exception {
+        Smq first = builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open();
+        Queue original = first.declare("q", QueueOptions.defaults());
+        original.publish(msg("a"));
+        Chunk oldChunk = original.pull(1, Duration.ZERO);
+        Settlement oldSettlement = oldChunk.ackAll();
+        first.close();
+
+        try (Smq reopened =
+                builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open()) {
+            Queue queue = reopened.queue("q");
+            assertThrows(IllegalArgumentException.class, () -> queue.settle(oldSettlement));
+            assertThrows(IllegalArgumentException.class, () -> queue.extend(oldChunk, Duration.ofSeconds(20)));
+            assertEquals(new QueueCounts(0, 1, 0), queue.counts());
+        }
+    }
+
+    @Test
     void lock을_기다리는_꺼내기를_interrupt하면_메시지는_준비_상태로_남는다() throws Exception {
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -166,13 +184,13 @@ class SqliteSmqTest extends SmqConformanceTest {
             Chunk again = q.pull(1, Duration.ZERO);
             assertEquals(id, again.messages().getFirst().id());
             assertEquals(2, again.messages().getFirst().deliveryCount());
-            assertEquals(Outcome.STALE, q.settle(lost.ackAll()).byMessage().get(id));
+            assertThrows(IllegalArgumentException.class, () -> q.settle(lost.ackAll()));
             assertTrue(q.settle(again.ackAll()).allOk());
         }
     }
 
     @Test
-    void 닫기_전에_꺼낸_리스는_다시_연_뒤_기한_전이면_그대로_정산된다() throws Exception {
+    void 다시_연_세션에서는_이전_세션의_청크를_정산하거나_연장할_수_없다() throws Exception {
         Chunk held;
         try (Smq first = builder().clock(clock).open()) {
             Queue q = first.declare("q", QueueOptions.defaults());
@@ -180,7 +198,10 @@ class SqliteSmqTest extends SmqConformanceTest {
             held = q.pull(1, Duration.ZERO);
         }
         try (Smq second = builder().clock(clock).open()) {
-            assertTrue(second.queue("q").settle(held.ackAll()).allOk());
+            Queue q = second.queue("q");
+            assertThrows(IllegalArgumentException.class, () -> q.settle(held.ackAll()));
+            assertThrows(IllegalArgumentException.class, () -> q.extend(held, Duration.ofSeconds(20)));
+            assertEquals(new QueueCounts(0, 1, 0), q.counts());
         }
     }
 

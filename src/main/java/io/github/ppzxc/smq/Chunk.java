@@ -12,12 +12,19 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Chunk {
 
+    private final Object session;
     private final String queue;
     private final List<Message> messages;
     private final @Nullable Instant leaseDeadline;
     private final @Nullable LeaseToken token;
 
-    Chunk(String queue, List<Message> messages, @Nullable Instant leaseDeadline, @Nullable LeaseToken token) {
+    Chunk(
+            Object session,
+            String queue,
+            List<Message> messages,
+            @Nullable Instant leaseDeadline,
+            @Nullable LeaseToken token) {
+        this.session = session;
         this.queue = queue;
         this.messages = List.copyOf(messages);
         this.leaseDeadline = leaseDeadline;
@@ -43,6 +50,10 @@ public final class Chunk {
     @Nullable
     LeaseToken token() {
         return token;
+    }
+
+    Object session() {
+        return session;
     }
 
     List<MessageId> messageIds() {

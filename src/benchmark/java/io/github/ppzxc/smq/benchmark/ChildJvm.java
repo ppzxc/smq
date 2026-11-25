@@ -38,9 +38,14 @@ public final class ChildJvm {
 
     /** 끝나기를 기다린다. 시간을 넘기거나 종료 코드가 0이 아니면 예외를 낸다. */
     public void await(long timeoutMs) throws Exception {
-        if (!process.waitFor(Math.max(timeoutMs, 1_000), TimeUnit.MILLISECONDS)) {
+        try {
+            if (!process.waitFor(Math.max(timeoutMs, 1_000), TimeUnit.MILLISECONDS)) {
+                terminate(process);
+                throw new IllegalStateException("자식 JVM이 제한 시간 안에 끝나지 않았다: " + label);
+            }
+        } catch (InterruptedException e) {
             terminate(process);
-            throw new IllegalStateException("자식 JVM이 제한 시간 안에 끝나지 않았다: " + label);
+            throw e;
         }
         if (process.exitValue() != 0) {
             throw new IllegalStateException("자식 JVM 실패(" + label + "), 종료 코드 " + process.exitValue());
@@ -57,10 +62,18 @@ public final class ChildJvm {
 
     /** 강제로 끝내고 프로세스가 사라질 때까지 기다린다. 인터럽트를 받으면 플래그를 복원한다. */
     static void terminate(Process process) {
+        process.destroyForcibly();
+        boolean interrupted = false;
         try {
-            process.destroyForcibly().waitFor();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            while (process.isAlive()) {
+                try {
+                    process.waitFor();
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
     }
 }

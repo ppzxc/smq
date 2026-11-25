@@ -13,11 +13,13 @@ import org.jspecify.annotations.Nullable;
 /** 청크에서 만든 정산 값. 불변이며 같은 값을 다시 반영해도 안전하다. */
 public final class Settlement {
 
+    private final Object session;
     private final String queue;
     private final @Nullable LeaseToken token;
     private final List<Disposition> items;
 
-    Settlement(String queue, @Nullable LeaseToken token, List<Disposition> items) {
+    Settlement(Object session, String queue, @Nullable LeaseToken token, List<Disposition> items) {
+        this.session = session;
         this.queue = queue;
         this.token = token;
         this.items = items;
@@ -25,6 +27,10 @@ public final class Settlement {
 
     String queue() {
         return queue;
+    }
+
+    Object session() {
+        return session;
     }
 
     @Nullable
@@ -95,7 +101,7 @@ public final class Settlement {
         }
 
         public Settlement build() {
-            return new Settlement(chunk.queue(), chunk.token(), List.copyOf(items.values()));
+            return new Settlement(chunk.session(), chunk.queue(), chunk.token(), List.copyOf(items.values()));
         }
     }
 }

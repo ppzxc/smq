@@ -390,7 +390,7 @@ public final class MemoryStorage implements Storage {
         return e.availableAt != null && e.availableAt.isAfter(now);
     }
 
-    @SuppressWarnings("NonApiType")
+    @SuppressWarnings("NonApiType") // TreeMap keeps messages in FIFO order for pulls.
     private TreeMap<Long, Entry> require(String queue) {
         TreeMap<Long, Entry> messages = queues.get(queue);
         if (messages == null) {

@@ -27,7 +27,7 @@ class LeaseCounterexampleTest {
 
     private static List<Step> shrink(List<Step> steps) {
         var result = new ArrayList<>(steps);
-        for (int i = 0; i < result.size();) {
+        for (int i = 0; i < result.size(); ) {
             var candidate = new ArrayList<>(result);
             candidate.remove(i);
             if (replay(candidate, false) != replay(candidate, true)) {

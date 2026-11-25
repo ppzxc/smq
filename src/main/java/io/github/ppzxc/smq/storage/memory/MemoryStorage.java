@@ -196,6 +196,11 @@ public final class MemoryStorage implements Storage {
             if (options.singleActiveConsumer() && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
                 return PullResult.empty();
             }
+            for (Entry e : entries.values()) {
+                if (e.availableAt != null && !e.availableAt.isAfter(now)) {
+                    e.availableAt = null;
+                }
+            }
             List<Entry> picked = new ArrayList<>();
             List<Entry> exhausted = new ArrayList<>();
             boolean deadLettersRemain = false;

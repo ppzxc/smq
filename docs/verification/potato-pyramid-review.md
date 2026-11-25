@@ -43,7 +43,7 @@ stateDiagram-v2
 | `windows-build` | 성공, 4분 58초 | [Windows run](https://github.com/ppzxc/smq/actions/runs/45531669116) |
 | `windows-deploy-test` | 성공, 1분 35초 | [Windows run](https://github.com/ppzxc/smq/actions/runs/45531669116) |
 
-실행 후 `Protect main` 규칙 세트는 위 네 job 이름을 필수 상태로 요구하며 우회 목록은 비어 있다. 릴리스 gate는 같은 SHA의 Linux·Windows 워크플로에서 이 네 job을 조회한다. PR에서 실패가 발생하지 않아 첫 실패 아티팩트와 재실행 결과는 이 대표 실행에 없었다. 실패 재현 경로는 Linux workflow의 smoke 실패 업로드 및 동일 시드 재실행으로 검증한다.
+실행 후 `Protect main` 규칙 세트는 위 네 job 이름을 필수 상태로 요구하며 우회 목록은 비어 있다. 릴리스 gate는 같은 SHA의 Linux·Windows 워크플로에서 이 네 job을 조회한다. 누락 시험 PR [#220](https://github.com/ppzxc/smq/pull/220)은 나머지 검사 통과 후에도 필수 `windows-build`가 없어서 BLOCKED였고, 실패 시험 PR [#221](https://github.com/ppzxc/smq/pull/221)은 `linux-build` 실패로 BLOCKED였다. 두 임시 PR은 확인 후 닫았다. 대표 PR은 네 필수 검사 모두 성공해 CLEAN이었다. 대표 실행에 첫 실패 아티팩트는 없었으며, 실패 재현 경로는 Linux workflow의 smoke 실패 업로드 및 동일 시드 재실행으로 검증한다.
 
 ## 정형 검증과 자동화 범위
 

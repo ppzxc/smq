@@ -276,6 +276,14 @@ val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
 }
 tasks.check { dependsOn(verifyJarExcludesBenchmark, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
 
+tasks.register<Exec>("checkJavaImplementationComments") {
+    group = "verification"
+    description = "신규 프로덕션 Java 구현 주석이 기준선에 추가되지 않았는지 확인한다."
+    commandLine(if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3",
+        "scripts/test_check_java_comments.py")
+}
+tasks.check { dependsOn("checkJavaImplementationComments") }
+
 tasks.test {
     useJUnitPlatform()
     jvmArgs("--enable-native-access=ALL-UNNAMED")

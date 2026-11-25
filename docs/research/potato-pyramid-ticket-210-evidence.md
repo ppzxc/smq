@@ -5,4 +5,4 @@
 - 축소 테스트의 재현 명령열은 `publish → pull → advance to lease deadline → pull`이다. strict expiry 변이(`deadline < now`)와 정상 비교(`deadline <= now`)의 전달 수가 다르며, 한 단계를 제거하면 차이가 사라진다.
 - 표적 코드 변이 확인: 메모리 저장소 만료 비교를 `<`로 바꿨을 때 계약 테스트 13건이 실패했다. SQLite 만료 SQL을 `<`로 바꿨을 때 26건이 실패했다. 두 변경을 원복한 뒤 모델·계약 테스트가 통과했다.
 - Linux Java 25에서 `StorageContractMemoryTest`, `StorageContractSqliteTest`, `LeaseCounterexampleTest`가 통과했고, 실행 시간은 28.04초였다.
-- Linux/Windows 전체 CI 시간은 [PR #219](https://github.com/ppzxc/smq/pull/219)의 동일 SHA `7b93fc567fc5c84c43d096dd2243c41da7172ce3` 실행에서 확인했다: [linux-build 2m11s](https://github.com/ppzxc/smq/actions/runs/45529715564/job/138921719739), [windows-build 5m08s](https://github.com/ppzxc/smq/actions/runs/45529715562/job/138921720249). 이 CI는 이번 티켓 테스트 추가 전의 통합 SHA에서 실행됐다.
+- 모델 테스트를 포함한 현재 통합 SHA `ec5715d`에서 PR #219의 전체 검사 잡 시간을 기록했다: [linux-build 2m37s](https://github.com/ppzxc/smq/actions/runs/45531669122/job/138928337591), [windows-build 4m58s](https://github.com/ppzxc/smq/actions/runs/45531669116/job/138928226039). 이는 모델 테스트만의 시간이 아니라 두 OS의 전체 `./gradlew check` 잡 시간이다. Linux에서 모델·계약 테스트 자체는 28.04초였다.

@@ -17,7 +17,7 @@ public final class Settlement {
     private final @Nullable LeaseToken token;
     private final List<Disposition> items;
 
-    Settlement(String queue, @Nullable LeaseToken token, List<Disposition> items) { // items는 호출자가 이미 불변 복사한 목록이다
+    Settlement(String queue, @Nullable LeaseToken token, List<Disposition> items) {
         this.queue = queue;
         this.token = token;
         this.items = items;
@@ -57,9 +57,9 @@ public final class Settlement {
             return put(new Disposition(id, Disposition.Kind.NACK));
         }
 
-        /** {@code delay}가 지난 뒤에야 다시 꺼낼 수 있게 NACK한다. 지나면 메시지는 자기 id 자리로 돌아간다. 지연은 최대 36,500일(100년)이다. */
+        /** {@code delay}가 지난 뒤 다시 꺼낼 수 있게 NACK한다. 0이면 지연 없이 자기 id 자리로 돌아간다. 지연은 최대 36,500일(100년)이다. */
         public Builder nack(MessageId id, Duration delay) {
-            return put(new Disposition(id, Disposition.Kind.NACK, Validation.positive(delay, "delay")));
+            return put(new Disposition(id, Disposition.Kind.NACK, Validation.nonNegative(delay, "delay")));
         }
 
         /** 전달 횟수와 상관없이 메시지를 그 큐의 dead letter 큐로 옮긴다. dead letter 큐가 없으면 정산 전체가 반영되지 않는다. */
@@ -87,7 +87,7 @@ public final class Settlement {
 
         /** 아직 처리 결과를 고르지 않은 나머지 메시지를 모두 {@code delay} 지연 NACK하고 마무리한다. 지연은 최대 36,500일(100년)이다. */
         public Settlement nackRest(Duration delay) {
-            Validation.positive(delay, "delay");
+            Validation.nonNegative(delay, "delay");
             for (MessageId id : chunkIds) {
                 items.putIfAbsent(id, new Disposition(id, Disposition.Kind.NACK, delay));
             }

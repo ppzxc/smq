@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           fail=0
-          # 두 워크플로(Linux, Windows) 모두에서 check와 deploy-test 잡이 녹색이어야 한다. 이름은 .github/workflows의 name과 잡 id와 맞춘다.
+          # main 보호 규칙과 같은 네 개의 고유한 잡 이름을 릴리스 커밋 SHA에서 확인한다.
           for wf in Linux Windows; do
             run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=push&per_page=50" \
               --jq "[.workflow_runs[] | select(.name == \"$wf\")] | sort_by(.created_at) | last | .id // empty")
@@ -53,7 +53,12 @@ jobs:
               fail=1
               continue
             fi
-            for job in check deploy-test; do
+            if [ "$wf" = Linux ]; then
+              jobs='linux-build linux-deploy-test'
+            else
+              jobs='windows-build windows-deploy-test'
+            fi
+            for job in $jobs; do
               conclusion=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
                 --jq "[.jobs[] | select(.name == \"$job\")] | first | .conclusion // \"missing\"")
               echo "$wf / $job: $conclusion"

@@ -133,7 +133,6 @@ final class SqliteSchema {
         }
     }
 
-    // Schema v2 files created before this index was introduced remain compatible.
     static void ensureDelayedIdIndex(Connection c) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute("""

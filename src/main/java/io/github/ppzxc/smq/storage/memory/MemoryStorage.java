@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import org.jspecify.annotations.Nullable;
 
@@ -141,7 +142,7 @@ public final class MemoryStorage implements Storage {
     public QueueCounts counts(String queue) {
         lock.lock();
         try {
-            // SqliteStorage와 같은 규칙: 시각을 보지 않고 저장된 상태로 센다(ADR-0018).
+
             long ready = 0;
             long leased = 0;
             long delayed = 0;
@@ -166,7 +167,7 @@ public final class MemoryStorage implements Storage {
         try {
             Instant now = clock.instant();
             TreeMap<Long, Entry> messages = require(queue);
-            // 항목을 모두 만든 뒤에 반영해서, 중간에 실패해도 일부만 들어가지 않게 한다.
+
             List<Entry> entries = new ArrayList<>(batch.size());
             long next = nextMessageId;
             for (NewMessage m : batch) {
@@ -191,7 +192,7 @@ public final class MemoryStorage implements Storage {
             Instant now = clock.instant();
             TreeMap<Long, Entry> entries = require(queue);
             QueueOptions options = requireOptions(queue);
-            // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
+
             if (options.singleActiveConsumer() && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
                 return PullResult.empty();
             }
@@ -201,7 +202,7 @@ public final class MemoryStorage implements Storage {
             boolean blocked = false;
             boolean moves = options.maxDeliveries().isPresent();
             for (Entry e : entries.values()) {
-                // 소진 메시지를 옮기려면 청크가 차도 끝까지 훑어야 한다. 옮길 일이 없는 큐는 청크가 차면 멈춘다.
+
                 if (picked.size() == max && !moves) {
                     break;
                 }
@@ -245,6 +246,25 @@ public final class MemoryStorage implements Storage {
                 messages.add(new Message(e.id, e.payload, e.headers, e.deliveryCount, e.publishedAt));
             }
             return PullResult.of(new LeaseToken(token), deadline, messages, !exhausted.isEmpty());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait)
+            throws InterruptedException {
+        long nanos;
+        try {
+            nanos = wait.toNanos();
+        } catch (ArithmeticException e) {
+            nanos = Long.MAX_VALUE;
+        }
+        if (!lock.tryLock(nanos, TimeUnit.NANOSECONDS)) {
+            return PullResult.empty();
+        }
+        try {
+            return pull(queue, max, lease, clock);
         } finally {
             lock.unlock();
         }
@@ -330,7 +350,7 @@ public final class MemoryStorage implements Storage {
     public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock) {
         lock.lock();
         try {
-            // 시각은 lock을 잡은 뒤에 읽는다. 앞서 커밋된 다른 꺼내기와 시각 순서가 어긋나지 않게 한다.
+
             Instant now = clock.instant();
             Instant deadline = now.plus(d);
             List<Result> results = new ArrayList<>(ids.size());
@@ -339,7 +359,7 @@ public final class MemoryStorage implements Storage {
                 for (Map.Entry<String, TreeMap<Long, Entry>> queue : queues.entrySet()) {
                     Entry e = queue.getValue().get(id.value());
                     if (e != null) {
-                        // 단일 활성 컨슈머 큐에서는 만료된 리스를 되살리지 않는다. 그 사이 다른 청크가 꺼냈을 수 있다.
+
                         boolean expiredInSingleActiveQueue = !isLeased(e, now)
                                 && requireOptions(queue.getKey()).singleActiveConsumer();
                         if (holds(e, token) && !expiredInSingleActiveQueue) {
@@ -370,7 +390,7 @@ public final class MemoryStorage implements Storage {
         return e.availableAt != null && e.availableAt.isAfter(now);
     }
 
-    @SuppressWarnings("NonApiType") // TreeMap preserves FIFO iteration order for message ids.
+    @SuppressWarnings("NonApiType") // TreeMap keeps messages in FIFO order for pulls.
     private TreeMap<Long, Entry> require(String queue) {
         TreeMap<Long, Entry> messages = queues.get(queue);
         if (messages == null) {
@@ -398,7 +418,5 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public void close() {
-        // 해제할 자원이 없다. 기다리는 꺼내기는 코어가 닫으면서 깨운다.
-    }
+    public void close() {}
 }

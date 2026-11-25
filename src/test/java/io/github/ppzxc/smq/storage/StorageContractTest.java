@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -75,6 +76,205 @@ abstract class StorageContractTest {
         storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
         PullResult result = afterLockWait(clock -> storage.pull("q", 1, LEASE, clock));
         assertEquals(T0.plusSeconds(70), result.leaseDeadline());
+    }
+
+    @Test
+    void 가상_시계_명령열은_독립_리스_모델과_만료_정각에도_일치한다() {
+        storage.declare("q", QueueOptions.defaults());
+        var model = new LeaseReferenceModel();
+        var published = storage.publish("q", List.of(message(1), message(2)), InstantSource.fixed(T0));
+        model.publish(published);
+
+        var oldLease = storage.pull("q", 1, LEASE, InstantSource.fixed(T0));
+        var expectedOld = model.pull(T0, LEASE);
+        assertEquals(
+                expectedOld.messages(),
+                oldLease.messages().stream()
+                        .map(io.github.ppzxc.smq.Message::id)
+                        .toList());
+        Instant oldDeadline = T0.plus(LEASE);
+
+        assertEquals(model.counts(), storage.counts("q"));
+        Instant atDeadline = oldDeadline;
+        var redelivery = storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline));
+        var expectedRedelivery = model.pull(atDeadline, LEASE);
+        assertEquals(
+                expectedRedelivery.messages(),
+                redelivery.messages().stream()
+                        .map(io.github.ppzxc.smq.Message::id)
+                        .toList());
+        assertEquals(model.counts(), storage.counts("q"));
+
+        var stale = storage.settle(
+                oldLease.token(),
+                List.of(new Disposition(oldLease.messages().getFirst().id(), Disposition.Kind.ACK)),
+                InstantSource.fixed(atDeadline));
+        assertEquals(Outcome.STALE, model.settle(oldLease.messages().getFirst().id(), expectedOld.generation()));
+        assertEquals(Outcome.STALE, stale.getFirst().outcome());
+        var current = storage.settle(
+                redelivery.token(),
+                List.of(new Disposition(redelivery.messages().getFirst().id(), Disposition.Kind.ACK)),
+                InstantSource.fixed(atDeadline));
+        assertEquals(Outcome.OK, model.settle(redelivery.messages().getFirst().id(), expectedRedelivery.generation()));
+        assertEquals(Outcome.OK, current.getFirst().outcome());
+        assertEquals(model.counts(), storage.counts("q"));
+        var finalPull = storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline));
+        assertEquals(
+                model.pull(atDeadline, LEASE).messages(),
+                finalPull.messages().stream()
+                        .map(io.github.ppzxc.smq.Message::id)
+                        .toList());
+    }
+
+    private static final class LeaseReferenceModel {
+        private final List<MessageId> ready = new ArrayList<>();
+        private final Map<MessageId, Lease> leased = new java.util.LinkedHashMap<>();
+        private long generation;
+
+        void publish(List<MessageId> ids) {
+            ready.addAll(ids);
+        }
+
+        ExpectedPull pull(Instant now, Duration lease) {
+            var expired = leased.entrySet().stream()
+                    .filter(e -> !e.getValue().deadline().isAfter(now))
+                    .map(Map.Entry::getKey)
+                    .toList();
+            for (MessageId id : expired) {
+                leased.remove(id);
+                ready.add(id);
+            }
+            ready.sort(MessageId::compareTo);
+            if (ready.isEmpty()) return new ExpectedPull(List.of(), -1);
+            MessageId id = ready.removeFirst();
+            long leaseGeneration = ++generation;
+            leased.put(id, new Lease(leaseGeneration, now.plus(lease)));
+            return new ExpectedPull(List.of(id), leaseGeneration);
+        }
+
+        Outcome settle(MessageId id, long leaseGeneration) {
+            Lease lease = leased.get(id);
+            if (lease == null || lease.generation() != leaseGeneration) return Outcome.STALE;
+            leased.remove(id);
+            return Outcome.OK;
+        }
+
+        io.github.ppzxc.smq.QueueCounts counts() {
+            return new io.github.ppzxc.smq.QueueCounts(ready.size(), leased.size(), 0);
+        }
+
+        private record Lease(long generation, Instant deadline) {}
+
+        private record ExpectedPull(List<MessageId> messages, long generation) {}
+    }
+
+    @Test
+    void 리스_만료_정각의_재꺼내기와_정산_경합은_직렬_순서_중_하나와_일치한다() throws Exception {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
+        PullResult old = storage.pull("q", 1, LEASE, InstantSource.fixed(T0));
+        var start = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<List<Result>> settle = executor.submit(() -> {
+                start.await();
+                return storage.settle(
+                        old.token(),
+                        List.of(new Disposition(old.messages().getFirst().id(), Disposition.Kind.ACK)),
+                        InstantSource.fixed(T0.plus(LEASE)));
+            });
+            Future<PullResult> pull = executor.submit(() -> {
+                start.await();
+                return storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plus(LEASE)));
+            });
+            start.countDown();
+            var settled = settle.get(5, TimeUnit.SECONDS).getFirst();
+            var repulled = pull.get(5, TimeUnit.SECONDS);
+            if (settled.outcome() == io.github.ppzxc.smq.Outcome.OK) {
+                assertTrue(repulled.messages().isEmpty(), "정산이 먼저 커밋되면 다시 꺼낼 메시지가 없다");
+                assertEquals(new io.github.ppzxc.smq.QueueCounts(0, 0, 0), storage.counts("q"));
+            } else {
+                assertEquals(io.github.ppzxc.smq.Outcome.STALE, settled.outcome());
+                assertEquals(
+                        old.messages().getFirst().id(),
+                        repulled.messages().getFirst().id());
+                assertEquals(new io.github.ppzxc.smq.QueueCounts(0, 1, 0), storage.counts("q"));
+            }
+        }
+    }
+
+    @Test
+    void lock_대기_마감이_끝나면_꺼내기는_상태를_바꾸지_않는다() throws Exception {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<?> holder = executor.submit(() -> storage.publish("q", List.of(), () -> {
+                locked.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                return T0;
+            }));
+            assertTrue(locked.await(5, TimeUnit.SECONDS));
+            Future<PullResult> pull =
+                    executor.submit(() -> storage.pull("q", 1, LEASE, InstantSource.fixed(T0), Duration.ofMillis(50)));
+            PullResult result;
+            try {
+                result = pull.get(1, TimeUnit.SECONDS);
+            } finally {
+                release.countDown();
+            }
+            holder.get(5, TimeUnit.SECONDS);
+            assertTrue(result.messages().isEmpty());
+            assertEquals(new QueueCounts(1, 0, 0), storage.counts("q"));
+        }
+    }
+
+    @Test
+    void lock을_기다리는_꺼내기를_interrupt하면_리스하지_않는다() throws Exception {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            Future<?> holder = executor.submit(() -> storage.publish("q", List.of(), () -> {
+                locked.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                return T0;
+            }));
+            assertTrue(locked.await(5, TimeUnit.SECONDS));
+            Thread pull = new Thread(() -> {
+                try {
+                    storage.pull("q", 1, LEASE, InstantSource.fixed(T0), Duration.ofSeconds(30));
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            });
+            try {
+                pull.start();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (pull.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < deadline)
+                    Thread.onSpinWait();
+                assertEquals(Thread.State.TIMED_WAITING, pull.getState());
+                pull.interrupt();
+                pull.join(5000);
+                assertFalse(pull.isAlive());
+                assertInstanceOf(InterruptedException.class, failure.get());
+            } finally {
+                pull.interrupt();
+                release.countDown();
+            }
+            holder.get(5, TimeUnit.SECONDS);
+            assertEquals(new QueueCounts(1, 0, 0), storage.counts("q"));
+        }
     }
 
     @Test

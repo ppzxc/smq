@@ -196,8 +196,11 @@ final class Session {
                                 "error=" + r.error(),
                                 r.params().describe()),
                         Stream.concat(r.violations().stream().map(RecordsJson::describe), diagnostics(r))));
-        Path target = failureDir(r.params().seed());
-        deleteTree(target);
+        Path first = failureDir(r.params().seed());
+        Path target = first;
+        for (int attempt = 2; Files.exists(target); attempt++) {
+            target = first.resolve("reruns").resolve(Integer.toString(attempt));
+        }
         Files.createDirectories(target.getParent());
         try {
             Files.move(dir, target, StandardCopyOption.ATOMIC_MOVE);

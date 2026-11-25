@@ -256,7 +256,8 @@ tasks.register<RandomBench>("randomBench") {
 // check에는 넣지 않는다. CI Linux 잡이 별도 단계로 돌린다.
 tasks.register<JavaExec>("randomBenchSmoke") {
     description = "고정 시드 몇 개를 실행당 약 2초씩 돈다. 하네스와 검사기가 끝까지 도는지, 위반이 없는지 확인한다."
-    benchmarkRunner("--smoke", "--out-dir", randomBenchOut, main = randomBenchMain)
+    val outputDir = providers.gradleProperty("randomBenchSmokeOutDir").orElse(randomBenchOut)
+    benchmarkRunner("--smoke", "--out-dir", outputDir.get(), main = randomBenchMain)
 }
 
 // benchmark 소스셋이 배포 jar와 소스 jar에 섞이지 않았는지 jar 내용으로 확인한다.

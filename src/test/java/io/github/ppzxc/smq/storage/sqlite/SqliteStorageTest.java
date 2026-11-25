@@ -349,6 +349,58 @@ class SqliteStorageTest {
     }
 
     @Test
+    void 단일_활성_큐의_활성_리스가_있으면_준비_메시지가_있어도_쓰기_트랜잭션을_열지_않는다() {
+        AtomicInteger begins = new AtomicInteger();
+        try (SqliteStorage s = SqliteStorage.open(
+                dir.resolve("single-active-pull.db"),
+                Durability.POWER_LOSS,
+                Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                (path, durability) -> {
+                    Connection real = SqliteStorage.connect(path, durability);
+                    return (Connection) Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (p, m, a) -> {
+                                Object result;
+                                try {
+                                    result = m.invoke(real, a);
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                                if (!m.getName().equals("createStatement")) return result;
+                                Statement st = (Statement) result;
+                                return Proxy.newProxyInstance(
+                                        Statement.class.getClassLoader(),
+                                        new Class<?>[] {Statement.class},
+                                        (p2, m2, a2) -> {
+                                            if (m2.getName().equals("execute")
+                                                    && a2 != null
+                                                    && a2.length > 0
+                                                    && "BEGIN IMMEDIATE".equals(a2[0])) begins.incrementAndGet();
+                                            try {
+                                                return m2.invoke(st, a2);
+                                            } catch (InvocationTargetException e) {
+                                                throw e.getCause();
+                                            }
+                                        });
+                            });
+                })) {
+            s.declare("q", QueueOptions.defaults().singleActiveConsumer(true));
+            var message = new NewMessage(new byte[0], Map.of());
+            s.publish("q", List.of(message, message), InstantSource.fixed(Instant.EPOCH));
+            assertEquals(
+                    1,
+                    s.pull("q", 1, Duration.ofSeconds(30), InstantSource.fixed(Instant.EPOCH))
+                            .messages()
+                            .size());
+
+            int beforeBlockedPull = begins.get();
+            assertTrue(s.pull("q", 1, Duration.ofSeconds(30), InstantSource.fixed(Instant.EPOCH))
+                    .messages()
+                    .isEmpty());
+            assertEquals(beforeBlockedPull, begins.get());
+        }
+    }
+
+    @Test
     void pullTransfersLargePromotionCountWithoutOverflow() {
         long promoted = (long) Integer.MAX_VALUE + 1;
         try (SqliteStorage s = SqliteStorage.open(

@@ -79,6 +79,79 @@ abstract class StorageContractTest {
     }
 
     @Test
+    void 가상_시계_명령열은_독립_리스_모델과_만료_정각에도_일치한다() {
+        storage.declare("q", QueueOptions.defaults());
+        MessageId first = storage.publish("q", List.of(message(1), message(2)), InstantSource.fixed(T0))
+                .getFirst();
+
+        // 독립 모델: 발행된 두 id의 순서, 현재 리스와 기한만 추적한다.
+        var modelReady = new ArrayList<>(List.of(first, new MessageId(first.value() + 1)));
+        var oldLease = storage.pull("q", 1, LEASE, InstantSource.fixed(T0));
+        assertEquals(modelReady.removeFirst(), oldLease.messages().getFirst().id());
+        Instant oldDeadline = T0.plus(LEASE);
+
+        assertEquals(new io.github.ppzxc.smq.QueueCounts(1, 1, 0), storage.counts("q"));
+        Instant atDeadline = oldDeadline;
+        var redelivery = storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline));
+        assertEquals(
+                oldLease.messages().getFirst().id(),
+                redelivery.messages().getFirst().id());
+        assertEquals(new io.github.ppzxc.smq.QueueCounts(1, 1, 0), storage.counts("q"));
+
+        var stale = storage.settle(
+                oldLease.token(),
+                List.of(new Disposition(oldLease.messages().getFirst().id(), Disposition.Kind.ACK)),
+                InstantSource.fixed(atDeadline));
+        assertEquals(Outcome.STALE, stale.getFirst().outcome());
+        var current = storage.settle(
+                redelivery.token(),
+                List.of(new Disposition(redelivery.messages().getFirst().id(), Disposition.Kind.ACK)),
+                InstantSource.fixed(atDeadline));
+        assertEquals(Outcome.OK, current.getFirst().outcome());
+        assertEquals(new io.github.ppzxc.smq.QueueCounts(1, 0, 0), storage.counts("q"));
+        assertEquals(
+                modelReady.getFirst(),
+                storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline))
+                        .messages()
+                        .getFirst()
+                        .id());
+    }
+
+    @Test
+    void 리스_만료_정각의_재꺼내기와_정산_경합은_직렬_순서_중_하나와_일치한다() throws Exception {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
+        PullResult old = storage.pull("q", 1, LEASE, InstantSource.fixed(T0));
+        var start = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<List<Result>> settle = executor.submit(() -> {
+                start.await();
+                return storage.settle(
+                        old.token(),
+                        List.of(new Disposition(old.messages().getFirst().id(), Disposition.Kind.ACK)),
+                        InstantSource.fixed(T0.plus(LEASE)));
+            });
+            Future<PullResult> pull = executor.submit(() -> {
+                start.await();
+                return storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plus(LEASE)));
+            });
+            start.countDown();
+            var settled = settle.get(5, TimeUnit.SECONDS).getFirst();
+            var repulled = pull.get(5, TimeUnit.SECONDS);
+            if (settled.outcome() == io.github.ppzxc.smq.Outcome.OK) {
+                assertTrue(repulled.messages().isEmpty(), "정산이 먼저 커밋되면 다시 꺼낼 메시지가 없다");
+                assertEquals(new io.github.ppzxc.smq.QueueCounts(0, 0, 0), storage.counts("q"));
+            } else {
+                assertEquals(io.github.ppzxc.smq.Outcome.STALE, settled.outcome());
+                assertEquals(
+                        old.messages().getFirst().id(),
+                        repulled.messages().getFirst().id());
+                assertEquals(new io.github.ppzxc.smq.QueueCounts(0, 1, 0), storage.counts("q"));
+            }
+        }
+    }
+
+    @Test
     void lock_대기_마감이_끝나면_꺼내기는_상태를_바꾸지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());
         storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));

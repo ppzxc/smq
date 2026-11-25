@@ -707,6 +707,44 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 다른_저장소의_같은_큐_청크는_정산하거나_연장할_수_없다() throws Exception {
+        Smq first = Smq.sqlite(dir.resolve("first.db")).clock(clock).open();
+        opened.add(first);
+        Queue a = first.declare("q", QueueOptions.defaults());
+        Smq second = Smq.sqlite(dir.resolve("second.db")).clock(clock).open();
+        opened.add(second);
+        Queue b = second.declare("q", QueueOptions.defaults());
+        a.publish(msg("settle"));
+        b.publish(msg("settle"));
+        Chunk aSettle = a.pull(1, Duration.ZERO);
+        Chunk bSettle = b.pull(1, Duration.ZERO);
+
+        assertEquals(
+                aSettle.messages().getFirst().id(),
+                bSettle.messages().getFirst().id());
+        assertThrows(IllegalArgumentException.class, () -> b.settle(aSettle.ackAll()));
+        assertThrows(IllegalArgumentException.class, () -> b.extend(aSettle, Duration.ofSeconds(20)));
+        assertEquals(new QueueCounts(0, 1, 0), a.counts());
+        assertEquals(new QueueCounts(0, 1, 0), b.counts());
+
+        Queue sameSessionHandle = first.queue("q");
+        assertTrue(sameSessionHandle.settle(aSettle.ackAll()).allOk());
+        a.publish(msg("extend"));
+        b.publish(msg("extend"));
+        Chunk aExtend = a.pull(1, Duration.ZERO);
+        b.pull(1, Duration.ZERO);
+        assertThrows(IllegalArgumentException.class, () -> b.extend(aExtend, Duration.ofSeconds(20)));
+        assertEquals(new QueueCounts(0, 1, 0), a.counts());
+        assertEquals(new QueueCounts(0, 2, 0), b.counts());
+        assertTrue(sameSessionHandle
+                .extend(aExtend, Duration.ofSeconds(20))
+                .outcomes()
+                .allOk());
+        assertEquals(new QueueCounts(0, 1, 0), a.counts());
+        assertEquals(new QueueCounts(0, 2, 0), b.counts());
+    }
+
+    @Test
     void 빈_청크를_연장하면_빈_결과이고_인자_오류는_IllegalArgumentException() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         Chunk empty = q.pull(1, Duration.ZERO);

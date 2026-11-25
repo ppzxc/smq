@@ -19,6 +19,7 @@ final class DefaultQueue implements Queue {
     private final InstantSource clock;
     private final Duration defaultLease;
     private final PullWaiter waiter;
+    private final Object session;
     private final String name;
     private final QueueOptions options;
 
@@ -27,12 +28,14 @@ final class DefaultQueue implements Queue {
             InstantSource clock,
             Duration defaultLease,
             PullWaiter waiter,
+            Object session,
             String name,
             QueueOptions options) {
         this.storage = storage;
         this.clock = clock;
         this.defaultLease = defaultLease;
         this.waiter = waiter;
+        this.session = session;
         this.name = name;
         this.options = options;
     }
@@ -99,6 +102,7 @@ final class DefaultQueue implements Queue {
                     PullResult r = storage.pull(name, max, leaseDuration, clock, remaining, this::wakeDeadLetter);
                     if (!r.messages().isEmpty()) {
                         return PullWaiter.Attempt.found(new Chunk(
+                                session,
                                 name,
                                 r.messages(),
                                 Objects.requireNonNull(r.leaseDeadline(), "non-empty pull must have a lease deadline"),
@@ -116,13 +120,13 @@ final class DefaultQueue implements Queue {
                             .map(at -> Duration.between(clock.instant(), at))
                             .orElse(Duration.ZERO));
                 },
-                () -> new Chunk(name, List.of(), null, null));
+                () -> new Chunk(session, name, List.of(), null, null));
     }
 
     @Override
     public Outcomes settle(Settlement settlement) {
         Objects.requireNonNull(settlement, "settlement");
-        requireOwn(settlement.queue(), "settlement");
+        requireOwn(settlement.queue(), settlement.session(), "settlement");
         waiter.requireOpen();
         if (settlement.items().isEmpty()) {
             return new Outcomes(Map.of());
@@ -144,7 +148,7 @@ final class DefaultQueue implements Queue {
     public Extension extend(Chunk chunk, Duration leaseDuration) {
         Objects.requireNonNull(chunk, "chunk");
         Validation.positive(leaseDuration, "leaseDuration");
-        requireOwn(chunk.queue(), "chunk");
+        requireOwn(chunk.queue(), chunk.session(), "chunk");
         waiter.requireOpen();
         if (chunk.isEmpty()) {
             return new Extension(null, new Outcomes(Map.of()));
@@ -166,10 +170,10 @@ final class DefaultQueue implements Queue {
         destination.ifPresentOrElse(waiter::wake, waiter::wake);
     }
 
-    /** 정산과 연장은 이 큐에서 꺼낸 청크로만 할 수 있다. 큐 이름이 다르면 호출자의 실수이므로 저장소에 가기 전에 거부한다. */
-    private void requireOwn(String sourceQueue, String what) {
-        if (!name.equals(sourceQueue)) {
-            throw new IllegalArgumentException(what + " is from queue '" + sourceQueue + "', not '" + name + "'");
+    /** 정산과 연장은 이 세션의 같은 큐에서 꺼낸 청크로만 할 수 있다. */
+    private void requireOwn(String sourceQueue, Object sourceSession, String what) {
+        if (!name.equals(sourceQueue) || !session.equals(sourceSession)) {
+            throw new IllegalArgumentException(what + " is not from this queue session");
         }
     }
 }

@@ -166,13 +166,13 @@ class SqliteSmqTest extends SmqConformanceTest {
             Chunk again = q.pull(1, Duration.ZERO);
             assertEquals(id, again.messages().getFirst().id());
             assertEquals(2, again.messages().getFirst().deliveryCount());
-            assertEquals(Outcome.STALE, q.settle(lost.ackAll()).byMessage().get(id));
+            assertThrows(IllegalArgumentException.class, () -> q.settle(lost.ackAll()));
             assertTrue(q.settle(again.ackAll()).allOk());
         }
     }
 
     @Test
-    void 닫기_전에_꺼낸_리스는_다시_연_뒤_기한_전이면_그대로_정산된다() throws Exception {
+    void 다시_연_세션에서는_이전_세션의_청크를_정산하거나_연장할_수_없다() throws Exception {
         Chunk held;
         try (Smq first = builder().clock(clock).open()) {
             Queue q = first.declare("q", QueueOptions.defaults());
@@ -180,7 +180,10 @@ class SqliteSmqTest extends SmqConformanceTest {
             held = q.pull(1, Duration.ZERO);
         }
         try (Smq second = builder().clock(clock).open()) {
-            assertTrue(second.queue("q").settle(held.ackAll()).allOk());
+            Queue q = second.queue("q");
+            assertThrows(IllegalArgumentException.class, () -> q.settle(held.ackAll()));
+            assertThrows(IllegalArgumentException.class, () -> q.extend(held, Duration.ofSeconds(20)));
+            assertEquals(new QueueCounts(0, 1, 0), q.counts());
         }
     }
 

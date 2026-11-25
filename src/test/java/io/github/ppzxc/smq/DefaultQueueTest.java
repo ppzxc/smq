@@ -106,6 +106,7 @@ class DefaultQueueTest {
                 () -> T0,
                 Duration.ofSeconds(10),
                 new PullWaiter(Optional.empty()),
+                new Object(),
                 "q",
                 QueueOptions.defaults());
     }

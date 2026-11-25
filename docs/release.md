@@ -27,7 +27,7 @@
 | 전체 `randomBench` 불변식 위반 0 | 릴리스 PR head에서 수동. PR 본문에 기록. 위반은 공개 전에 반드시 고친다 |
 | 배포 테스트 (b) | 공개 워크플로 안. 실패하면 Publish하지 않는다 |
 
-조회하는 CI는 릴리스 커밋(main에서 실행한 SHA)의 main push 실행이다. `Linux` 워크플로와 `Windows` 워크플로 각각에서 `check`와 `deploy-test` 잡이 `success`여야 한다. `randomBenchSmoke`는 `Linux`의 `check` 잡 안의 단계라서 그 잡이 녹색이면 통과한 것이다. 배포 테스트 (a), (b), (c)는 같은 하네스(`deploy-test/run-all.sh`)를 쓰고 저장소 URL만 다르다. (a)는 `publishToMavenLocal`, (b)는 Portal 스테이징, (c)는 공개 후 Central이다.
+조회하는 CI는 릴리스 커밋(main에서 실행한 SHA)의 main push 실행이다. 네 개의 필수 체크 `linux-build`, `windows-build`, `linux-deploy-test`, `windows-deploy-test`가 모두 `success`여야 한다. `randomBenchSmoke`는 `linux-build` 잡 안의 단계라서 그 잡이 녹색이면 통과한 것이다. 배포 테스트 (a), (b), (c)는 같은 하네스(`deploy-test/run-all.sh`)를 쓰고 저장소 URL만 다르다. (a)는 `publishToMavenLocal`, (b)는 Portal 스테이징, (c)는 공개 후 Central이다.
 
 ## 1. 릴리스 PR
 

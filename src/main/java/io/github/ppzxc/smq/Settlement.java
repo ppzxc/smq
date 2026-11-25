@@ -17,7 +17,7 @@ public final class Settlement {
     private final @Nullable LeaseToken token;
     private final List<Disposition> items;
 
-    Settlement(String queue, @Nullable LeaseToken token, List<Disposition> items) { // items는 호출자가 이미 불변 복사한 목록이다
+    Settlement(String queue, @Nullable LeaseToken token, List<Disposition> items) {
         this.queue = queue;
         this.token = token;
         this.items = items;

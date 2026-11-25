@@ -63,6 +63,8 @@ import org.sqlite.SQLiteException;
  */
 public final class SqliteStorage implements Storage {
 
+    private static final System.Logger LOG = System.getLogger(SqliteStorage.class.getName());
+
     /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
     public static final int APPLICATION_ID = SqliteSchema.APPLICATION_ID;
 
@@ -94,8 +96,6 @@ public final class SqliteStorage implements Storage {
     static final String SELECT_PULLABLE_STATE = "SELECT lease_token IS NOT NULL" + PULLABLE_FROM_WHERE;
 
     /** 최대 전달 횟수에 도달한 준비 메시지. dead letter 큐로 옮길 대상이다. */
-    // Pull only delivers below the limit, so exhausted messages all have the same delivery count.
-    // Ordering by delivery count and id therefore preserves id order while avoiding a temporary sort.
     static final String SELECT_EXHAUSTED = "SELECT id, payload, headers, delivery_count, lease_token IS NOT NULL"
             + STORED_READY_FROM_WHERE
             + " AND delivery_count > 0 AND delivery_count >= ? ORDER BY delivery_count, id LIMIT ?";
@@ -166,7 +166,7 @@ public final class SqliteStorage implements Storage {
                 SqliteSchema.ensureDelayedIdIndex(c);
                 return version;
             });
-            // 표식을 확인한 뒤에야 파일의 저널 모드를 바꾼다.
+
             executor.executeOutsideTransaction(() -> {
                 try (Statement s = executor.connection().createStatement()) {
                     TransactionExecutor.configureWal(s);
@@ -216,14 +216,11 @@ public final class SqliteStorage implements Storage {
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
         boolean ok = false;
         try (Statement s = connection.createStatement()) {
-            // sqlite-jdbc는 설정 pragma의 실행 순서를 보장하지 않으므로, EXCLUSIVE를 첫 문장으로 직접 건다.
-            // 두 문장의 순서가 곧 설정이다. 아래 결과 확인은 pragma가 무시된 경우만 잡고, 락을 실제로 잡았는지는 -shm 부재 테스트가 확인한다. 순서를 바꾸거나 SQLiteConfig로
-            // 되돌리면 같은 고장이 다시 난다.
-            // 이미 WAL인 파일을 다시 열 때도 WAL로 들어가기 전에 켜야 -shm 대신 heap memory wal-index를 쓴다.
+
             try (ResultSet rs = s.executeQuery("PRAGMA locking_mode = EXCLUSIVE")) {
                 requireExclusive(rs.next() ? rs.getString(1) : null);
             }
-            // POWER_LOSS는 synchronous=FULL, PROCESS_CRASH는 WAL과 함께 synchronous=NORMAL이다.
+
             s.execute("PRAGMA synchronous = "
                     + switch (durability) {
                         case POWER_LOSS -> "FULL";
@@ -505,7 +502,7 @@ public final class SqliteStorage implements Storage {
                         ps.setLong(5, nowNanos);
                         ps.setString(6, queue);
                         try (ResultSet rs = ps.executeQuery()) {
-                            // 행이 없는 일은 없지만, 모르면 쓰기 경로가 확인하게 한다.
+
                             return !rs.next() || rs.getInt(1) == 1 || rs.getInt(2) == 0;
                         }
                     }
@@ -618,7 +615,7 @@ public final class SqliteStorage implements Storage {
                     Instant now = clock.instant();
                     long queueId = requireQueue(c, queue);
                     QueueOptions options = readOptions(c, queue);
-                    // 꺼내기 트랜잭션 1단계: 단일 활성 컨슈머 큐에 리스 중인 청크가 있으면 빈 청크다.
+
                     if (options.singleActiveConsumer() && hasActiveLease(c, queueId, now)) {
                         return PullResult.empty();
                     }
@@ -644,7 +641,7 @@ public final class SqliteStorage implements Storage {
                             }
                         }
                     }
-                    // 꺼낼 대상을 저장된 상태와 함께 먼저 읽는다. 아래 UPDATE가 같은 트랜잭션에서 같은 행을 고른다.
+
                     long fromReady = 0;
                     long picked = 0;
                     try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE_STATE)) {
@@ -655,7 +652,7 @@ public final class SqliteStorage implements Storage {
                         try (ResultSet rs = peek.executeQuery()) {
                             while (rs.next()) {
                                 picked++;
-                                // 리스 토큰이 남은 행은 리스 중에서 리스 중으로 간다.
+
                                 if (rs.getInt(1) == 0) {
                                     fromReady++;
                                 }
@@ -709,7 +706,7 @@ public final class SqliteStorage implements Storage {
     }
 
     private static void promote(Connection c, QueueCounters.Tx tx, long queueId, long nowNanos) throws SQLException {
-        // 토큰을 남겨 아직 다시 꺼내지 않은 메시지의 정산과 개수를 유지한다.
+
         try (PreparedStatement ps = c.prepareStatement(PROMOTE_EXPIRED_LEASES)) {
             ps.setLong(1, queueId);
             ps.setLong(2, nowNanos);
@@ -750,7 +747,7 @@ public final class SqliteStorage implements Storage {
                 }
             }
         }
-        // 상한보다 한 건 더 읽어 두었으므로, 더 있는지는 개수로 안다.
+
         boolean deadLettersRemain = found.size() > DeadLetters.MAX_MOVES_PER_PULL;
         List<Exhausted> moving = found.subList(0, Math.min(found.size(), DeadLetters.MAX_MOVES_PER_PULL));
         try (PreparedStatement insert = c.prepareStatement("""
@@ -770,7 +767,7 @@ public final class SqliteStorage implements Storage {
                 insert.executeUpdate();
                 delete.setLong(1, e.id());
                 delete.executeUpdate();
-                // 원천은 저장된 상태로 정한다. 기한이 지난 리스가 남은 행은 리스 중에서 빠진다.
+
                 if (e.leased()) {
                     tx.leased(queueId, -1);
                 } else {
@@ -785,7 +782,6 @@ public final class SqliteStorage implements Storage {
     private record MoveResult(boolean remain, boolean moved) {}
 
     /** dead letter 큐로 옮길 도달 메시지 한 건. */
-    // payload 배열은 JDBC에서 읽어 즉시 SQL 바인딩에만 사용한다.
     @SuppressWarnings("ArrayRecordComponent")
     private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount, boolean leased) {}
 
@@ -918,11 +914,10 @@ public final class SqliteStorage implements Storage {
     @Override
     public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock) {
         return inTransaction(c -> {
-            // 시각은 쓰기 트랜잭션을 잡은 뒤에 읽는다. 앞서 커밋된 다른 꺼내기와 시각 순서가 어긋나지 않게 한다.
             Instant now = clock.instant();
             Instant deadline = now.plus(d);
             List<Result> results = new ArrayList<>(ids.size());
-            // 단일 활성 컨슈머 큐에서는 만료된 리스를 되살리지 않는다. 그 사이 다른 청크가 꺼냈을 수 있다.
+
             try (PreparedStatement ps = c.prepareStatement("""
                     UPDATE message SET lease_deadline = ?
                     WHERE id = ? AND lease_token = ?
@@ -972,11 +967,11 @@ public final class SqliteStorage implements Storage {
                 }
                 throw e;
             }
-            // 연결이 끝난 뒤라 대상은 이미 완전한 파일이다. 임시 파일을 못 지워도 실패로 보지 않는다.
+
             try {
                 Files.deleteIfExists(temp);
-            } catch (IOException ignored) {
-                // 남은 임시 파일은 스냅샷의 결과에 영향이 없다.
+            } catch (IOException e) {
+                LOG.log(System.Logger.Level.WARNING, "failed to remove temporary snapshot file " + temp, e);
             }
         } catch (IOException e) {
             throw new SmqStorageException("cannot snapshot to " + target, e);
@@ -1008,8 +1003,8 @@ public final class SqliteStorage implements Storage {
         if (c != null) {
             try {
                 c.close();
-            } catch (SQLException ignored) {
-                // 닫기 실패는 무시한다.
+            } catch (SQLException e) {
+                LOG.log(System.Logger.Level.WARNING, "failed to close SQLite connection during cleanup", e);
             }
         }
     }

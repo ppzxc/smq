@@ -93,7 +93,7 @@ final class QueueCounters {
             for (Map.Entry<Long, long[]> e : deltas.entrySet()) {
                 Slot slot = byId.get(e.getKey());
                 if (slot == null) {
-                    // 커밋된 DB에 있는 큐인데 등록되지 않았다면 불변식 위반이다. 조용히 넘기지 않는다.
+
                     System.getLogger(QueueCounters.class.getName())
                             .log(System.Logger.Level.ERROR, "no counter registered for queue id " + e.getKey());
                     continue;

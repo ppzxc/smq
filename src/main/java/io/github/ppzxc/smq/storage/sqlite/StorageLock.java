@@ -18,6 +18,8 @@ import org.jspecify.annotations.Nullable;
  */
 final class StorageLock implements AutoCloseable {
 
+    private static final System.Logger LOG = System.getLogger(StorageLock.class.getName());
+
     private final FileChannel channel;
     private final FileLock lock;
 
@@ -70,8 +72,8 @@ final class StorageLock implements AutoCloseable {
     public void close() {
         try {
             lock.release();
-        } catch (IOException ignored) {
-            // 채널을 닫으면 락도 풀린다.
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.WARNING, "failed to release storage lock", e);
         }
         closeQuietly(channel);
     }
@@ -79,8 +81,8 @@ final class StorageLock implements AutoCloseable {
     private static void closeQuietly(FileChannel c) {
         try {
             c.close();
-        } catch (IOException ignored) {
-            // 닫기 실패는 무시한다.
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.WARNING, "failed to close storage lock channel", e);
         }
     }
 }

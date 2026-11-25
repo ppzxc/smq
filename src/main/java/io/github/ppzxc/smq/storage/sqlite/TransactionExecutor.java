@@ -161,8 +161,8 @@ final class TransactionExecutor {
         lock.lock();
         try {
             connection.close();
-        } catch (SQLException ignored) {
-            // 닫기 실패는 무시한다.
+        } catch (SQLException e) {
+            LOG.log(System.Logger.Level.WARNING, "failed to close SQLite connection", e);
         } finally {
             lock.unlock();
         }
@@ -187,7 +187,7 @@ final class TransactionExecutor {
             }
             throw t;
         }
-        // 커밋이 확정됐다. 이 아래의 어떤 실패도 롤백이나 호출자의 실패로 이어지면 안 된다.
+
         try {
             afterCommit.run();
         } catch (RuntimeException e) {
@@ -219,17 +219,9 @@ final class TransactionExecutor {
         try {
             checkWalSizeAndRewind();
         } catch (Throwable t) {
-            // 커밋은 이미 확정됐다. Error(LinkageError, StackOverflowError, OutOfMemoryError 등)를 올려도 JVM을 살리지도,
-            // 커밋을 되돌리지도 못하고 호출자가 성공한 쓰기를 실패로 보고 재시도해 중복만 만든다. VirtualMachineError는 복구할 수
-            // 없지만 같은 이유로 여기서 삼킨다. 진짜로 망가진 JVM이면 다음 할당이나 호출에서 호출자에게 다시 드러난다.
-            // ThreadDeath도 같다(Thread.stop은 폐기됐다). 예상 가능한 반복 실패가 아니라 드문 이상 신호이므로 연속 실패 간격
-            // 억제를 거치지 않고 매번 스택 트레이스와 함께 남긴다. 로그조차 못 남기는 상태일 수 있어 로그 실패는 무시한다.
+
             walSizeAtRestart = 0;
-            try {
-                LOG.log(System.Logger.Level.WARNING, CHECKPOINT_UNEXPECTED, t);
-            } catch (Throwable ignored) {
-                // 로그를 남기지 못해도 커밋 결과에는 영향이 없다.
-            }
+            LOG.log(System.Logger.Level.WARNING, CHECKPOINT_UNEXPECTED, t);
         }
     }
 
@@ -239,7 +231,7 @@ final class TransactionExecutor {
                 walFile = locateWalFile();
                 walFileLocated = true;
             } catch (SQLException | RuntimeException e) {
-                // 위치를 모르면 크기도 볼 수 없다. 확인하지 못했을 뿐 체크포인트를 시도한 것은 아니다.
+
                 checkpointFailed(WAL_LOCATE_FAILED, e);
                 return;
             }
@@ -251,10 +243,10 @@ final class TransactionExecutor {
             try {
                 size = walSizeReader.size(walFile);
             } catch (NoSuchFileException e) {
-                // -wal이 아직 없거나 지워졌다. 오류가 아니라 크기 0(한도 아래)이다.
+
                 size = 0;
             } catch (IOException | RuntimeException e) {
-                // 크기를 모르면 "한도 아래"로 볼 수 없다. 연속 실패 상태를 지우지 않고 다음 확인에 맡긴다.
+
                 checkpointFailed(WAL_SIZE_UNREADABLE, e);
                 return;
             }
@@ -264,13 +256,12 @@ final class TransactionExecutor {
             return;
         }
         if (size <= walSizeAtRestart) {
-            // 되감은 구간을 아직 다 채우지 못했다. 되감기 성공 때 이미 횟수를 지웠고, 실패하면 기억값을 0으로 되돌리므로
-            // 여기서 실패 상태를 지울 일은 없다.
+
             return;
         }
         try (Statement s = connection.createStatement();
                 ResultSet rs = s.executeQuery("PRAGMA wal_checkpoint(RESTART)")) {
-            // 첫 열이 0이면 WAL을 끝까지 되감았다.
+
             if (rs.next() && rs.getInt(1) == 0) {
                 consecutiveCheckpointFailures = 0;
                 rememberSizeAfterRestart();
@@ -391,7 +382,7 @@ final class TransactionExecutor {
     }
 
     static boolean isBusy(SQLException e) {
-        // 확장 결과 코드의 아래 8비트가 기본 결과 코드다.
+
         return (e.getErrorCode() & 0xFF) == SQLITE_BUSY;
     }
 }

@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage;
 import io.github.ppzxc.smq.Message;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -18,6 +19,14 @@ public record PullResult(
         List<Message> messages,
         boolean deadLettersRemain,
         boolean deadLettersMoved) {
+
+    public PullResult {
+        messages = List.copyOf(Objects.requireNonNull(messages, "messages"));
+        if (messages.isEmpty() ? token != null || leaseDeadline != null : token == null || leaseDeadline == null) {
+            throw new IllegalArgumentException(
+                    "token and leaseDeadline must be present exactly when messages are present");
+        }
+    }
 
     public static PullResult of(LeaseToken token, Instant leaseDeadline, List<Message> messages) {
         return of(token, leaseDeadline, messages, false);

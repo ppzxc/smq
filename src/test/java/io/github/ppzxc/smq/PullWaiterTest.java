@@ -1,6 +1,7 @@
 package io.github.ppzxc.smq;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.ppzxc.smq.PullWaiter.Attempt;
@@ -244,7 +245,7 @@ class PullWaiterTest {
     }
 
     @Test
-    void 바로_다시_꺼내라는_표시가_계속되어도_interrupt되면_InterruptedException() {
+    void 바로_다시_꺼내라는_표시가_계속되어도_interrupt되면_InterruptedException() throws Exception {
         PullWaiter waiter = new PullWaiter(new RecordingHint(), true);
         AtomicInteger attempts = new AtomicInteger();
         assertThrows(
@@ -263,5 +264,7 @@ class PullWaiterTest {
                         },
                         () -> "empty"));
         assertEquals(3, attempts.get());
+        assertFalse(Thread.currentThread().isInterrupted());
+        assertEquals("next", waiter.await(Duration.ZERO, () -> Attempt.found("next"), () -> "empty"));
     }
 }

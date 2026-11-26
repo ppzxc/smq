@@ -61,7 +61,7 @@ Benchmark code retains narrowly scoped PMD suppressions to preserve its external
 
 ## PMD enforcement and reports
 
-PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java`. The [MUST ruleset](../../config/pmd/must.xml) is the authoritative list of 86 rule IDs, grouped as follows:
+PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java`. The [MUST ruleset](../../config/pmd/must.xml) contains 86 built-in rule IDs, grouped as follows, and the custom `PolicyException` rule:
 
 | PMD category | MUST rules |
 | --- | ---: |

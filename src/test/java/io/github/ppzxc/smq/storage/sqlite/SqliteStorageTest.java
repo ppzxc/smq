@@ -405,7 +405,7 @@ class SqliteStorageTest {
     @Test
     void cachedStatementIsReusedAndClosedWithStorage() throws Exception {
         List<PreparedStatement> prepared = new ArrayList<>();
-        SqliteStorage storage = SqliteStorage.open(
+        try (SqliteStorage storage = SqliteStorage.open(
                 dir.resolve("statement-cache.db"),
                 Durability.PROCESS_CRASH,
                 Deadline.DEFAULT_LOCK_WAIT_FLOOR,
@@ -425,15 +425,12 @@ class SqliteStorageTest {
                                     throw e.getCause();
                                 }
                             });
-                });
-        try {
+                })) {
             storage.declare("q", QueueOptions.defaults());
             storage.counts("q");
             storage.counts("q");
             assertEquals(1, prepared.size());
             assertFalse(prepared.get(0).isClosed());
-        } finally {
-            storage.close();
         }
         assertTrue(prepared.get(0).isClosed());
     }

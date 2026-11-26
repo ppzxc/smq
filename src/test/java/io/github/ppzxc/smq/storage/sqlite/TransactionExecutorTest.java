@@ -96,6 +96,30 @@ class TransactionExecutorTest {
     }
 
     @Test
+    void 오류로_실패한_트랜잭션도_롤백하고_다음_연산을_허용한다() throws Exception {
+        TransactionExecutor ex = executor();
+        AssertionError failure = new AssertionError("injected");
+        assertSame(
+                failure,
+                assertThrows(
+                        AssertionError.class,
+                        () -> ex.execute(c -> {
+                            try (Statement s = c.createStatement()) {
+                                s.execute("INSERT INTO t VALUES (1)");
+                            }
+                            throw failure;
+                        })));
+        assertEquals(0, count());
+        ex.execute(c -> {
+            try (Statement s = c.createStatement()) {
+                s.execute("INSERT INTO t VALUES (2)");
+            }
+            return null;
+        });
+        assertEquals(1, count());
+    }
+
+    @Test
     void 롤백이_실패하면_이후_모든_연산이_처음_원인으로_실패한다() {
         SQLException rollbackFailure = new SQLException("rollback failed");
         TransactionExecutor ex = new TransactionExecutor(failingQuery(connection, "ROLLBACK", () -> rollbackFailure));

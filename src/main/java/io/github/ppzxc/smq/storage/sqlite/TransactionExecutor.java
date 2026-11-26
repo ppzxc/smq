@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.SmqStorageException;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -133,6 +134,12 @@ final class TransactionExecutor {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "All body and rollback failures must preserve the original failure and release the transaction.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private <T> T runOnce(TxBody<T> body, Runnable afterCommit) throws SQLException {
         try (Statement s = connection.createStatement()) {
             s.execute("BEGIN IMMEDIATE");
@@ -162,6 +169,12 @@ final class TransactionExecutor {
         return result;
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "A post-commit checkpoint failure must never turn a successful commit into a failure.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void checkpointIfWalIsLarge() {
         commits++;
         if (commits % CHECKPOINT_CHECK_EVERY_COMMITS != 0) {
@@ -176,7 +189,13 @@ final class TransactionExecutor {
         }
     }
 
-    @SuppressWarnings("ReferenceEquality") // Suppress self-suppression by comparing Throwable identity.
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Logging a post-commit failure must not change the successful commit result.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "ReferenceEquality"
+    }) // Throwable identity avoids self-suppression.
     static void logCheckpointFailure(Throwable failure, Runnable log) {
         try {
             log.run();
@@ -187,31 +206,16 @@ final class TransactionExecutor {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Checkpoint failures after commit are logged and retried without failing the committed operation.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void checkWalSizeAndRewind() {
-        if (!walFileLocated) {
-            try {
-                walFile = locateWalFile();
-                walFileLocated = true;
-            } catch (SQLException | RuntimeException e) {
-
-                checkpointFailed(WAL_LOCATE_FAILED, e);
-                return;
-            }
-        }
-        long size;
-        if (walFile.equals(NO_WAL)) {
-            size = 0;
-        } else {
-            try {
-                size = walSizeReader.size(walFile);
-            } catch (NoSuchFileException e) {
-
-                size = 0;
-            } catch (IOException | RuntimeException e) {
-
-                checkpointFailed(WAL_SIZE_UNREADABLE, e);
-                return;
-            }
+        Long size = walSize();
+        if (size == null) {
+            return;
         }
         if (size < CHECKPOINT_WAL_BYTES) {
             consecutiveCheckpointFailures = 0;
@@ -235,11 +239,52 @@ final class TransactionExecutor {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Checkpoint failures after commit are logged and retried without failing the committed operation.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
+    private @Nullable Long walSize() {
+        if (!walFileLocated) {
+            try {
+                walFile = locateWalFile();
+                walFileLocated = true;
+            } catch (SQLException | RuntimeException e) {
+
+                checkpointFailed(WAL_LOCATE_FAILED, e);
+                return null;
+            }
+        }
+        long size;
+        if (walFile.equals(NO_WAL)) {
+            size = 0;
+        } else {
+            try {
+                size = walSizeReader.size(walFile);
+            } catch (NoSuchFileException e) {
+
+                size = 0;
+            } catch (IOException | RuntimeException e) {
+
+                checkpointFailed(WAL_SIZE_UNREADABLE, e);
+                return null;
+            }
+        }
+        return size;
+    }
+
     private void rewindFailed(@Nullable Exception cause) {
         walSizeAtRestart = 0;
         checkpointFailed(CHECKPOINT_INCOMPLETE, cause);
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "A failed post-commit size read is logged and causes a later retry.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void rememberSizeAfterRestart() {
         try {
             walSizeAtRestart = Math.min(walSizeReader.size(walFile), WAL_FILE_KEEP_BYTES);

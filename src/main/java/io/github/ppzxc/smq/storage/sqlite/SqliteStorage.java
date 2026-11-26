@@ -646,20 +646,7 @@ public final class SqliteStorage implements Storage {
                     if (moved.moved()) {
                         destinations.add(options.deadLetterQueue().orElseThrow());
                     }
-                    long barrier = Long.MAX_VALUE;
-                    if (options.singleActiveConsumer()) {
-                        try (PreparedStatement ps = c.prepareStatement(SELECT_DELAY_BARRIER)) {
-                            ps.setLong(1, queueId);
-                            try (ResultSet rs = ps.executeQuery()) {
-                                if (rs.next()) {
-                                    long id = rs.getLong(1);
-                                    if (!rs.wasNull()) {
-                                        barrier = id - 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    long barrier = options.singleActiveConsumer() ? delayBarrier(c, queueId) : Long.MAX_VALUE;
 
                     long fromReady = 0;
                     long picked = 0;
@@ -796,6 +783,21 @@ public final class SqliteStorage implements Storage {
 
     @SuppressWarnings("ArrayRecordComponent") // This private record carries a database-owned payload.
     private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount, boolean leased) {}
+
+    private static long delayBarrier(Connection c, long queueId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(SELECT_DELAY_BARRIER)) {
+            ps.setLong(1, queueId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long id = rs.getLong(1);
+                    if (!rs.wasNull()) {
+                        return id - 1;
+                    }
+                }
+            }
+        }
+        return Long.MAX_VALUE;
+    }
 
     @Override
     public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {

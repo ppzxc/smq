@@ -13,7 +13,12 @@ public final class SigkillWriterMain {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.SystemPrintln")
+    @SuppressWarnings({"PMD.SystemPrintln", "PMD.CloseResource"})
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "This process intentionally runs until killed; closing would invalidate the crash fixture.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     public static void main(String[] args) {
         Smq smq = Smq.sqlite(Path.of(args[0]))
                 .durability(Durability.PROCESS_CRASH)

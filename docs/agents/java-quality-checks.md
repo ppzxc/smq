@@ -94,3 +94,11 @@ Run `./gradlew spotbugsMain` to analyze the compiled production classes with Spo
 `pmdMainComments` and `pmdTestComments` enforce STYLE-011 through the PMD 7 Java rule in `pmd-rules`; both tasks and the rule tests run in `check`. Generated source directories are excluded. PMD 7.29 cannot parse both modifiers on the module descriptor’s `requires static transitive` directive, so the comment task analyzes a copy with one modifier blanked while preserving line and column positions. Parsing errors fail the task. Reports identify STYLE-011 and the file and line. Spotless does not configure `toggleOffOn()`, so neither toggle is currently accepted. If enabled, configure the rule's `spotlessToggles` property together with Spotless and use matched pairs.
 
 ADR 0011 and AGENTS.md require an adjacent explanation for intentional Error Prone suppressions, while STYLE-011 and STYLE-005 section 9.4 prohibit ordinary comments and comment-based suppression. The repository instructions take precedence for these explanations: only the existing specific Error Prone rationale comments are permitted, alongside their matching annotations; PMD suppression comments remain forbidden. This exception retains the reviewable reason without treating the comment as a suppression mechanism. New exceptions require review and a corresponding rule test. The `ArrayRecordComponent` suppressions keep the public API and the internal payload ownership contracts unchanged.
+
+### PMD SHOULD test baseline (#247)
+
+On Linux with JDK 25, integration commit `aab13e0` reported 89 violations in
+`pmdTestShould`: 52 CloseResource, 14 UnnecessaryWarningSuppression,
+13 AvoidCatchingGenericException, 6 CognitiveComplexity, 2 CyclomaticComplexity,
+and 2 UnitTestShouldIncludeAssert. The XML and HTML reports identify each location.
+This is a starting measurement, not evidence that the test gate is ready to enable.

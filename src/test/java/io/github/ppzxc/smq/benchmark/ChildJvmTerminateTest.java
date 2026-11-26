@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -43,6 +44,12 @@ class ChildJvmTerminateTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     void 대기_스레드가_인터럽트될_때_자식이_이미_종료됐다() throws Exception {
         Path dir = Files.createTempDirectory("smq-child-interrupt");
         Path pidFile = dir.resolve("child.pid");

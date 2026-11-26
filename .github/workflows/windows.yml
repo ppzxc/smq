@@ -32,6 +32,13 @@ jobs:
         shell: bash
         run: ./gradlew check --no-daemon --stacktrace
 
+      - name: SpotBugs 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-spotbugs-report
+          path: build/reports/spotbugs/main.html
+
       - name: 테스트 수 요약
         if: always()
         shell: bash

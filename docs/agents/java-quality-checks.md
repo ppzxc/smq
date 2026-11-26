@@ -26,6 +26,7 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 | | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test, benchmark | error |
 | Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test, benchmark | any violation fails the build |
 | Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | reports only |
+| TOOL-003 | SpotBugs 4.10.5 default checks | main | reports only |
 | NUL-001 | NullAway / JSpecify | main | error; only `@NullMarked` code, explicit nullness required |
 | STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, benchmark, deploy-test Java | `spotlessCheck` is part of `check` |
 
@@ -83,6 +84,10 @@ PMD's `errorprone` category is a group of PMD rules; it is separate from Google 
 - `ExceptionAsFlowControl` keeps the established wrapped I/O error for an existing snapshot target and for invalid encoded header lengths.
 
 PMD MUST tasks also check each PMD suppression for a matching `@PolicyException`, a nonempty reason and approver, and an unexpired ISO-8601 review date. The tasks rerun when the date changes and do not reuse PMD incremental results. Existing Error Prone exceptions retain their documented adjacent explanations.
+
+## SpotBugs report
+
+Run `./gradlew spotbugsMain` to analyze the compiled production classes with SpotBugs 4.10.5. The existing `check` task also runs it. Findings are advisory and appear in `build/reports/spotbugs/main.html`. Linux and Windows CI upload that report as `linux-spotbugs-report` and `windows-spotbugs-report`, respectively.
 
 ## STYLE-011 comment policy
 

@@ -24,6 +24,18 @@ final class RecordSpool implements AutoCloseable {
     private final DataOutputStream published;
     private final DataOutputStream deliveries;
 
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason =
+                    "The streams transfer to this spool and close together in close; the first closes if opening the second fails.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "A failure opening the second stream must close the first, including runtime failures.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CloseResource", "PMD.AvoidCatchingGenericException"})
     RecordSpool(Path dir) throws IOException {
         this.published = open(publishedFile(dir));
         DataOutputStream second;

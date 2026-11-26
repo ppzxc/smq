@@ -32,7 +32,13 @@ public final class BenchMain {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.SystemPrintln")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason =
+                    "The entry point selects the plan, reports each run, and applies thresholds only for full SQLite runs.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.SystemPrintln", "PMD.CyclomaticComplexity"})
     public static void main(String[] args) throws Exception {
         ModuleGuard.requireSmqModule("부모 JVM");
         Map<String, String> opts = parse(args);

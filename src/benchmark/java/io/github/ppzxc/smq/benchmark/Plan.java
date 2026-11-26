@@ -76,6 +76,24 @@ final class Plan {
         List<Durability> durabilities =
                 sqlite ? List.of(Durability.POWER_LOSS, Durability.PROCESS_CRASH) : Collections.singletonList(null);
         List<RunSpec> plan = new ArrayList<>();
+        addS1(plan, storage, durabilities, sqlite, d, w, deep);
+        // S2: 묶음 프로파일과 단건 프로파일(P0, P2, P4, P6), 빈 큐.
+        for (Profile p :
+                List.of(Profile.P1, Profile.P3, Profile.P5, Profile.P7, Profile.P0, Profile.P2, Profile.P4, Profile.P6))
+            plan.add(RunSpec.s2(storage, p, d, w));
+        // S3: P1만.
+        plan.add(RunSpec.s3(storage, Profile.P1, d, w));
+        return plan;
+    }
+
+    private static void addS1(
+            List<RunSpec> plan,
+            Storage storage,
+            List<Durability> durabilities,
+            boolean sqlite,
+            long d,
+            long w,
+            int deep) {
         // S1: 묶음 프로파일(P1, P3, P5, P7)은 내구성 수준별.
         for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P0, dur, 0, d, w));
         for (Profile p : List.of(Profile.P1, Profile.P3, Profile.P5, Profile.P7))
@@ -85,18 +103,14 @@ final class Plan {
             for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
         // 100만 건 깊이는 P1에서만.
         for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, dur, deep, d, w));
-        if (sqlite)
-            for (RunSpec.QueueKind kind : List.of(
-                    RunSpec.QueueKind.MAX_DELIVERIES,
-                    RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
-                    RunSpec.QueueKind.LEASED_HEAD))
-                for (int depth : new int[] {0, deep}) plan.add(RunSpec.s1(kind, depth, d, w));
-        // S2: 묶음 프로파일과 단건 프로파일(P0, P2, P4, P6), 빈 큐.
-        for (Profile p :
-                List.of(Profile.P1, Profile.P3, Profile.P5, Profile.P7, Profile.P0, Profile.P2, Profile.P4, Profile.P6))
-            plan.add(RunSpec.s2(storage, p, d, w));
-        // S3: P1만.
-        plan.add(RunSpec.s3(storage, Profile.P1, d, w));
-        return plan;
+        if (sqlite) addSqliteQueueKinds(plan, d, w, deep);
+    }
+
+    private static void addSqliteQueueKinds(List<RunSpec> plan, long d, long w, int deep) {
+        for (RunSpec.QueueKind kind : List.of(
+                RunSpec.QueueKind.MAX_DELIVERIES,
+                RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
+                RunSpec.QueueKind.LEASED_HEAD))
+            for (int depth : new int[] {0, deep}) plan.add(RunSpec.s1(kind, depth, d, w));
     }
 }

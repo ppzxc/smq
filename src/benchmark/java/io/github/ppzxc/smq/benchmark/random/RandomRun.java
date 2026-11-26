@@ -6,6 +6,7 @@ import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.Outcome;
 import io.github.ppzxc.smq.Outcomes;
 import io.github.ppzxc.smq.OutgoingMessage;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.Queue;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
@@ -38,6 +39,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>시각 규약: 발행과 정산은 호출 직전 벽시계를, 꺼내기는 호출이 돌아온 직후 벽시계를 기록한다. 검사기의 부등식이 모두 거짓 위반을 내지
  * 않는 쪽으로 기울도록 하는 것이다(발행·정산 시각은 실제보다 이르고, 꺼낸 시각은 실제보다 늦다).
  */
+@PolicyException(
+        rule = "PMD.CyclomaticComplexity",
+        reason =
+                "The run coordinates independent workload, recording, and judgment phases; each method remains subject to the complexity limit.",
+        approvedBy = "ppzxc",
+        reviewBy = "2027-11-26")
 final class RandomRun {
 
     static final String TARGET = "random-target";
@@ -120,6 +127,12 @@ final class RandomRun {
     }
 
     /** {@code dir}에 SQLite 파일을 만들고 돈다. 예외는 {@link Verdict#ERROR}로 돌려준다. */
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The harness converts any run failure to an error result while preserving interrupt status.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static RunResult execute(RunParams params, Path dir, Checker checker) {
         RandomRun run = new RandomRun(params, checker, drainLimit(params));
         try {
@@ -252,6 +265,12 @@ final class RandomRun {
         rethrowFailure();
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Any worker failure must stop the run and be propagated to the controlling thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private Thread thread(String name, Body body) {
         return new Thread(
                 () -> {
@@ -375,6 +394,12 @@ final class RandomRun {
     }
 
     /** 처리 시간만큼 기다린다. 길면 리스 기한의 절반마다 연장한다. 부하 구간이 끝나 멈추면 false(정산하지 않는다). */
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The processing loop coordinates interruption, lease extension, and per-message deadlines.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     private boolean process(Queue target, Chunk chunk, Script.Processing p, long[] deadline)
             throws InterruptedException {
         long remaining = p.millis();
@@ -398,6 +423,17 @@ final class RandomRun {
         return true;
     }
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "Each scripted disposition is applied and its result recorded against the same message.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Each scripted disposition is applied and its result recorded against the same message.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private void settleDecisions(Queue target, Chunk chunk, List<Tag> tags, Settle[] settles) {
         List<Message> messages = chunk.messages();
         Settlement.Builder b = chunk.settle();
@@ -505,6 +541,12 @@ final class RandomRun {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The local reference borrows the run-owned spool; runIn closes it after workers finish.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     private void record(Published p) {
         RecordSpool s = spool;
         if (s != null) {
@@ -514,6 +556,12 @@ final class RandomRun {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The local reference borrows the run-owned spool; runIn closes it after workers finish.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     private void record(Delivery d) {
         RecordSpool s = spool;
         if (s != null) {
@@ -531,6 +579,12 @@ final class RandomRun {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The local reference borrows the run-owned spool; runIn closes it after workers finish.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     private void closeSpool() throws IOException {
         RecordSpool s = spool;
         if (s != null) {
@@ -539,6 +593,12 @@ final class RandomRun {
     }
 
     /** 헤더의 태그. 읽을 수 없으면 어떤 발행 기록과도 맞지 않는 태그를 돌려줘 검사기가 유령으로 보고하게 한다. 발행 태그의 순번은 0 이상이라, 음수 순번이면 겹치지 않는다. */
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Any malformed or missing tag must be reported as a ghost delivery by the checker.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static Tag tagOf(Message m) {
         try {
             return Tag.parse(m.headers().get(Script.TAG_HEADER));

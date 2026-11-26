@@ -102,3 +102,14 @@ On Linux with JDK 25, integration commit `aab13e0` reported 89 violations in
 13 AvoidCatchingGenericException, 6 CognitiveComplexity, 2 CyclomaticComplexity,
 and 2 UnitTestShouldIncludeAssert. The XML and HTML reports identify each location.
 The findings were resolved or addressed with narrowly scoped, justified exceptions before the test gate was enabled.
+
+### PMD SHOULD benchmark baseline (#248)
+
+On Linux with JDK 25, the initial `pmdBenchmarkShould` baseline was 58 violations:
+20 CyclomaticComplexity, 12 AvoidCatchingGenericException, 11 CognitiveComplexity,
+9 UnnecessaryWarningSuppression, 5 CloseResource, and 1 AvoidReassigningParameters.
+After the rule changes in #242 and #247, the benchmark cleanup started at 57.
+The benchmark gate remains advisory until the main gate in #246 is complete.
+`RandomRun` coordinates the workload, recording, and judgment phases; its aggregate
+class complexity is excepted with a class-node-only XPath and `@PolicyException`.
+Method complexity findings remain enabled, including for `RandomRun`.

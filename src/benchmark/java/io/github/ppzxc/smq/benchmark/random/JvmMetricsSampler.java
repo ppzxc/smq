@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.benchmark.Json;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -122,6 +123,12 @@ final class JvmMetricsSampler implements AutoCloseable {
      * 메트릭 파일 하나에서 요약을 다시 만든다. 파일이 없으면
      * 표본 0개의 요약이다. GC 횟수와 시간은 마지막 표본의 누적값이다. CPU 필드가 없으면 -1이다.
      */
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "The summary aggregates independent optional fields while reading each metrics sample once.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     static Summary summarize(Path file) {
         long peakHeap = 0;
         long peakNonHeap = 0;
@@ -208,20 +215,19 @@ final class JvmMetricsSampler implements AutoCloseable {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Platform-specific management beans are optional; unsupported metrics must not fail the workload.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void sample() {
         long now = System.currentTimeMillis();
         MemoryUsage heap = memory.getHeapMemoryUsage();
         MemoryUsage nonHeap = memory.getNonHeapMemoryUsage();
         int liveThreads = threads.getThreadCount();
 
-        long gcCount = 0;
-        long gcTime = 0;
-        for (GarbageCollectorMXBean gc : gcBeans) {
-            long c = gc.getCollectionCount();
-            long t = gc.getCollectionTime();
-            if (c >= 0) gcCount += c;
-            if (t >= 0) gcTime += t;
-        }
+        GcTotals gc = gcTotals();
 
         long openFds = -1;
         long mxFds = -1;
@@ -250,18 +256,12 @@ final class JvmMetricsSampler implements AutoCloseable {
         } catch (Exception ignored) {
             // 지원하지 않는 플랫폼
         }
-        if (cpuLoad >= 0) {
-            peakCpuLoad = Math.max(peakCpuLoad, cpuLoad);
-            cpuLoadSum += cpuLoad;
-            cpuSamples++;
-        }
+        updateOptionalPeaks(cpuLoad, openFds, mxFds);
 
         // 피크 갱신
         peakHeapUsed = Math.max(peakHeapUsed, heap.getUsed());
         peakNonHeapUsed = Math.max(peakNonHeapUsed, nonHeap.getUsed());
         peakThreads = Math.max(peakThreads, liveThreads);
-        if (openFds > 0) peakOpenFds = Math.max(peakOpenFds, openFds);
-        if (mxFds > 0) maxFds = mxFds;
         sampleCount++;
 
         Map<String, Object> m = new LinkedHashMap<>();
@@ -269,14 +269,10 @@ final class JvmMetricsSampler implements AutoCloseable {
         m.put("heapUsedMB", round2(heap.getUsed() / (1024.0 * 1024.0)));
         m.put("heapMaxMB", round2(heap.getMax() / (1024.0 * 1024.0)));
         m.put("nonHeapUsedMB", round2(nonHeap.getUsed() / (1024.0 * 1024.0)));
-        m.put("gcCount", gcCount);
-        m.put("gcTimeMs", gcTime);
+        m.put("gcCount", gc.count());
+        m.put("gcTimeMs", gc.timeMillis());
         m.put("liveThreads", liveThreads);
-        if (openFds >= 0) m.put("openFds", openFds);
-        if (mxFds >= 0) m.put("maxFds", mxFds);
-        if (rssBytes >= 0) m.put("rssMB", round2(rssBytes / (1024.0 * 1024.0)));
-        if (cpuLoad >= 0) m.put("processCpuLoad", round4(cpuLoad)); // 코어가 많으면 0.01 단위는 너무 거칠다
-        if (cpuTimeMs >= 0) m.put("processCpuTimeMs", cpuTimeMs);
+        addOptionalMetrics(m, openFds, mxFds, rssBytes, cpuLoad, cpuTimeMs);
 
         try {
             Files.writeString(file, Json.write(m) + "\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
@@ -285,7 +281,47 @@ final class JvmMetricsSampler implements AutoCloseable {
         }
     }
 
+    private record GcTotals(long count, long timeMillis) {}
+
+    private GcTotals gcTotals() {
+        long count = 0;
+        long time = 0;
+        for (GarbageCollectorMXBean gc : gcBeans) {
+            long c = gc.getCollectionCount();
+            long t = gc.getCollectionTime();
+            if (c >= 0) count += c;
+            if (t >= 0) time += t;
+        }
+        return new GcTotals(count, time);
+    }
+
+    private void updateOptionalPeaks(double cpuLoad, long openFds, long mxFds) {
+        if (cpuLoad >= 0) {
+            peakCpuLoad = Math.max(peakCpuLoad, cpuLoad);
+            cpuLoadSum += cpuLoad;
+            cpuSamples++;
+        }
+        if (openFds > 0) peakOpenFds = Math.max(peakOpenFds, openFds);
+        if (mxFds > 0) maxFds = mxFds;
+    }
+
+    private static void addOptionalMetrics(
+            Map<String, Object> m, long openFds, long mxFds, long rssBytes, double cpuLoad, long cpuTimeMs) {
+        if (openFds >= 0) m.put("openFds", openFds);
+        if (mxFds >= 0) m.put("maxFds", mxFds);
+        if (rssBytes >= 0) m.put("rssMB", round2(rssBytes / (1024.0 * 1024.0)));
+        if (cpuLoad >= 0) m.put("processCpuLoad", round4(cpuLoad)); // 코어가 많으면 0.01 단위는 너무 거칠다
+        if (cpuTimeMs >= 0) m.put("processCpuTimeMs", cpuTimeMs);
+    }
+
     /** 이 프로세스의 상주 메모리(바이트). Linux의 {@code /proc/self/status}에서만 읽고, 못 읽으면 -1이다. */
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason =
+                    "Unavailable or malformed platform metrics are reported as unknown instead of failing the benchmark.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static long readRssBytes() {
         try {
             return parseVmRssBytes(Files.readAllLines(Path.of("/proc/self/status")));

@@ -2,6 +2,7 @@ package io.github.ppzxc.smq.benchmark;
 
 import io.github.ppzxc.smq.Chunk;
 import io.github.ppzxc.smq.OutgoingMessage;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.Queue;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.Smq;
@@ -40,28 +41,34 @@ final class Workload {
 
     /** 큐를 선언하고 깊이만큼 미리 채운다. SQLite는 부모가, 인메모리는 자식이 부른다. */
     static void prepare(Smq smq, RunSpec spec) {
-        QueueOptions options = QueueOptions.defaults();
-        if (spec.queueKind() == RunSpec.QueueKind.MAX_DELIVERIES) {
-            smq.declare("bench-dlq", QueueOptions.defaults());
-            options = options.maxDeliveries(5, "bench-dlq");
-        } else if (spec.queueKind() == RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER) {
-            options = options.singleActiveConsumer(true);
-        }
-        Queue q = smq.declare(QUEUE, options);
+        Queue q = smq.declare(QUEUE, options(smq, spec));
         if (spec.depth() == 0) return;
         List<OutgoingMessage> batch = batch(spec.profile(), PREFILL_BATCH);
         for (int done = 0; done < spec.depth(); done += PREFILL_BATCH) {
             int n = Math.min(PREFILL_BATCH, spec.depth() - done);
             q.publish(n == PREFILL_BATCH ? batch : batch.subList(0, n));
         }
-        if (spec.queueKind() == RunSpec.QueueKind.LEASED_HEAD) {
-            try {
-                for (int done = 0; done < spec.depth(); done += 10_000)
-                    q.pull(Math.min(10_000, spec.depth() - done), Duration.ZERO, Duration.ofHours(1));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("리스 준비가 중단되었다", e);
-            }
+        if (spec.queueKind() == RunSpec.QueueKind.LEASED_HEAD) leaseHead(q, spec.depth());
+    }
+
+    private static QueueOptions options(Smq smq, RunSpec spec) {
+        QueueOptions options = QueueOptions.defaults();
+        if (spec.queueKind() == RunSpec.QueueKind.MAX_DELIVERIES) {
+            smq.declare("bench-dlq", QueueOptions.defaults());
+            return options.maxDeliveries(5, "bench-dlq");
+        }
+        return spec.queueKind() == RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER
+                ? options.singleActiveConsumer(true)
+                : options;
+    }
+
+    private static void leaseHead(Queue q, int depth) {
+        try {
+            for (int done = 0; done < depth; done += 10_000)
+                q.pull(Math.min(10_000, depth - done), Duration.ZERO, Duration.ofHours(1));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("리스 준비가 중단되었다", e);
         }
     }
 
@@ -130,6 +137,12 @@ final class Workload {
         void run() throws Exception;
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker records any failure, including errors, for propagation to the controlling thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private static void guard(AtomicReference<Throwable> failure, Body body) {
         try {
             body.run();

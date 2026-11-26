@@ -65,7 +65,12 @@ public final class RandomBenchMain {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings({"PMD.SystemPrintln", "PMD.UseTryWithResources"})
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "JFR is optional; startup failures are reported and the benchmark continues.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.SystemPrintln", "PMD.UseTryWithResources", "PMD.AvoidCatchingGenericException"})
     static int run(Options o) throws IOException {
         Files.createDirectories(o.outDir());
         Path workRoot = o.outDir().resolve("work");

@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,36 +29,42 @@ public final class Json {
             case Double d -> number(sb, d);
             case Float f -> number(sb, f.doubleValue());
             case Number n -> sb.append(n.longValue());
-            case Map<?, ?> m -> {
-                sb.append('{');
-                boolean first = true;
-                for (Map.Entry<?, ?> e : m.entrySet()) {
-                    if (!first) sb.append(',');
-                    first = false;
-                    string(sb, String.valueOf(e.getKey()));
-                    sb.append(':');
-                    write(sb, e.getValue());
-                }
-                sb.append('}');
-            }
-            case List<?> l -> {
-                sb.append('[');
-                for (int i = 0; i < l.size(); i++) {
-                    if (i > 0) sb.append(',');
-                    write(sb, l.get(i));
-                }
-                sb.append(']');
-            }
-            case long[] a -> {
-                sb.append('[');
-                for (int i = 0; i < a.length; i++) {
-                    if (i > 0) sb.append(',');
-                    sb.append(a[i]);
-                }
-                sb.append(']');
-            }
+            case Map<?, ?> m -> writeMap(sb, m);
+            case List<?> l -> writeList(sb, l);
+            case long[] a -> writeLongs(sb, a);
             default -> throw new IllegalArgumentException("지원하지 않는 JSON 값: " + v.getClass());
         }
+    }
+
+    private static void writeMap(StringBuilder sb, Map<?, ?> map) {
+        sb.append('{');
+        boolean first = true;
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (!first) sb.append(',');
+            first = false;
+            string(sb, String.valueOf(entry.getKey()));
+            sb.append(':');
+            write(sb, entry.getValue());
+        }
+        sb.append('}');
+    }
+
+    private static void writeList(StringBuilder sb, List<?> values) {
+        sb.append('[');
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) sb.append(',');
+            write(sb, values.get(i));
+        }
+        sb.append(']');
+    }
+
+    private static void writeLongs(StringBuilder sb, long[] values) {
+        sb.append('[');
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(values[i]);
+        }
+        sb.append(']');
     }
 
     private static void number(StringBuilder sb, double d) {
@@ -191,22 +198,32 @@ public final class Json {
                     sb.append(c);
                     continue;
                 }
-                char e = peek();
-                pos++;
-                switch (e) {
-                    case '"', '\\', '/' -> sb.append(e);
-                    case 'n' -> sb.append('\n');
-                    case 'r' -> sb.append('\r');
-                    case 't' -> sb.append('\t');
-                    case 'b' -> sb.append('\b');
-                    case 'f' -> sb.append('\f');
-                    case 'u' -> {
-                        if (pos + 4 > s.length()) throw error("\\u 이스케이프");
-                        sb.append((char) Integer.parseInt(s.substring(pos, pos + 4), 16));
-                        pos += 4;
-                    }
-                    default -> throw error("알 수 없는 이스케이프");
+                escape(sb);
+            }
+        }
+
+        @PolicyException(
+                rule = "PMD.CyclomaticComplexity",
+                reason = "Each JSON escape sequence is a distinct grammar case, including invalid escapes.",
+                approvedBy = "ppzxc",
+                reviewBy = "2027-11-26")
+        @SuppressWarnings("PMD.CyclomaticComplexity")
+        private void escape(StringBuilder sb) {
+            char e = peek();
+            pos++;
+            switch (e) {
+                case '"', '\\', '/' -> sb.append(e);
+                case 'n' -> sb.append('\n');
+                case 'r' -> sb.append('\r');
+                case 't' -> sb.append('\t');
+                case 'b' -> sb.append('\b');
+                case 'f' -> sb.append('\f');
+                case 'u' -> {
+                    if (pos + 4 > s.length()) throw error("\\u 이스케이프");
+                    sb.append((char) Integer.parseInt(s.substring(pos, pos + 4), 16));
+                    pos += 4;
                 }
+                default -> throw error("알 수 없는 이스케이프");
             }
         }
 

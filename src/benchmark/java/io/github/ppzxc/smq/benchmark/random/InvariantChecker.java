@@ -1,13 +1,12 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Action;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -55,11 +54,11 @@ final class InvariantChecker {
     static List<Violation> check(
             Config config, List<Published> published, List<Delivery> deliveries, List<CountsSample> samples) {
         List<Violation> out = new ArrayList<>(checkTags(config, published, deliveries));
-        checkChunkOrder(deliveries, out);
+        SampleChecks.checkChunkOrder(deliveries, out);
         if (config.singleActiveConsumer()) {
-            checkSingleActive(deliveries, out);
+            SampleChecks.checkSingleActive(deliveries, out);
         }
-        checkCounts(samples, out);
+        SampleChecks.checkCounts(samples, out);
         return out;
     }
 
@@ -67,6 +66,12 @@ final class InvariantChecker {
      * 태그 단위 검사(유령, 중복, 지연, 유실, dead letter 이동). 한 태그의 발행과 전달이 모두 들어 있어야 맞게 판정하므로,
      * 기록을 태그로 나눠 조각마다 부르는 호출자는 한 태그를 쪼개지 않아야 한다.
      */
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Each tag is checked against publication, content, deliveries, and final outcome.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     static List<Violation> checkTags(Config config, List<Published> published, List<Delivery> deliveries) {
         List<Violation> out = new ArrayList<>();
         Map<Tag, Published> byTag = new LinkedHashMap<>();
@@ -122,14 +127,14 @@ final class InvariantChecker {
     /** 청크 안의 메시지 id 순서. 한 청크의 전달이 모두 들어 있어야 맞게 판정한다. */
     static List<Violation> checkChunks(List<Delivery> deliveries) {
         List<Violation> out = new ArrayList<>();
-        checkChunkOrder(deliveries, out);
+        SampleChecks.checkChunkOrder(deliveries, out);
         return out;
     }
 
     /** counts 표본 검사. */
     static List<Violation> checkSamples(List<CountsSample> samples) {
         List<Violation> out = new ArrayList<>();
-        checkCounts(samples, out);
+        SampleChecks.checkCounts(samples, out);
         return out;
     }
 
@@ -151,6 +156,17 @@ final class InvariantChecker {
         return out;
     }
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "A delivery history must distinguish duplicate deliveries, delays, settlement, and lease expiry.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "A delivery history must distinguish duplicate deliveries, delays, settlement, and lease expiry.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private static void checkMessage(Config config, Published pub, Message m, List<Violation> out) {
         List<Delivery> ds = m.deliveries();
         List<Tag> tags = List.of(m.tag());
@@ -232,6 +248,17 @@ final class InvariantChecker {
 
     // ---- 태그 단위: 유실, dead letter 이동
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The outcome checks distinguish ACK, loss, duplicate, and dead-letter cases for one tag.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "The outcome checks distinguish ACK, loss, duplicate, and dead-letter cases for one tag.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private static void checkOutcome(
             Config config, Tag tag, List<Message> targets, List<Message> deadLetters, List<Violation> out) {
         List<Tag> tags = List.of(tag);
@@ -283,6 +310,12 @@ final class InvariantChecker {
     }
 
     /** 이동이 기록과 맞지 않으면 이유를, 맞으면 null을 돌려준다. */
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Dead-letter reason and each recorded header are checked independently.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     private static String moveProblem(Config config, Delivery last, Map<String, String> headers) {
         if (last == null) {
             return "대상 큐에서 한 번도 전달되지 않은 메시지가 dead letter 큐로 옮겨졌다";
@@ -309,101 +342,6 @@ final class InvariantChecker {
             problems.add(LAST_DELIVERY_COUNT + "=" + headers.get(LAST_DELIVERY_COUNT) + " 기록은 " + last.deliveryCount());
         }
         return problems.isEmpty() ? null : String.join("; ", problems);
-    }
-
-    // ---- 청크 단위
-
-    private static void checkChunkOrder(List<Delivery> deliveries, List<Violation> out) {
-        Map<Long, List<Delivery>> chunks = new LinkedHashMap<>();
-        for (Delivery d : deliveries) {
-            chunks.computeIfAbsent(d.pull().chunk(), k -> new ArrayList<>()).add(d);
-        }
-        for (List<Delivery> chunk : chunks.values()) {
-            List<Delivery> sorted = chunk.stream()
-                    .sorted(Comparator.comparingInt(d -> d.pull().position()))
-                    .toList();
-            for (int i = 1; i < sorted.size(); i++) {
-                Delivery prev = sorted.get(i - 1);
-                Delivery cur = sorted.get(i);
-                if (cur.messageId() <= prev.messageId()) {
-                    out.add(new Violation(
-                            Invariant.CHUNK_ORDER,
-                            List.of(prev.tag(), cur.tag()),
-                            List.of(prev.messageId(), cur.messageId()),
-                            "청크 " + prev.pull().chunk() + " 안에서 메시지 id가 " + prev.messageId() + " 다음에 " + cur.messageId()
-                                    + "다"));
-                }
-            }
-        }
-    }
-
-    private record Lease(Delivery first, long start, long end) {}
-
-    /** 청크의 리스는 꺼낸 시각부터 기한까지다. 청크 전체를 정산했다면 가장 늦은 정산 시각에 풀린다. */
-    private static void checkSingleActive(List<Delivery> deliveries, List<Violation> out) {
-        Map<Long, List<Delivery>> chunks = new LinkedHashMap<>();
-        for (Delivery d : deliveries) {
-            if (d.queue() == QueueKind.TARGET) {
-                chunks.computeIfAbsent(d.pull().chunk(), k -> new ArrayList<>()).add(d);
-            }
-        }
-        List<Lease> leases = new ArrayList<>();
-        for (List<Delivery> chunk : chunks.values()) {
-            long end = chunk.stream()
-                    .mapToLong(d -> d.pull().leaseDeadlineMillis())
-                    .max()
-                    .orElseThrow();
-            if (chunk.stream().allMatch(d -> d.settle().action() != Action.NONE)) {
-                end = Math.min(
-                        end,
-                        chunk.stream()
-                                .mapToLong(d -> d.settle().atMillis())
-                                .max()
-                                .orElseThrow());
-            }
-            Delivery first = chunk.stream()
-                    .min(Comparator.comparingInt(d -> d.pull().position()))
-                    .orElseThrow();
-            leases.add(new Lease(first, first.pull().atMillis(), end));
-        }
-        leases.sort(Comparator.comparingLong(Lease::start));
-        Lease widest = null;
-        for (Lease cur : leases) {
-            if (widest != null && cur.start() < widest.end() - TOLERANCE_MILLIS) {
-                out.add(new Violation(
-                        Invariant.SINGLE_ACTIVE,
-                        List.of(widest.first().tag(), cur.first().tag()),
-                        List.of(widest.first().messageId(), cur.first().messageId()),
-                        "청크 " + widest.first().pull().chunk() + "의 리스가 " + (widest.end() - cur.start())
-                                + "ms 더 살아 있는데 청크 " + cur.first().pull().chunk() + "가 꺼내졌다"));
-            }
-            if (widest == null || cur.end() > widest.end()) {
-                widest = cur;
-            }
-        }
-    }
-
-    // ---- counts
-
-    private static void checkCounts(List<CountsSample> samples, List<Violation> out) {
-        Set<QueueKind> drained = EnumSet.noneOf(QueueKind.class);
-        for (CountsSample s : samples) {
-            String where = s.queue() + (s.afterDrain() ? " 소진 뒤" : " 부하 중") + " counts=(" + s.ready() + ", "
-                    + s.leased() + ", " + s.delayed() + ")";
-            if (s.ready() < 0 || s.leased() < 0 || s.delayed() < 0) {
-                out.add(new Violation(Invariant.COUNTS, List.of(), List.of(), where + "에 음수가 있다"));
-            } else if (s.afterDrain() && (s.ready() != 0 || s.leased() != 0 || s.delayed() != 0)) {
-                out.add(new Violation(Invariant.COUNTS, List.of(), List.of(), where + "가 (0, 0, 0)이 아니다"));
-            }
-            if (s.afterDrain()) {
-                drained.add(s.queue());
-            }
-        }
-        for (QueueKind q : QueueKind.values()) {
-            if (!drained.contains(q)) {
-                out.add(new Violation(Invariant.COUNTS, List.of(), List.of(), q + " 소진 뒤 counts 표본이 없다"));
-            }
-        }
     }
 
     // ---- 유틸

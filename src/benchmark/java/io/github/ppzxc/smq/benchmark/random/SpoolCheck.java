@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -160,6 +161,12 @@ final class SpoolCheck {
     private static final class Writers implements AutoCloseable {
         final DataOutputStream[] outs;
 
+        @PolicyException(
+                rule = "PMD.AvoidCatchingGenericException",
+                reason = "All already opened writers must close if a later writer fails, including runtime failures.",
+                approvedBy = "ppzxc",
+                reviewBy = "2027-11-26")
+        @SuppressWarnings("PMD.AvoidCatchingGenericException")
         Writers(Path work, String pattern, int partitions) throws IOException {
             outs = new DataOutputStream[partitions];
             try {
@@ -197,6 +204,13 @@ final class SpoolCheck {
         return mix(messageId * 3 + queue.spoolCode());
     }
 
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason =
+                    "This method closes the streams supplied by Writers and continues after an individual close failure.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     private static void closeAll(DataOutputStream[] outs) throws IOException {
         IOException first = null;
         for (DataOutputStream o : outs) {

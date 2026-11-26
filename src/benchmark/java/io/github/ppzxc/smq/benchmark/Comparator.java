@@ -104,7 +104,7 @@ final class Comparator {
      */
     private static void ratio(
             List<Check> out, String name, List<Double> values, List<Double> references, boolean enabled) {
-        if (values == null || references == null || values.isEmpty() || references.isEmpty()) {
+        if (missing(values) || missing(references)) {
             out.add(notMeasured(name));
             return;
         }
@@ -124,22 +124,28 @@ final class Comparator {
             parts.add(fmt(values.get(i)) + " / " + fmt(references.get(i)) + " = "
                     + String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1f%%", 100 * ratio));
         }
-        String detail;
-        if (rounds == 1) {
-            detail = parts.get(0);
-        } else {
-            StringBuilder sb = new StringBuilder("중앙값 "
-                    + String.format(
-                            Locale.getDefault(Locale.Category.FORMAT), "%.1f%%", 100 * Aggregator.median(ratios))
-                    + ", 바퀴별 ");
-            for (int i = 0; i < rounds; i++)
-                sb.append(i > 0 ? "; " : "").append(i + 1).append("회 ").append(parts.get(i));
-            detail = sb.toString();
-        }
-        out.add(
-                !enabled
-                        ? new Check(name, Status.SKIP, detail)
-                        : Aggregator.median(ratios) >= RATIO - EPS ? pass(name, detail) : fail(name, detail));
+        String detail = ratioDetail(rounds, parts, ratios);
+        out.add(ratioResult(name, detail, ratios, enabled));
+    }
+
+    private static Check ratioResult(String name, String detail, List<Double> ratios, boolean enabled) {
+        return !enabled
+                ? new Check(name, Status.SKIP, detail)
+                : Aggregator.median(ratios) >= RATIO - EPS ? pass(name, detail) : fail(name, detail);
+    }
+
+    private static boolean missing(List<Double> values) {
+        return values == null || values.isEmpty();
+    }
+
+    private static String ratioDetail(int rounds, List<String> parts, List<Double> ratios) {
+        if (rounds == 1) return parts.get(0);
+        StringBuilder sb = new StringBuilder("중앙값 "
+                + String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1f%%", 100 * Aggregator.median(ratios))
+                + ", 바퀴별 ");
+        for (int i = 0; i < rounds; i++)
+            sb.append(i > 0 ? "; " : "").append(i + 1).append("회 ").append(parts.get(i));
+        return sb.toString();
     }
 
     private static void latency(Map<String, Double> r, List<Check> out) {

@@ -50,6 +50,15 @@ class TransactionExecutorTest {
         assertSame(loggingFailure, checkpointFailure.getSuppressed()[0]);
     }
 
+    @Test
+    void 로그가_원래_오류를_다시_던져도_자기_자신을_억제하지_않는다() {
+        RuntimeException failure = new IllegalStateException("checkpoint failed");
+        assertDoesNotThrow(() -> TransactionExecutor.logCheckpointFailure(failure, () -> {
+            throw failure;
+        }));
+        assertEquals(0, failure.getSuppressed().length);
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         connection = SqliteStorage.connect(dir.resolve("t.db"), Durability.POWER_LOSS);

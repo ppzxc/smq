@@ -194,16 +194,20 @@ final class TransactionExecutor {
             reason = "Logging a post-commit failure must not change the successful commit result.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "ReferenceEquality"
-    }) // Throwable identity avoids self-suppression.
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static void logCheckpointFailure(Throwable failure, Runnable log) {
         try {
             log.run();
         } catch (Throwable loggingFailure) {
-            if (loggingFailure != failure) {
+            if (differentFailures(loggingFailure, failure)) {
                 failure.addSuppressed(loggingFailure);
             }
         }
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Suppress self-suppression by comparing Throwable identity.
+    private static boolean differentFailures(Throwable first, Throwable second) {
+        return first != second;
     }
 
     @PolicyException(

@@ -8,6 +8,9 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +51,39 @@ class TransactionExecutorReadTest {
     @Test
     void 읽기가_있다고_하면_있다고_답한다() {
         assertTrue(executor.anyOrUncertain(c -> true));
+    }
+
+    @Test
+    void 실패한_읽기_뒤_다른_스레드에서_연산할_수_있다() throws Exception {
+        assertThrows(
+                SmqStorageException.class,
+                () -> executor.read(c -> {
+                    throw new SQLException("injected");
+                }));
+        try (var threads = Executors.newSingleThreadExecutor()) {
+            assertEquals(
+                    42,
+                    threads.submit(() -> executor.read(c -> 42, Deadline.after(Duration.ofSeconds(1), Duration.ZERO)))
+                            .get(2, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    void interruptedLockAttemptDoesNotPreventLaterOperations() throws Exception {
+        try (var threads = Executors.newSingleThreadExecutor()) {
+            var result = threads.submit(() -> {
+                Thread.currentThread().interrupt();
+                try {
+                    assertThrows(
+                            Deadline.Interrupted.class,
+                            () -> executor.read(c -> 1, Deadline.after(Duration.ofSeconds(1), Duration.ZERO)));
+                    return executor.read(c -> 42, Deadline.after(Duration.ofSeconds(1), Duration.ZERO));
+                } finally {
+                    Thread.interrupted();
+                }
+            });
+            assertEquals(42, result.get(2, TimeUnit.SECONDS));
+        }
     }
 
     @ParameterizedTest

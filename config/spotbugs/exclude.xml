@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- acquire transfers the lock to read/runLocked, which unlock in finally; failed acquisition owns no lock. -->
+    <Match>
+        <Class name="io.github.ppzxc.smq.storage.sqlite.TransactionExecutor"/>
+        <Method name="acquire"/>
+        <Bug pattern="UL_UNRELEASED_LOCK"/>
+    </Match>
+</FindBugsFilter>

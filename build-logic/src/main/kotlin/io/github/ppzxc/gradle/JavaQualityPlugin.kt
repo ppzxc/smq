@@ -83,6 +83,7 @@ class JavaQualityPlugin : Plugin<Project> {
         project.pluginManager.apply("com.github.spotbugs-base")
         project.extensions.configure(SpotBugsExtension::class.java) {
             toolVersion.set("4.10.5")
+            excludeFilter.set(project.rootProject.file("config/spotbugs/exclude.xml"))
         }
 
         val main = project.extensions.getByType(SourceSetContainer::class.java).named("main")

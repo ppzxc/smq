@@ -253,8 +253,8 @@ public final class SqliteStorage implements Storage {
     }
 
     private static boolean isBusyCause(Throwable t) {
-        for (; t != null; t = t.getCause()) {
-            if (t instanceof SQLException se && TransactionExecutor.isBusy(se)) {
+        for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException se && TransactionExecutor.isBusy(se)) {
                 return true;
             }
         }
@@ -262,8 +262,8 @@ public final class SqliteStorage implements Storage {
     }
 
     private static boolean isNotADatabase(Throwable t) {
-        for (; t != null; t = t.getCause()) {
-            if (t instanceof SQLiteException se && se.getResultCode() == SQLiteErrorCode.SQLITE_NOTADB) {
+        for (Throwable cause = t; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLiteException se && se.getResultCode() == SQLiteErrorCode.SQLITE_NOTADB) {
                 return true;
             }
         }

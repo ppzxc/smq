@@ -15,6 +15,7 @@ plugins {
     id("net.ltgt.errorprone") version "5.1.1"
     id("net.ltgt.nullaway") version "3.3.0"
     id("com.diffplug.spotless") version "8.10.4"
+    id("org.cyclonedx.bom") version "3.5.1"
 }
 
 group = "io.github.ppzxc"

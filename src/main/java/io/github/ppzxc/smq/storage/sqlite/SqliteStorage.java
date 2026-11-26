@@ -318,30 +318,34 @@ public final class SqliteStorage implements Storage {
                 }
                 return true;
             }
-            Long dlqId = null;
-            if (options.deadLetterQueue().isPresent()) {
-                dlqId = requireQueue(c, options.deadLetterQueue().get());
-            }
-            try (PreparedStatement ps = c.prepareStatement("""
-                    INSERT INTO queue(name, max_deliveries, dead_letter_queue_id, single_active_consumer)
-                    VALUES (?, ?, ?, ?)""")) {
-                ps.setString(1, queue);
-                if (options.maxDeliveries().isPresent()) {
-                    ps.setInt(2, options.maxDeliveries().getAsInt());
-                } else {
-                    ps.setNull(2, java.sql.Types.INTEGER);
-                }
-                if (dlqId != null) {
-                    ps.setLong(3, dlqId);
-                } else {
-                    ps.setNull(3, java.sql.Types.INTEGER);
-                }
-                ps.setInt(4, options.singleActiveConsumer() ? 1 : 0);
-                ps.executeUpdate();
-            }
+            insertQueue(c, queue, options);
             tx.declared(queue, requireQueue(c, queue));
             return true;
         });
+    }
+
+    private static void insertQueue(Connection c, String queue, QueueOptions options) throws SQLException {
+        Long dlqId = null;
+        if (options.deadLetterQueue().isPresent()) {
+            dlqId = requireQueue(c, options.deadLetterQueue().get());
+        }
+        try (PreparedStatement ps = c.prepareStatement("""
+            INSERT INTO queue(name, max_deliveries, dead_letter_queue_id, single_active_consumer)
+            VALUES (?, ?, ?, ?)""")) {
+            ps.setString(1, queue);
+            if (options.maxDeliveries().isPresent()) {
+                ps.setInt(2, options.maxDeliveries().getAsInt());
+            } else {
+                ps.setNull(2, java.sql.Types.INTEGER);
+            }
+            if (dlqId != null) {
+                ps.setLong(3, dlqId);
+            } else {
+                ps.setNull(3, java.sql.Types.INTEGER);
+            }
+            ps.setInt(4, options.singleActiveConsumer() ? 1 : 0);
+            ps.executeUpdate();
+        }
     }
 
     @Override

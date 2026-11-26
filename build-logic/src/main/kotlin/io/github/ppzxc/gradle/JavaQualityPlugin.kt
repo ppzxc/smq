@@ -92,7 +92,7 @@ class JavaQualityPlugin : Plugin<Project> {
             sourceDirs.from(main.map { it.allJava.sourceDirectories })
             classDirs.from(main.map { it.output.classesDirs })
             auxClassPaths.from(main.map { it.compileClasspath })
-            setIgnoreFailures(true)
+            setIgnoreFailures(false)
             reports {
                 create("html") {
                     required.set(true)
@@ -128,7 +128,7 @@ class JavaQualityPlugin : Plugin<Project> {
                 classpath = project.files(sourceSet.output, sourceSet.compileClasspath)
                 ruleSetFiles = project.files(shouldRules)
                 ruleSets = emptyList()
-                setIgnoreFailures(true)
+                setIgnoreFailures(sourceSet.name != "main")
                 setConsoleOutput(true)
                 reports {
                     xml.required.set(true)

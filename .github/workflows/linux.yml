@@ -28,7 +28,22 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: ./gradlew check
-        run: ./gradlew check --no-daemon --stacktrace
+        run: ./gradlew check --continue --no-daemon --stacktrace
+
+      - name: PMD 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-pmd-report
+          path: build/reports/pmd/*.html
+          if-no-files-found: ignore
+
+      - name: SpotBugs 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-spotbugs-report
+          path: build/reports/spotbugs/main.html
 
       # 고정 시드/프로파일 실패는 같은 SHA로 한 번 재실행하되 최초 산출물을 보존한다.
       - name: 최초 무작위 스모크

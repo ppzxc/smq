@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.SmqStorageException;
 import io.github.ppzxc.smq.storage.Disposition;
@@ -309,6 +310,12 @@ class SqliteStorageTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The proxy records write transactions while forwarding connection and statement calls.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     void 큐_존재와_옵션_조회는_쓰기_트랜잭션을_열지_않는다() {
         AtomicInteger begins = new AtomicInteger();
         try (SqliteStorage s = SqliteStorage.open(
@@ -351,6 +358,12 @@ class SqliteStorageTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The proxy records write transactions while forwarding connection and statement calls.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     void 단일_활성_큐의_활성_리스가_있으면_준비_메시지가_있어도_쓰기_트랜잭션을_열지_않는다() {
         AtomicInteger begins = new AtomicInteger();
         try (SqliteStorage s = SqliteStorage.open(
@@ -403,6 +416,45 @@ class SqliteStorageTest {
     }
 
     @Test
+    void cachedStatementIsReusedAndClosedWithStorage() throws Exception {
+        List<PreparedStatement> prepared = new ArrayList<>();
+        try (SqliteStorage storage = SqliteStorage.open(
+                dir.resolve("statement-cache.db"),
+                Durability.PROCESS_CRASH,
+                Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                (path, durability) -> {
+                    Connection real = SqliteStorage.connect(path, durability);
+                    return (Connection) Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (p, m, a) -> {
+                                try {
+                                    Object result = m.invoke(real, a);
+                                    if (m.getName().equals("prepareStatement")
+                                            && a != null
+                                            && "SELECT id FROM queue WHERE name = ?".equals(a[0])) {
+                                        prepared.add((PreparedStatement) result);
+                                    }
+                                    return result;
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                            });
+                })) {
+            storage.declare("q", QueueOptions.defaults());
+            storage.counts("q");
+            storage.counts("q");
+            assertEquals(1, prepared.size());
+            assertFalse(prepared.get(0).isClosed());
+        }
+        assertTrue(prepared.get(0).isClosed());
+    }
+
+    @Test
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The test creates a large promotion count and verifies its transfer across the storage boundary.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     void pullTransfersLargePromotionCountWithoutOverflow() {
         long promoted = (long) Integer.MAX_VALUE + 1;
         try (SqliteStorage s = SqliteStorage.open(

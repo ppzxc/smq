@@ -28,14 +28,7 @@ final class SqliteSchema {
     int establish(Connection c) throws SQLException {
         int applicationId = pragmaInt(c, "application_id");
         int version = pragmaInt(c, "user_version");
-        boolean empty;
-        try (Statement s = c.createStatement();
-                ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
-            if (!rs.next()) {
-                throw new SQLException("schema count row missing");
-            }
-            empty = rs.getInt(1) == 0;
-        }
+        boolean empty = schemaIsEmpty(c);
         if (empty && applicationId == 0) {
             createV1(c);
             upgrade(c, 1);
@@ -51,6 +44,16 @@ final class SqliteSchema {
             upgrade(c, version);
         }
         return targetVersion;
+    }
+
+    private static boolean schemaIsEmpty(Connection c) throws SQLException {
+        try (Statement s = c.createStatement();
+                ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
+            if (!rs.next()) {
+                throw new SQLException("schema count row missing");
+            }
+            return rs.getInt(1) == 0;
+        }
     }
 
     static void configureNewDatabase(Connection c, boolean autoVacuum) throws SQLException {

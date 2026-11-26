@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <ruleset xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="smq PMD SHOULD rules" xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
-    <description>Strict Java 25 / PMD 7.29.0 advisory rules. Review violations; do not fail the build.</description>
+    <description>Strict Java 25 / PMD 7.29.0 SHOULD rules. Violations in all source sets fail the build.</description>
     <!-- Run with minimum priority 5. Custom policy rules and other analyzers are configured separately. -->
-    <!-- Parameter reassignment is advisory because record compact constructors require defensive-copy reassignment. -->
+    <!-- Record compact constructors may require defensive-copy parameter reassignment. -->
     <!-- bestpractices -->
     <rule ref="category/java/bestpractices.xml/ArrayIsStoredDirectly">
         </rule>
@@ -11,6 +11,15 @@
     <rule ref="category/java/bestpractices.xml/MethodReturnsInternalArray">
         </rule>
     <rule ref="category/java/bestpractices.xml/UnitTestShouldIncludeAssert" />
+    <!-- Include MUST rules with suppressions so this rule can validate them. -->
+    <rule ref="category/java/bestpractices.xml/SystemPrintln" />
+    <rule ref="category/java/bestpractices.xml/UnusedLocalVariable" />
+    <rule ref="category/java/design.xml/AvoidThrowingRawExceptionTypes" />
+    <rule ref="category/java/errorprone.xml/DoNotCallGarbageCollectionExplicitly" />
+    <rule ref="category/java/bestpractices.xml/UseTryWithResources" />
+    <rule ref="category/java/bestpractices.xml/PreserveStackTrace" />
+    <rule ref="category/java/bestpractices.xml/ExhaustiveSwitchHasDefault" />
+    <rule ref="category/java/design.xml/ExceptionAsFlowControl" />
     <rule ref="category/java/bestpractices.xml/UnnecessaryWarningSuppression" />
     <rule ref="category/java/bestpractices.xml/UseStandardCharsets" />
     <!-- codestyle -->
@@ -26,6 +35,7 @@
         <properties>
             <property name="methodReportLevel" value="10" />
             <property name="classReportLevel" value="80" />
+            <property name="violationSuppressXPath" value=".[self::ClassDeclaration[parent::CompilationUnit and @CanonicalName = ('io.github.ppzxc.smq.storage.sqlite.SqliteStorage', 'io.github.ppzxc.smq.benchmark.random.RandomRun')]]" />
         </properties>
     </rule>
     <rule ref="category/java/design.xml/MutableStaticState" />

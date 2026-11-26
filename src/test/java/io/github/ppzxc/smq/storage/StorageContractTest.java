@@ -289,7 +289,12 @@ abstract class StorageContractTest {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.AvoidThrowingRawExceptionTypes"})
     void lock을_기다리는_꺼내기를_interrupt하면_리스하지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());
         storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));

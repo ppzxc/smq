@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,6 +24,13 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 @Timeout(60)
+@PolicyException(
+        rule = "PMD.CyclomaticComplexity",
+        reason =
+                "Independent conformance tests share one fixture; their combined class metric is not one control flow.",
+        approvedBy = "ppzxc",
+        reviewBy = "2027-11-26")
+@SuppressWarnings("PMD.CyclomaticComplexity")
 abstract class SmqConformanceTest {
 
     static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
@@ -72,6 +80,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 닫힌_뒤_큐_선언은_실패한다() {
         Smq smq = open();
         smq.close();
@@ -79,6 +93,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 닫힌_뒤_조회와_큐_연산은_실패한다() throws Exception {
         Smq smq = open();
         Queue q = smq.declare("q", QueueOptions.defaults());
@@ -163,6 +183,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 선언한_큐를_queue로_얻고_없으면_QueueNotFoundException() {
         Smq smq = open();
         Queue declared = smq.declare("orders", QueueOptions.defaults());
@@ -192,6 +218,22 @@ abstract class SmqConformanceTest {
         Message m = q.pull(1, Duration.ZERO).messages().getFirst();
         assertArrayEquals(payload, m.payload());
         assertEquals(headers, m.headers());
+    }
+
+    @Test
+    void 발행_뒤_외부_payload와_헤더를_바꿔도_메시지는_그대로다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        byte[] payload = {1, 2};
+        Map<String, String> headers = new HashMap<>(Map.of("key", "original"));
+        OutgoingMessage outgoing = new OutgoingMessage(payload, headers);
+        q.publish(outgoing);
+        payload[0] = 9;
+        headers.put("key", "changed");
+        outgoing.payload()[1] = 9;
+
+        Message message = q.pull(1, Duration.ZERO).messages().getFirst();
+        assertArrayEquals(new byte[] {1, 2}, message.payload());
+        assertEquals(Map.of("key", "original"), message.headers());
     }
 
     @Test
@@ -313,6 +355,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 큐마다_메시지가_분리된다() throws Exception {
         Smq smq = open();
         Queue a = smq.declare("a", QueueOptions.defaults());
@@ -347,6 +395,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 인자_오류는_IllegalArgumentException() {
         Smq smq = open();
         for (String bad : new String[] {"", "has space", "a/b", "x".repeat(201)}) {
@@ -369,6 +423,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 같은_옵션으로_여러_번_선언해도_아무_일이_없다() throws Exception {
         Smq smq = open();
         smq.declare("orders.dead", QueueOptions.defaults());
@@ -382,6 +442,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 이미_있는_큐를_다른_옵션으로_선언하면_기존과_요청_옵션을_담은_QueueDeclarationConflictException() {
         Smq smq = open();
         smq.declare("dead", QueueOptions.defaults());
@@ -398,6 +464,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void maxDeliveries는_dead_letter_큐_없이_지정할_수_없고_지정하지_않으면_무제한이다() {
         assertThrows(
                 IllegalArgumentException.class, () -> new QueueOptions(OptionalInt.of(3), Optional.empty(), false));
@@ -414,6 +486,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 자기_자신을_dead_letter_큐로_지정하면_오류이고_없는_큐를_지정하면_선언_오류다() {
         Smq smq = open();
         assertThrows(
@@ -430,6 +508,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void singleActiveConsumer가_저장되어_options와_재선언_비교에_반영된다() {
         Smq smq = open();
         QueueOptions single = QueueOptions.defaults().singleActiveConsumer(true);
@@ -445,6 +529,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void delete는_메시지째_지우고_지웠으면_true_없었으면_false() {
         Smq smq = open();
         Queue q = smq.declare("orders", QueueOptions.defaults());
@@ -458,6 +548,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 다른_큐가_dead_letter_큐로_참조하는_큐를_지우면_QueueInUseException() {
         Smq smq = open();
         smq.declare("dead", QueueOptions.defaults());
@@ -472,6 +568,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void dead_letter_큐_연쇄에서도_참조_중인_큐는_지울_수_없다() {
         Smq smq = open();
         smq.declare("c", QueueOptions.defaults());
@@ -485,6 +587,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 삭제한_큐의_핸들로_발행하거나_꺼내면_QueueNotFoundException() {
         Smq smq = open();
         Queue q = smq.declare("orders", QueueOptions.defaults());
@@ -495,6 +603,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 삭제한_큐의_리스로_들어온_정산은_STALE이고_같은_이름으로_다시_선언한_큐는_새_큐다() throws Exception {
         Smq smq = open();
         Queue old = smq.declare("orders", QueueOptions.defaults());
@@ -680,6 +794,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 다른_큐의_청크로_정산하거나_연장하면_IllegalArgumentException이고_원래_큐의_리스는_그대로다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue a = smq.declare("a", QueueOptions.defaults());
@@ -704,6 +824,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 다른_저장소의_같은_큐_청크는_정산하거나_연장할_수_없다() throws Exception {
         Smq first = Smq.sqlite(dir.resolve("first.db")).clock(clock).open();
         opened.add(first);
@@ -1082,6 +1208,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     void 같은_프로세스에서_발행하면_기다리던_꺼내기가_곧바로_깨어난다() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         var result = new java.util.concurrent.CompletableFuture<Chunk>();
@@ -1101,6 +1233,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     void 시계를_앞으로_돌린_효과는_다음_폴링에서_반영되어_지연_메시지가_나온다() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         q.publish(msg("later").withDelay(Duration.ofMinutes(10)));
@@ -1120,6 +1258,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     void 기다리던_스레드를_interrupt하면_InterruptedException() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         var thrown = new java.util.concurrent.atomic.AtomicReference<Throwable>();
@@ -1142,6 +1286,17 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
     void Smq를_닫으면_기다리던_꺼내기가_빈_청크를_받고_깨어난다() throws Exception {
         Smq smq = open();
         Queue q = smq.declare("q", QueueOptions.defaults());
@@ -1168,6 +1323,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 닫은_뒤의_꺼내기는_기다리지_않고_빈_청크이고_두_번_닫아도_안전하다() throws Exception {
         Smq smq = open();
         Queue q = smq.declare("q", QueueOptions.defaults());
@@ -1179,6 +1340,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The concurrent producer and consumer scenario coordinates and verifies all workers together.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     void 여러_스레드가_하나의_Smq를_함께_써도_모든_메시지가_정확히_한_번_전달된다() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         int producers = 4;
@@ -1220,6 +1387,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 최대_전달_횟수_이동은_dead_letter_꺼내기를_깨운다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1237,6 +1410,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void reject한_메시지는_dead_letter_큐로_옮겨지고_payload와_헤더를_유지하며_smq_헤더를_갖는다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("orders.dead", QueueOptions.defaults());
@@ -1273,6 +1452,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void reject한_메시지의_이전_리스로_다시_정산하면_STALE이다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         smq.declare("dead", QueueOptions.defaults());
@@ -1287,6 +1472,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 다른_컨슈머가_다시_꺼간_메시지의_reject는_STALE이고_dead_letter_큐에_아무것도_넣지_않는다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1340,6 +1531,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void dead_letter_큐는_평범한_큐라_꺼내고_정산하고_연쇄로_dead_letter를_둘_수_있다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue last = smq.declare("last", QueueOptions.defaults());
@@ -1368,6 +1565,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void smq_접두사는_예약이라_같은_이름의_사용자_헤더는_시스템_값으로_덮어써진다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1382,6 +1585,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 최대_전달_횟수에_도달한_메시지는_다시_꺼낼_때_dead_letter_큐로_옮겨지고_꺼내기는_다음_메시지로_진행한다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1418,6 +1627,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 리스가_만료된_채_최대_전달_횟수에_도달한_메시지도_다음_꺼내기에서_옮겨진다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1433,6 +1648,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 마지막_전달에서_ACK하면_정상적으로_성공하고_옮겨지지_않는다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1450,6 +1671,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 마지막_전달에서_지연_NACK한_메시지는_지연이_끝나야_옮겨지고_그동안_지연됨으로_센다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1469,6 +1696,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void dead_letter가_한_번에_옮기는_상한보다_많이_쌓여_있어도_pull_한_번이_남은_준비_메시지를_돌려준다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1494,6 +1727,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 상한보다_많이_쌓인_dead_letter_뒤에_준비_메시지가_없으면_pull은_다_옮기고_빈_청크를_돌려준다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1514,6 +1753,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 청크가_차도_뒤쪽의_도달_메시지는_같은_꺼내기에서_옮겨진다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1560,6 +1805,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 지연_발행은_단일_활성_큐의_뒤만_막는다() throws Exception {
         Smq smq = open();
         Queue serial = smq.declare("serial", QueueOptions.defaults().singleActiveConsumer(true));
@@ -1600,6 +1851,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 지연_뒤의_소진_메시지도_dead_letter로_옮긴다() throws Exception {
         Smq smq = open();
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1680,6 +1937,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 단일_활성_컨슈머_큐에서_여러_스레드가_동시에_꺼내도_리스_중인_청크는_하나다() throws Exception {
         Smq smq = open(Duration.ofMinutes(10));
 
@@ -1707,7 +1970,12 @@ abstract class SmqConformanceTest {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.SystemPrintln")
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CloseResource", "PMD.SystemPrintln"})
     void 여러_스레드가_동시에_꺼내도_같은_메시지가_두_리스에_묶이지_않는다() throws Exception {
         Smq smq = open(Duration.ofMinutes(10));
         int roundsWithEmptyChunk = assertConcurrentPullContract(smq);
@@ -1772,6 +2040,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 같은_청크를_동시에_정산하면_메시지마다_정확히_한_쪽만_OK다() throws Exception {
         Smq smq = open(Duration.ofMinutes(10));
         for (int round = 0; round < ROUNDS; round++) {
@@ -1794,6 +2068,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 여러_스레드가_동시에_발행해도_id는_겹치지_않고_모두_들어간다() throws Exception {
         Smq smq = open();
         for (int round = 0; round < ROUNDS; round++) {
@@ -1809,6 +2089,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 여러_스레드가_동시에_연장해도_모두_OK이고_리스는_유지된다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         for (int round = 0; round < ROUNDS; round++) {
@@ -1861,6 +2147,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 단일_활성_컨슈머_큐는_리스_중이면_최대_전달_횟수에_도달한_준비_메시지도_옮기지_않고_리스가_끝나면_옮긴다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         Queue dead = smq.declare("dead", QueueOptions.defaults());
@@ -1892,6 +2184,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 만료된_리스를_연장하는_쪽과_다시_꺼내는_쪽이_동시에_겨루면_한_쪽만_성공한다() throws Exception {
         Smq smq = open(Duration.ofSeconds(10));
         for (int round = 0; round < ROUNDS; round++) {
@@ -1917,6 +2215,12 @@ abstract class SmqConformanceTest {
         void run() throws Exception;
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static void runConcurrently(List<ThrowingRunnable> tasks) throws InterruptedException {
         var start = new java.util.concurrent.CountDownLatch(1);
         var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();

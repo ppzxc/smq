@@ -114,45 +114,48 @@ class DefaultQueueTest {
 
     @Test
     void 비어_돌아오고_남은_dead_letter_표시가_없으면_한_번만_꺼내고_빈_청크다() throws Exception {
-        ScriptedStorage storage = new ScriptedStorage(PullResult.empty());
+        try (ScriptedStorage storage = new ScriptedStorage(PullResult.empty())) {
 
-        Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
+            Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
 
-        assertTrue(chunk.isEmpty());
-        assertNull(chunk.leaseDeadline());
-        assertEquals(1, storage.pulls);
+            assertTrue(chunk.isEmpty());
+            assertNull(chunk.leaseDeadline());
+            assertEquals(1, storage.pulls);
+        }
     }
 
     @Test
     void 남은_dead_letter_표시가_있으면_기다리지_않고_바로_다시_꺼내_표시가_없어질_때까지_되풀이한다() throws Exception {
-        ScriptedStorage storage = new ScriptedStorage(
-                PullResult.emptyDeadLettersRemain(), PullResult.emptyDeadLettersRemain(), PullResult.empty());
+        try (ScriptedStorage storage = new ScriptedStorage(
+                PullResult.emptyDeadLettersRemain(), PullResult.emptyDeadLettersRemain(), PullResult.empty())) {
 
-        Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
+            Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
 
-        assertTrue(chunk.isEmpty());
-        assertEquals(3, storage.pulls);
+            assertTrue(chunk.isEmpty());
+            assertEquals(3, storage.pulls);
+        }
     }
 
     @Test
     void 남은_dead_letter_표시_뒤에_메시지가_나오면_그_청크를_돌려주고_더_꺼내지_않는다() throws Exception {
-        ScriptedStorage storage = new ScriptedStorage(PullResult.emptyDeadLettersRemain(), delivered());
+        try (ScriptedStorage storage = new ScriptedStorage(PullResult.emptyDeadLettersRemain(), delivered())) {
 
-        Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
+            Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
 
-        assertEquals(
-                List.of(new MessageId(1)),
-                chunk.messages().stream().map(Message::id).toList());
-        assertEquals(2, storage.pulls);
+            assertEquals(
+                    List.of(new MessageId(1)),
+                    chunk.messages().stream().map(Message::id).toList());
+            assertEquals(2, storage.pulls);
+        }
     }
 
     @Test
     void 표시가_없으면_wait_동안만_폴링하고_그_안의_호출_수는_한정된다() throws Exception {
-        ScriptedStorage storage = new ScriptedStorage();
+        try (ScriptedStorage storage = new ScriptedStorage()) {
+            Chunk chunk = queueOver(storage).pull(1, Duration.ofMillis(30));
 
-        Chunk chunk = queueOver(storage).pull(1, Duration.ofMillis(30));
-
-        assertTrue(chunk.isEmpty());
-        assertTrue(storage.pulls >= 2, "pulls=" + storage.pulls);
+            assertTrue(chunk.isEmpty());
+            assertTrue(storage.pulls >= 2, "pulls=" + storage.pulls);
+        }
     }
 }

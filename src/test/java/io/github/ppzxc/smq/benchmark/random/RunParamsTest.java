@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.benchmark.random;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
+import io.github.ppzxc.smq.PolicyException;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,6 +21,12 @@ class RunParamsTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "This seed loop checks independent specification ranges and aggregate distributions.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     void everySeedStaysInsideTheSpecTable() {
         int single = 0;
         int withMax = 0;

@@ -351,6 +351,8 @@ AGENTS.md는 **자동화할 수 없는 맥락과 도구 사용법을 전달**하
 | TOOL-007 | MUST | PMD·Error Prone·NullAway·ArchUnit·Instancio 버전을 version catalog 등으로 고정하고, 버전 변경 시 커스텀 규칙 테스트(9.3)를 재실행한다. 커스텀 PMD 규칙은 고정 버전의 API 문서를 기준으로 작성한다 |
 | TOOL-008 | MUST | 위 구성은 단일 Gradle convention plugin(`build-logic`) 또는 Maven parent POM에서 관리한다. 모듈별 빌드 파일에서 검사 비활성화·심각도 하향·대상 제외를 금지한다(STYLE-005) |
 
+smq는 TOOL-003의 프로젝트별 적용 사례로 SpotBugs 기본 검사를 `main` 바이트코드에 실행한다. `check`에 연결하고 탐지 결과가 있으면 빌드를 실패시킨다. Linux·Windows CI는 HTML 보고서를 아티팩트로 제공한다.
+
 ## 9. 커스텀 Lint 작성 및 운영 SPEC
 
 ### 9.1 커스텀 규칙 도입 조건
@@ -532,7 +534,7 @@ SCA는 PR 외에 정기 실행으로 신규 공개 취약점을 추적한다. �
 - `Domain은 프레임워크 독립`, `Application은 Adapter에 의존 금지`는 **해당 아키텍처를 채택했다면 작성자가 강제하는 규칙**이다.
 - Spring Constructor Injection은 일반적 권고이자 불변성·순환참조 방지·테스트 용이성을 위한 핵심 설계 기준이지만, 선택적 의존성이나 재설정이 필요한 제한적 경우의 모든 Setter Injection이 오류인 것은 아니다.
 - Java 24(JEP 491) 이후 가상 스레드의 `synchronized` 고정(Pinning) 문제가 해소되었으므로 규칙 설계자는 `synchronized` 일괄 금지 규칙을 만들지 않는다(구 CON-010).
-- PMD/Error Prone/NullAway는 규칙별 활성 상태·심각도·오탐이 다르다. SpotBugs는 기존 규칙의 출처 참고로만 남긴다.
+- PMD/Error Prone/NullAway는 규칙별 활성 상태·심각도·오탐이 다르다. SpotBugs의 smq 적용 범위는 8.1에 명시한다.
 - 코드 커버리지, Mutation Score, PR 되돌림 비율은 단독으로 코드의 완전한 정확성을 보증하지 않는다.
 
 ### 12.2 회귀 방지 참고 출처

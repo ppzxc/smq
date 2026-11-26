@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.IncompatibleStorageException;
+import io.github.ppzxc.smq.PolicyException;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -36,6 +37,12 @@ class SqliteSchemaModuleTest {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Rollback must run for errors as well as exceptions before the failure is rethrown.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private static int establishInTransaction(SqliteSchema schema, Connection c) throws SQLException {
         exec(c, "BEGIN IMMEDIATE");
         try {

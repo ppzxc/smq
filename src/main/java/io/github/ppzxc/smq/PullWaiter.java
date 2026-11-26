@@ -147,39 +147,60 @@ final class PullWaiter {
             if (closed.get()) {
                 return empty.get();
             }
-            Attempt<T> result;
-            try {
-                result = attempt.get();
-            } catch (RuntimeException e) {
-
-                if (closed.get()) {
-                    return empty.get();
-                }
-                throw e;
+            Optional<Attempt<T>> attempted = attemptUnlessClosed(attempt);
+            if (attempted.isEmpty()) {
+                return empty.get();
             }
+            Attempt<T> result = attempted.orElseThrow();
             if (result instanceof Attempt.Found<T> found) {
                 return found.value();
             }
             if (result instanceof Attempt.RetryNow<T>) {
-                if (Thread.interrupted()) {
-                    throw new InterruptedException();
-                }
+                checkInterrupted();
                 continue;
             }
             long remaining = deadline - System.nanoTime();
             if (remaining <= 0) {
                 return empty.get();
             }
-            Duration pause = Duration.ofNanos(Math.min(pollInterval, remaining));
-            if (result instanceof Attempt.Empty<T> pending
-                    && pending.untilReady().isPositive()
-                    && pending.untilReady().compareTo(pause) < 0) {
-                pause = pending.untilReady();
-            }
+            Duration pause = pauseFor(result, pollInterval, remaining);
             hint.await(seen, pause);
             if (!storageHint) {
                 pollInterval = Math.min(pollInterval * 2, MAX_POLL_INTERVAL_NANOS);
             }
+        }
+    }
+
+    private static void checkInterrupted() throws InterruptedException {
+        if (Thread.interrupted()) {
+            throw new InterruptedException();
+        }
+    }
+
+    private static Duration pauseFor(Attempt<?> result, long pollInterval, long remaining) {
+        Duration pause = Duration.ofNanos(Math.min(pollInterval, remaining));
+        if (result instanceof Attempt.Empty<?> pending
+                && pending.untilReady().isPositive()
+                && pending.untilReady().compareTo(pause) < 0) {
+            return pending.untilReady();
+        }
+        return pause;
+    }
+
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Any storage runtime failure becomes an empty result if closure raced with the attempt.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
+    private <T> Optional<Attempt<T>> attemptUnlessClosed(InterruptibleAttempt<T> attempt) throws InterruptedException {
+        try {
+            return Optional.of(attempt.get());
+        } catch (RuntimeException e) {
+            if (closed.get()) {
+                return Optional.empty();
+            }
+            throw e;
         }
     }
 }

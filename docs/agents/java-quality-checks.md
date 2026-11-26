@@ -25,7 +25,8 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 | CON-002 | Error Prone `InterruptedExceptionSwallowed` | main, benchmark | error |
 | | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test, benchmark | error |
 | Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test, benchmark | any violation fails the build |
-| Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | reports only |
+| Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | any violation fails the build |
+| TOOL-003 | SpotBugs 4.10.5 default checks | main | findings fail the build |
 | NUL-001 | NullAway / JSpecify | main | error; only `@NullMarked` code, explicit nullness required |
 | STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, benchmark, deploy-test Java | `spotlessCheck` is part of `check` |
 
@@ -73,7 +74,7 @@ PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java
 | performance | 5 |
 | security | 2 |
 
-PMD's `errorprone` category is a group of PMD rules; it is separate from Google Error Prone and its built-in checker counts above. MUST violations at priorities 1 through 5 fail their respective tasks. SHOULD tasks are advisory and generate reports without failing on violations. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect all reports under `build/reports/pmd/`; the XML and HTML reports identify each rule, file, and line. The HTML report also shows the total number of violations.
+PMD's `errorprone` category is a group of PMD rules; it is separate from Google Error Prone and its built-in checker counts above. MUST violations at priorities 1 through 5 fail their respective tasks. SHOULD violations fail their respective tasks in all three source sets. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect all reports under `build/reports/pmd/`; the XML and HTML reports identify each rule, file, and line. The HTML report also shows the total number of violations. Linux and Windows CI upload the HTML reports as `linux-pmd-report` and `windows-pmd-report`, respectively.
 
 `SqliteStorage` retains narrowly scoped PMD suppressions for these contracts:
 
@@ -84,8 +85,31 @@ PMD's `errorprone` category is a group of PMD rules; it is separate from Google 
 
 PMD MUST tasks also check each PMD suppression for a matching `@PolicyException`, a nonempty reason and approver, and an unexpired ISO-8601 review date. The tasks rerun when the date changes and do not reuse PMD incremental results. Existing Error Prone exceptions retain their documented adjacent explanations.
 
+## SpotBugs report
+
+Run `./gradlew spotbugsMain` to analyze the compiled production classes with SpotBugs 4.10.5. The existing `check` task also runs it. Findings fail the build and appear in `build/reports/spotbugs/main.html`. Linux and Windows CI upload that report as `linux-spotbugs-report` and `windows-spotbugs-report`, respectively.
+
 ## STYLE-011 comment policy
 
 `pmdMainComments` and `pmdTestComments` enforce STYLE-011 through the PMD 7 Java rule in `pmd-rules`; both tasks and the rule tests run in `check`. Generated source directories are excluded. PMD 7.29 cannot parse both modifiers on the module descriptor’s `requires static transitive` directive, so the comment task analyzes a copy with one modifier blanked while preserving line and column positions. Parsing errors fail the task. Reports identify STYLE-011 and the file and line. Spotless does not configure `toggleOffOn()`, so neither toggle is currently accepted. If enabled, configure the rule's `spotlessToggles` property together with Spotless and use matched pairs.
 
 ADR 0011 and AGENTS.md require an adjacent explanation for intentional Error Prone suppressions, while STYLE-011 and STYLE-005 section 9.4 prohibit ordinary comments and comment-based suppression. The repository instructions take precedence for these explanations: only the existing specific Error Prone rationale comments are permitted, alongside their matching annotations; PMD suppression comments remain forbidden. This exception retains the reviewable reason without treating the comment as a suppression mechanism. New exceptions require review and a corresponding rule test. The `ArrayRecordComponent` suppressions keep the public API and the internal payload ownership contracts unchanged.
+
+### PMD SHOULD test baseline (#247)
+
+On Linux with JDK 25, integration commit `aab13e0` reported 89 violations in
+`pmdTestShould`: 52 CloseResource, 14 UnnecessaryWarningSuppression,
+13 AvoidCatchingGenericException, 6 CognitiveComplexity, 2 CyclomaticComplexity,
+and 2 UnitTestShouldIncludeAssert. The XML and HTML reports identify each location.
+The findings were resolved or addressed with narrowly scoped, justified exceptions before the test gate was enabled.
+
+### PMD SHOULD benchmark baseline (#248)
+
+On Linux with JDK 25, the initial `pmdBenchmarkShould` baseline was 58 violations:
+20 CyclomaticComplexity, 12 AvoidCatchingGenericException, 11 CognitiveComplexity,
+9 UnnecessaryWarningSuppression, 5 CloseResource, and 1 AvoidReassigningParameters.
+After the rule changes in #242 and #247, the benchmark cleanup started at 57.
+The findings were resolved or addressed with narrowly scoped, justified exceptions before the benchmark gate was enabled.
+`RandomRun` coordinates the workload, recording, and judgment phases; its aggregate
+class complexity is excepted with a class-node-only XPath and `@PolicyException`.
+Method complexity findings remain enabled, including for `RandomRun`.

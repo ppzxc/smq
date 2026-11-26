@@ -65,6 +65,23 @@ class SqliteSnapshotTest {
     }
 
     @Test
+    void 작은따옴표가_있는_경로에_스냅샷을_만들고_기존_파일을_보존한다() throws Exception {
+        Path quotedDir = Files.createDirectory(dir.resolve("consumer's snapshots"));
+        Path target = quotedDir.resolve("snapshot.db");
+        try (Smq smq = open()) {
+            smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
+            smq.snapshot(target);
+            byte[] snapshot = Files.readAllBytes(target);
+
+            assertThrows(SmqStorageException.class, () -> smq.snapshot(target));
+            assertArrayEquals(snapshot, Files.readAllBytes(target));
+        }
+        try (Connection c = external(target)) {
+            assertEquals(List.of("a"), payloads(c));
+        }
+    }
+
+    @Test
     void 스냅샷은_외부_SQLite로_열어_원본과_같은_메시지를_보여_준다() throws Exception {
         Path target = dir.resolve("snap.db");
         try (Smq smq = open()) {
@@ -159,6 +176,12 @@ class SqliteSnapshotTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     void 스냅샷을_뜨는_동안_발행이_이어져도_스냅샷은_일관되고_모든_발행이_끝내_성공한다() throws Exception {
         int initial = 1_000;
         int rounds = 5;
@@ -253,7 +276,12 @@ class SqliteSnapshotTest {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.UseTryWithResources")
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.UseTryWithResources"})
     void 스냅샷_도중_다른_스레드가_close를_불러도_스냅샷은_완전한_파일로_끝난다() throws Exception {
         int rows = 4_000;
         byte[] big = new byte[16 * 1024];
@@ -331,14 +359,15 @@ class SqliteSnapshotTest {
     @Test
     void 닫힌_뒤_스냅샷은_예외가_나고_대상_파일도_임시_파일도_남지_않는다() throws Exception {
         Path target = dir.resolve("snap.db");
-        Smq smq = open();
-        smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
-        smq.close();
-        Set<String> before = names(dir);
+        try (Smq smq = open()) {
+            smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
+            smq.close();
+            Set<String> before = names(dir);
 
-        assertThrows(IllegalStateException.class, () -> smq.snapshot(target));
+            assertThrows(IllegalStateException.class, () -> smq.snapshot(target));
 
-        assertFalse(Files.exists(target));
-        assertEquals(before, names(dir));
+            assertFalse(Files.exists(target));
+            assertEquals(before, names(dir));
+        }
     }
 }

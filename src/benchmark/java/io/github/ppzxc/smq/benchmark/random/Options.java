@@ -1,6 +1,7 @@
 package io.github.ppzxc.smq.benchmark.random;
 
 import io.github.ppzxc.smq.Durability;
+import io.github.ppzxc.smq.PolicyException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -46,6 +47,17 @@ record Options(
     static final Duration SMOKE_LOAD = Duration.ofSeconds(2);
     static final List<Long> SMOKE_SEEDS = List.of(1L, 2L, 3L, 4L, 5L, 6L);
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The CLI parser keeps each option and its cross-option validation together for review.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Each supported CLI flag and invalid combination requires an explicit parsing branch.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     static Options parse(String[] args, long nowMillis) {
         OptionalLong seed = OptionalLong.empty();
         Duration budget = DEFAULT_BUDGET;
@@ -170,6 +182,12 @@ record Options(
     }
 
     /** {@code 30m}, {@code 90s}, {@code 2h}, {@code 1500ms}, {@code PT30M}. 단위가 없으면 초. */
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Invalid durations, overflow, and empty input all become the same option error with their cause.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static Duration parseDuration(String v) {
         String s = v.trim();
         try {

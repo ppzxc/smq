@@ -68,7 +68,17 @@ public final class BacklogBench {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.SystemPrintln")
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The load, ramp, recovery, and timeout decisions share the same concurrent run state.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "The load, ramp, recovery, and timeout decisions share the same concurrent run state.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.SystemPrintln", "PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private static void run(Queue queue, Rates rates, long target, Duration timeout)
             throws ExecutionException, InterruptedException {
         AtomicLong acked = new AtomicLong();
@@ -142,6 +152,12 @@ public final class BacklogBench {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "The consumer checks sequence, settlement, draining, and deadline within one paced loop.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     private static void consume(Queue queue, long rate, AtomicLong acked, AtomicBoolean finish, long deadline)
             throws InterruptedException {
         while (System.nanoTime() < deadline) {

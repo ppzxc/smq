@@ -1,6 +1,8 @@
 package io.github.ppzxc.gradle
 
 import com.diffplug.gradle.spotless.SpotlessExtension
+import com.github.spotbugs.snom.SpotBugsExtension
+import com.github.spotbugs.snom.SpotBugsTask
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 import net.ltgt.gradle.nullaway.nullaway
@@ -32,6 +34,7 @@ class JavaQualityPlugin : Plugin<Project> {
         }
 
         configurePmd(project)
+        configureSpotBugs(project)
 
         project.dependencies.add("errorprone", "com.google.errorprone:error_prone_core:2.51.0")
         project.dependencies.add("errorprone", "com.uber.nullaway:nullaway:0.14.3")
@@ -76,6 +79,30 @@ class JavaQualityPlugin : Plugin<Project> {
         }
     }
 
+    private fun configureSpotBugs(project: Project) {
+        project.pluginManager.apply("com.github.spotbugs-base")
+        project.extensions.configure(SpotBugsExtension::class.java) {
+            toolVersion.set("4.10.5")
+            excludeFilter.set(project.rootProject.file("config/spotbugs/exclude.xml"))
+        }
+
+        val main = project.extensions.getByType(SourceSetContainer::class.java).named("main")
+        val spotbugsMain = project.tasks.register("spotbugsMain", SpotBugsTask::class.java) {
+            excludeFilter.set(project.rootProject.layout.projectDirectory.file("config/spotbugs/exclude.xml"))
+            sourceDirs.from(main.map { it.allJava.sourceDirectories })
+            classDirs.from(main.map { it.output.classesDirs })
+            auxClassPaths.from(main.map { it.compileClasspath })
+            setIgnoreFailures(false)
+            reports {
+                create("html") {
+                    required.set(true)
+                    outputLocation.set(project.layout.buildDirectory.file("reports/spotbugs/main.html"))
+                }
+            }
+        }
+        project.tasks.named("check").configure { dependsOn(spotbugsMain) }
+    }
+
     private fun configurePmd(project: Project) {
         val mustRules = project.rootProject.file("config/pmd/must.xml")
         val shouldRules = project.rootProject.file("config/pmd/should.xml")
@@ -101,7 +128,7 @@ class JavaQualityPlugin : Plugin<Project> {
                 classpath = project.files(sourceSet.output, sourceSet.compileClasspath)
                 ruleSetFiles = project.files(shouldRules)
                 ruleSets = emptyList()
-                setIgnoreFailures(true)
+                setIgnoreFailures(false)
                 setConsoleOutput(true)
                 reports {
                     xml.required.set(true)

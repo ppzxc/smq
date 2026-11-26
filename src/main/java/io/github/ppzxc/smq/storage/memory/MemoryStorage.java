@@ -196,47 +196,10 @@ public final class MemoryStorage implements Storage {
             if (options.singleActiveConsumer() && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
                 return PullResult.empty();
             }
-            for (Entry e : entries.values()) {
-                if (e.availableAt != null && !e.availableAt.isAfter(now)) {
-                    e.availableAt = null;
-                }
-            }
             List<Entry> picked = new ArrayList<>();
             List<Entry> exhausted = new ArrayList<>();
-            boolean deadLettersRemain = false;
-            boolean blocked = false;
-            boolean moves = options.maxDeliveries().isPresent();
-            for (Entry e : entries.values()) {
-
-                if (picked.size() == max && !moves) {
-                    break;
-                }
-                if (options.singleActiveConsumer() && isDelayed(e, now)) {
-                    blocked = true;
-                }
-                if (!isReady(e, now)) {
-                    continue;
-                }
-                if (moves && e.deliveryCount >= options.maxDeliveries().getAsInt()) {
-                    if (exhausted.size() < DeadLetters.MAX_MOVES_PER_PULL) {
-                        exhausted.add(e);
-                    } else {
-                        deadLettersRemain = true;
-                    }
-                } else if (!blocked && picked.size() < max) {
-                    picked.add(e);
-                }
-            }
-            if (!exhausted.isEmpty()) {
-                TreeMap<Long, Entry> dlq = require(options.deadLetterQueue().orElseThrow());
-                for (Entry e : exhausted) {
-                    entries.remove(e.id.value());
-                    long id = nextMessageId;
-                    nextMessageId++;
-                    Entry moved = e.deadLettered(new MessageId(id), queue, DeadLetters.Reason.MAX_DELIVERIES, now);
-                    dlq.put(moved.id.value(), moved);
-                }
-            }
+            boolean deadLettersRemain = Selection.selectEntries(entries, options, now, max, picked, exhausted);
+            moveExhausted(entries, options, queue, now, exhausted);
             if (picked.isEmpty()) {
                 return deadLettersRemain
                         ? PullResult.emptyDeadLettersRemain(!exhausted.isEmpty())
@@ -255,6 +218,73 @@ public final class MemoryStorage implements Storage {
             return PullResult.of(new LeaseToken(token), deadline, messages, !exhausted.isEmpty());
         } finally {
             lock.unlock();
+        }
+    }
+
+    private static final class Selection {
+        private static boolean selectEntries(
+                Map<Long, Entry> entries,
+                QueueOptions options,
+                Instant now,
+                int max,
+                List<Entry> picked,
+                List<Entry> exhausted) {
+            boolean deadLettersRemain = false;
+            boolean blocked = false;
+            boolean moves = options.maxDeliveries().isPresent();
+            clearReadyDelays(entries, now);
+            for (Entry e : entries.values()) {
+                if (picked.size() == max && !moves) {
+                    break;
+                }
+                if (options.singleActiveConsumer() && isDelayed(e, now)) {
+                    blocked = true;
+                }
+                if (!isReady(e, now)) {
+                    continue;
+                }
+                if (isExhausted(e, options, moves)) {
+                    deadLettersRemain |= !addExhausted(exhausted, e);
+                } else if (!blocked && picked.size() < max) {
+                    picked.add(e);
+                }
+            }
+            return deadLettersRemain;
+        }
+
+        private static boolean isExhausted(Entry entry, QueueOptions options, boolean moves) {
+            return moves && entry.deliveryCount >= options.maxDeliveries().getAsInt();
+        }
+
+        private static boolean addExhausted(List<Entry> exhausted, Entry entry) {
+            if (exhausted.size() >= DeadLetters.MAX_MOVES_PER_PULL) {
+                return false;
+            }
+            exhausted.add(entry);
+            return true;
+        }
+
+        private static void clearReadyDelays(Map<Long, Entry> entries, Instant now) {
+            for (Entry e : entries.values()) {
+                if (e.availableAt != null && !e.availableAt.isAfter(now)) {
+                    e.availableAt = null;
+                }
+            }
+        }
+    }
+
+    private void moveExhausted(
+            Map<Long, Entry> entries, QueueOptions options, String queue, Instant now, List<Entry> exhausted) {
+        if (exhausted.isEmpty()) {
+            return;
+        }
+        TreeMap<Long, Entry> dlq = require(options.deadLetterQueue().orElseThrow());
+        for (Entry e : exhausted) {
+            entries.remove(e.id.value());
+            long id = nextMessageId;
+            nextMessageId++;
+            Entry moved = e.deadLettered(new MessageId(id), queue, DeadLetters.Reason.MAX_DELIVERIES, now);
+            dlq.put(moved.id.value(), moved);
         }
     }
 

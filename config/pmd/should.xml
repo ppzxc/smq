@@ -35,7 +35,7 @@
         <properties>
             <property name="methodReportLevel" value="10" />
             <property name="classReportLevel" value="80" />
-            <property name="violationSuppressXPath" value=".[self::ClassDeclaration[@SimpleName = ('SqliteStorage', 'RandomRun')]]" />
+            <property name="violationSuppressXPath" value=".[self::ClassDeclaration[parent::CompilationUnit and @CanonicalName = ('io.github.ppzxc.smq.storage.sqlite.SqliteStorage', 'io.github.ppzxc.smq.benchmark.random.RandomRun')]]" />
         </properties>
     </rule>
     <rule ref="category/java/design.xml/MutableStaticState" />

@@ -77,6 +77,11 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock을_기다리는_꺼내기를_interrupt하면_메시지는_준비_상태로_남는다() throws Exception {
         CountDownLatch locked = new CountDownLatch(1);

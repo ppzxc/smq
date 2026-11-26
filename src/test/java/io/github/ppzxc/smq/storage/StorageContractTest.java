@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
 import io.github.ppzxc.smq.Outcome;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueOptions;
 import java.nio.file.Path;
@@ -246,6 +247,11 @@ abstract class StorageContractTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock_대기_마감이_끝나면_꺼내기는_상태를_바꾸지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());
@@ -278,6 +284,11 @@ abstract class StorageContractTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock을_기다리는_꺼내기를_interrupt하면_리스하지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());
@@ -341,6 +352,11 @@ abstract class StorageContractTest {
                         .id());
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     private <T> T afterLockWait(java.util.function.Function<InstantSource, T> operation) throws Exception {
         CountDownLatch locked = new CountDownLatch(1);

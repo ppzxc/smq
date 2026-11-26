@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.QueueOptions;
 import java.time.Duration;
 import java.time.InstantSource;
@@ -37,6 +38,11 @@ class StorageContractSqliteTest extends StorageContractTest {
 
     @Override
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock을_기다리는_꺼내기를_interrupt하면_리스하지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());

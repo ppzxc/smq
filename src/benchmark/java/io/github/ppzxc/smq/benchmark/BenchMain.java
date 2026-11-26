@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,11 @@ public final class BenchMain {
 
     private BenchMain() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws Exception {
         ModuleGuard.requireSmqModule("부모 JVM");
@@ -85,6 +91,11 @@ public final class BenchMain {
         System.exit(Comparator.exitCode(checks));
     }
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
     private static Map<String, Double> loadBaseline(String path) throws IOException {
         if (path == null || !Files.exists(Path.of(path))) {

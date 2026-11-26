@@ -1702,6 +1702,11 @@ abstract class SmqConformanceTest {
     private static final int ROUNDS = 300;
 
     @Test
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
     void 여러_스레드가_동시에_꺼내도_같은_메시지가_두_리스에_묶이지_않는다() throws Exception {
         Smq smq = open(Duration.ofMinutes(10));

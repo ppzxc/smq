@@ -8,6 +8,11 @@ public final class SigkillWriterMain {
 
     private SigkillWriterMain() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) {
         Smq smq = Smq.sqlite(Path.of(args[0]))

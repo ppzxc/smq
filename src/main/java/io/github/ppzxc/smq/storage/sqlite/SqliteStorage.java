@@ -5,6 +5,7 @@ import io.github.ppzxc.smq.Message;
 import io.github.ppzxc.smq.MessageId;
 import io.github.ppzxc.smq.NoDeadLetterQueueException;
 import io.github.ppzxc.smq.Outcome;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueDeclarationConflictException;
 import io.github.ppzxc.smq.QueueInUseException;
@@ -148,6 +149,16 @@ public final class SqliteStorage implements Storage {
         return open(path, durability, lockWaitFloor, connector, true);
     }
 
+    @PolicyException(
+            rule = "PMD.PreserveStackTrace",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.UseTryWithResources",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.UseTryWithResources", "PMD.PreserveStackTrace"})
     private static SqliteStorage open(
             Path path, Durability durability, Duration lockWaitFloor, Connector connector, boolean autoVacuum) {
@@ -203,6 +214,11 @@ public final class SqliteStorage implements Storage {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.UseTryWithResources",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.UseTryWithResources")
     static Connection connect(Path path, Durability durability) throws SQLException {
         SQLiteConfig config = new SQLiteConfig();
@@ -513,6 +529,11 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
+    @PolicyException(
+            rule = "PMD.PreserveStackTrace",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.PreserveStackTrace")
     public PullResult pull(
             String queue,
@@ -540,6 +561,11 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
+    @PolicyException(
+            rule = "PMD.PreserveStackTrace",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.PreserveStackTrace")
     public Optional<Instant> nextReadyAt(String queue, InstantSource clock, Duration wait) throws InterruptedException {
         try {
@@ -777,6 +803,11 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
+    @PolicyException(
+            rule = "PMD.ExhaustiveSwitchHasDefault",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.ExhaustiveSwitchHasDefault")
     public List<Result> settle(
             LeaseToken token, List<Disposition> items, InstantSource clock, Consumer<Optional<String>> deadLetter) {
@@ -923,6 +954,11 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
+    @PolicyException(
+            rule = "PMD.ExceptionAsFlowControl",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.ExceptionAsFlowControl")
     public void snapshot(Path target) {
         try {
@@ -976,6 +1012,11 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
+    @PolicyException(
+            rule = "PMD.UseTryWithResources",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.UseTryWithResources")
     public void close() {
         closed = true;
@@ -1027,6 +1068,11 @@ public final class SqliteStorage implements Storage {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.ExceptionAsFlowControl",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.ExceptionAsFlowControl")
     private static Map<String, String> decodeHeaders(byte[] raw) {
         try {

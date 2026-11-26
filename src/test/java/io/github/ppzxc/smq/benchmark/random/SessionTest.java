@@ -2,6 +2,7 @@ package io.github.ppzxc.smq.benchmark.random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -60,6 +61,11 @@ class SessionTest {
                 null);
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     private Session.Executor fake(java.util.function.Function<RunParams, RunResult> make) {
         return (params, runDir) -> {
@@ -96,6 +102,11 @@ class SessionTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.DoNotCallGarbageCollectionExplicitly",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.DoNotCallGarbageCollectionExplicitly")
     void passedRunsDoNotKeepTheirRecordsAliveForTheRestOfTheSession() {
         List<java.lang.ref.WeakReference<List<Published>>> firstRecords = new ArrayList<>();
@@ -331,6 +342,11 @@ class SessionTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void 고정_속도_실행은_통과해도_JFR과_메트릭_파일을_남기고_DB와_큰_기록만_지운다() throws IOException {
         Session.Executor exec = (params, runDir) -> {

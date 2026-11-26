@@ -248,6 +248,11 @@ class SqliteSnapshotTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.UseTryWithResources",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.UseTryWithResources")
     void 스냅샷_도중_다른_스레드가_close를_불러도_스냅샷은_완전한_파일로_끝난다() throws Exception {
         int rows = 4_000;

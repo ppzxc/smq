@@ -2,6 +2,7 @@ package io.github.ppzxc.smq.benchmark;
 
 import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.OutgoingMessage;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.Queue;
 import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.Smq;
@@ -36,6 +37,11 @@ public final class BacklogBench {
 
     private BacklogBench() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws Exception {
         ModuleGuard.requireSmqModule("backlog benchmark");
@@ -57,6 +63,11 @@ public final class BacklogBench {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
     private static void run(Queue queue, Rates rates, long target, Duration timeout)
             throws ExecutionException, InterruptedException {

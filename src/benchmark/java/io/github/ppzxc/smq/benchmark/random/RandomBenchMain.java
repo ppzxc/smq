@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.benchmark.Environment;
 import io.github.ppzxc.smq.benchmark.ModuleGuard;
 import java.io.IOException;
@@ -21,6 +22,11 @@ public final class RandomBenchMain {
 
     private RandomBenchMain() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws IOException {
         ModuleGuard.requireSmqModule("부모 JVM");
@@ -49,6 +55,16 @@ public final class RandomBenchMain {
         return limits;
     }
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.UseTryWithResources",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.SystemPrintln", "PMD.UseTryWithResources"})
     static int run(Options o) throws IOException {
         Files.createDirectories(o.outDir());

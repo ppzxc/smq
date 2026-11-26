@@ -51,6 +51,15 @@ class TransactionExecutorTest {
         assertSame(loggingFailure, checkpointFailure.getSuppressed()[0]);
     }
 
+    @Test
+    void 로그가_원래_오류를_다시_던져도_자기_자신을_억제하지_않는다() {
+        RuntimeException failure = new IllegalStateException("checkpoint failed");
+        assertDoesNotThrow(() -> TransactionExecutor.logCheckpointFailure(failure, () -> {
+            throw failure;
+        }));
+        assertEquals(0, failure.getSuppressed().length);
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         connection = SqliteStorage.connect(dir.resolve("t.db"), Durability.POWER_LOSS);
@@ -86,6 +95,30 @@ class TransactionExecutorTest {
                     }
                     throw new SQLException("boom", null, SQLITE_CONSTRAINT);
                 }));
+        assertEquals(0, count());
+        ex.execute(c -> {
+            try (Statement s = c.createStatement()) {
+                s.execute("INSERT INTO t VALUES (2)");
+            }
+            return null;
+        });
+        assertEquals(1, count());
+    }
+
+    @Test
+    void 오류로_실패한_트랜잭션도_롤백하고_다음_연산을_허용한다() throws Exception {
+        TransactionExecutor ex = executor();
+        AssertionError failure = new AssertionError("injected");
+        assertSame(
+                failure,
+                assertThrows(
+                        AssertionError.class,
+                        () -> ex.execute(c -> {
+                            try (Statement s = c.createStatement()) {
+                                s.execute("INSERT INTO t VALUES (1)");
+                            }
+                            throw failure;
+                        })));
         assertEquals(0, count());
         ex.execute(c -> {
             try (Statement s = c.createStatement()) {

@@ -62,6 +62,12 @@ import org.sqlite.SQLiteException;
  * 보고, 확실하지 않으면 "있다"고 답해 쓰기 경로가 다시 확인하게 한다.
  * 열 때의 스키마 판정(생성, 거부, 업그레이드)은 상태 없는 {@link SqliteSchema}가 맡는다.
  */
+@PolicyException(
+        rule = "PMD.CyclomaticComplexity",
+        reason =
+                "The storage facade owns many independent SQL operations; each method remains subject to the complexity limit.",
+        approvedBy = "ppzxc",
+        reviewBy = "2027-11-26")
 public final class SqliteStorage implements Storage {
 
     private static final System.Logger LOG = System.getLogger(SqliteStorage.class.getName());
@@ -150,16 +156,17 @@ public final class SqliteStorage implements Storage {
     }
 
     @PolicyException(
-            rule = "PMD.PreserveStackTrace",
-            reason = "A non-database file is reported as a domain error without exposing the SQLite cause.",
-            approvedBy = "ppzxc",
-            reviewBy = "2027-11-26")
-    @PolicyException(
             rule = "PMD.UseTryWithResources",
             reason = "The connection transfers to the storage object, which closes it when the storage closes.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings({"PMD.UseTryWithResources", "PMD.PreserveStackTrace"})
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason =
+                    "Opening must translate SQLite failures while releasing the connection and file lock on every failure.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.UseTryWithResources", "PMD.AvoidCatchingGenericException"})
     private static SqliteStorage open(
             Path path, Durability durability, Duration lockWaitFloor, Connector connector, boolean autoVacuum) {
         if (lockWaitFloor.isNegative()) {
@@ -193,16 +200,7 @@ public final class SqliteStorage implements Storage {
             success = true;
             return storage;
         } catch (SQLException | RuntimeException e) {
-            if (isNotADatabase(e)) {
-                throw SCHEMA.notSmq("not a SQLite file");
-            }
-            if (isBusyCause(e)) {
-                throw StorageLock.locked(path, StorageLock.lockPathOf(path), e);
-            }
-            if (e instanceof RuntimeException re) {
-                throw re;
-            }
-            throw new SmqStorageException("cannot open " + path, e);
+            throw openFailure(path, e);
         } finally {
             if (!success) {
                 try {
@@ -212,6 +210,19 @@ public final class SqliteStorage implements Storage {
                 }
             }
         }
+    }
+
+    private static RuntimeException openFailure(Path path, Exception e) {
+        if (isNotADatabase(e)) {
+            throw SCHEMA.notSmq("not a SQLite file");
+        }
+        if (isBusyCause(e)) {
+            throw StorageLock.locked(path, StorageLock.lockPathOf(path), e);
+        }
+        if (e instanceof RuntimeException re) {
+            throw re;
+        }
+        return new SmqStorageException("cannot open " + path, e);
     }
 
     @PolicyException(
@@ -318,30 +329,34 @@ public final class SqliteStorage implements Storage {
                 }
                 return true;
             }
-            Long dlqId = null;
-            if (options.deadLetterQueue().isPresent()) {
-                dlqId = requireQueue(c, options.deadLetterQueue().get());
-            }
-            try (PreparedStatement ps = c.prepareStatement("""
-                    INSERT INTO queue(name, max_deliveries, dead_letter_queue_id, single_active_consumer)
-                    VALUES (?, ?, ?, ?)""")) {
-                ps.setString(1, queue);
-                if (options.maxDeliveries().isPresent()) {
-                    ps.setInt(2, options.maxDeliveries().getAsInt());
-                } else {
-                    ps.setNull(2, java.sql.Types.INTEGER);
-                }
-                if (dlqId != null) {
-                    ps.setLong(3, dlqId);
-                } else {
-                    ps.setNull(3, java.sql.Types.INTEGER);
-                }
-                ps.setInt(4, options.singleActiveConsumer() ? 1 : 0);
-                ps.executeUpdate();
-            }
+            insertQueue(c, queue, options);
             tx.declared(queue, requireQueue(c, queue));
             return true;
         });
+    }
+
+    private static void insertQueue(Connection c, String queue, QueueOptions options) throws SQLException {
+        Long dlqId = null;
+        if (options.deadLetterQueue().isPresent()) {
+            dlqId = requireQueue(c, options.deadLetterQueue().get());
+        }
+        try (PreparedStatement ps = c.prepareStatement("""
+            INSERT INTO queue(name, max_deliveries, dead_letter_queue_id, single_active_consumer)
+            VALUES (?, ?, ?, ?)""")) {
+            ps.setString(1, queue);
+            if (options.maxDeliveries().isPresent()) {
+                ps.setInt(2, options.maxDeliveries().getAsInt());
+            } else {
+                ps.setNull(2, java.sql.Types.INTEGER);
+            }
+            if (dlqId != null) {
+                ps.setLong(3, dlqId);
+            } else {
+                ps.setNull(3, java.sql.Types.INTEGER);
+            }
+            ps.setInt(4, options.singleActiveConsumer() ? 1 : 0);
+            ps.executeUpdate();
+        }
     }
 
     @Override
@@ -646,82 +661,90 @@ public final class SqliteStorage implements Storage {
                     if (moved.moved()) {
                         destinations.add(options.deadLetterQueue().orElseThrow());
                     }
-                    long barrier = Long.MAX_VALUE;
-                    if (options.singleActiveConsumer()) {
-                        try (PreparedStatement ps = c.prepareStatement(SELECT_DELAY_BARRIER)) {
-                            ps.setLong(1, queueId);
-                            try (ResultSet rs = ps.executeQuery()) {
-                                if (rs.next()) {
-                                    long id = rs.getLong(1);
-                                    if (!rs.wasNull()) {
-                                        barrier = id - 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    long barrier = options.singleActiveConsumer() ? delayBarrier(c, queueId) : Long.MAX_VALUE;
 
-                    long fromReady = 0;
-                    long picked = 0;
-                    try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE_STATE)) {
-                        peek.setLong(1, queueId);
-                        peek.setInt(2, limit);
-                        peek.setLong(3, barrier);
-                        peek.setInt(4, max);
-                        try (ResultSet rs = peek.executeQuery()) {
-                            while (rs.next()) {
-                                picked++;
-
-                                if (rs.getInt(1) == 0) {
-                                    fromReady++;
-                                }
-                            }
-                        }
-                    }
+                    PullCounts counts = countPullable(c, queueId, limit, barrier, max);
+                    long fromReady = counts.ready();
+                    long picked = counts.total();
                     if (picked == 0) {
-                        return moved.remain()
-                                ? PullResult.emptyDeadLettersRemain(moved.moved())
-                                : PullResult.empty(moved.moved());
+                        return emptyPullResult(moved);
                     }
                     tx.ready(queueId, -fromReady);
                     tx.leased(queueId, fromReady);
-                    long token;
-                    try (Statement s = c.createStatement();
-                            ResultSet rs = s.executeQuery(
-                                    "UPDATE meta SET value = value + 1 WHERE key = 'lease_seq' RETURNING value")) {
-                        if (!rs.next()) {
-                            throw new SQLException("lease sequence row missing");
-                        }
-                        token = rs.getLong(1);
-                    }
+                    long token = nextLeaseToken(c);
                     Instant deadline = now.plus(lease);
-                    List<Message> messages = new ArrayList<>();
-                    try (PreparedStatement ps = c.prepareStatement("""
-                    UPDATE message SET lease_token = ?, lease_deadline = ?, delivery_count = delivery_count + 1
-                    WHERE id IN (""" + SELECT_PULLABLE + """
-                    )
-                    RETURNING id, payload, headers, delivery_count, published_at""")) {
-                        ps.setLong(1, token);
-                        ps.setLong(2, toNanos(deadline));
-                        ps.setLong(3, queueId);
-                        ps.setInt(4, limit);
-                        ps.setLong(5, barrier);
-                        ps.setInt(6, max);
-                        try (ResultSet rs = ps.executeQuery()) {
-                            while (rs.next()) {
-                                messages.add(new Message(
-                                        new MessageId(rs.getLong(1)),
-                                        rs.getBytes(2),
-                                        decodeHeaders(rs.getBytes(3)),
-                                        rs.getInt(4),
-                                        fromNanos(rs.getLong(5))));
-                            }
-                        }
-                    }
+                    List<Message> messages = leaseMessages(c, token, deadline, queueId, limit, barrier, max);
                     messages.sort((a, b) -> a.id().compareTo(b.id()));
                     return PullResult.of(new LeaseToken(token), deadline, messages, moved.moved());
                 },
                 waitDeadline);
+    }
+
+    private static PullResult emptyPullResult(MoveResult moved) {
+        return moved.remain() ? PullResult.emptyDeadLettersRemain(moved.moved()) : PullResult.empty(moved.moved());
+    }
+
+    private static long nextLeaseToken(Connection c) throws SQLException {
+        try (Statement s = c.createStatement();
+                ResultSet rs =
+                        s.executeQuery("UPDATE meta SET value = value + 1 WHERE key = 'lease_seq' RETURNING value")) {
+            if (!rs.next()) {
+                throw new SQLException("lease sequence row missing");
+            }
+            return rs.getLong(1);
+        }
+    }
+
+    private static List<Message> leaseMessages(
+            Connection c, long token, Instant deadline, long queueId, int limit, long barrier, int max)
+            throws SQLException {
+        List<Message> messages = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement("""
+    UPDATE message SET lease_token = ?, lease_deadline = ?, delivery_count = delivery_count + 1
+    WHERE id IN (""" + SELECT_PULLABLE + """
+    )
+    RETURNING id, payload, headers, delivery_count, published_at""")) {
+            ps.setLong(1, token);
+            ps.setLong(2, toNanos(deadline));
+            ps.setLong(3, queueId);
+            ps.setInt(4, limit);
+            ps.setLong(5, barrier);
+            ps.setInt(6, max);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    messages.add(new Message(
+                            new MessageId(rs.getLong(1)),
+                            rs.getBytes(2),
+                            decodeHeaders(rs.getBytes(3)),
+                            rs.getInt(4),
+                            fromNanos(rs.getLong(5))));
+                }
+            }
+        }
+        return messages;
+    }
+
+    private record PullCounts(long ready, long total) {}
+
+    private static PullCounts countPullable(Connection c, long queueId, int limit, long barrier, int max)
+            throws SQLException {
+        long ready = 0;
+        long total = 0;
+        try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE_STATE)) {
+            peek.setLong(1, queueId);
+            peek.setInt(2, limit);
+            peek.setLong(3, barrier);
+            peek.setInt(4, max);
+            try (ResultSet rs = peek.executeQuery()) {
+                while (rs.next()) {
+                    total++;
+                    if (rs.getInt(1) == 0) {
+                        ready++;
+                    }
+                }
+            }
+        }
+        return new PullCounts(ready, total);
     }
 
     private static void promote(Connection c, QueueCounters.Tx tx, long queueId, long nowNanos) throws SQLException {
@@ -797,6 +820,21 @@ public final class SqliteStorage implements Storage {
     @SuppressWarnings("ArrayRecordComponent") // This private record carries a database-owned payload.
     private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount, boolean leased) {}
 
+    private static long delayBarrier(Connection c, long queueId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(SELECT_DELAY_BARRIER)) {
+            ps.setLong(1, queueId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long id = rs.getLong(1);
+                    if (!rs.wasNull()) {
+                        return id - 1;
+                    }
+                }
+            }
+        }
+        return Long.MAX_VALUE;
+    }
+
     @Override
     public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
         return settle(token, items, clock, _ -> {});
@@ -831,39 +869,12 @@ public final class SqliteStorage implements Storage {
                             WHERE id = ? AND lease_token = ?
                             RETURNING queue_id""")) {
                 for (Disposition d : items) {
-                    int updated;
-                    switch (d.kind()) {
-                        case ACK -> {
-                            ackFrom.setLong(1, d.id().value());
-                            ackFrom.setLong(2, token.value());
-                            try (ResultSet rs = ackFrom.executeQuery()) {
-                                updated = rs.next() ? 1 : 0;
-                                if (updated == 1) {
-                                    tx.leased(rs.getLong(1), -1);
-                                }
-                            }
-                        }
-                        case NACK -> {
-                            Instant availableAt = d.availableAt(now);
-                            setInstantOrNull(nack, 1, availableAt);
-                            nack.setLong(2, d.id().value());
-                            nack.setLong(3, token.value());
-                            try (ResultSet rs = nack.executeQuery()) {
-                                updated = rs.next() ? 1 : 0;
-                                if (updated == 1) {
-                                    long queueId = rs.getLong(1);
-                                    tx.leased(queueId, -1);
-                                    if (availableAt == null) {
-                                        tx.ready(queueId, 1);
-                                    } else {
-                                        tx.delayed(queueId, 1);
-                                    }
-                                }
-                            }
-                        }
-                        case REJECT -> updated = reject(find, insert, ack, tx, token, d, now, destinations);
+                    int updated = switch (d.kind()) {
+                        case ACK -> settleAck(ackFrom, tx, token, d);
+                        case NACK -> settleNack(nack, tx, token, d, now);
+                        case REJECT -> reject(find, insert, ack, tx, token, d, now, destinations);
                         default -> throw new IllegalStateException("unknown disposition: " + d.kind());
-                    }
+                    };
                     results.add(new Result(d.id(), updated == 1 ? Outcome.OK : Outcome.STALE));
                 }
             }
@@ -871,6 +882,41 @@ public final class SqliteStorage implements Storage {
         });
         destinations.forEach(name -> deadLetter.accept(Optional.of(name)));
         return settled;
+    }
+
+    private static int settleAck(PreparedStatement ack, QueueCounters.Tx tx, LeaseToken token, Disposition d)
+            throws SQLException {
+        ack.setLong(1, d.id().value());
+        ack.setLong(2, token.value());
+        try (ResultSet rs = ack.executeQuery()) {
+            if (!rs.next()) {
+                return 0;
+            }
+            tx.leased(rs.getLong(1), -1);
+            return 1;
+        }
+    }
+
+    private static int settleNack(
+            PreparedStatement nack, QueueCounters.Tx tx, LeaseToken token, Disposition d, Instant now)
+            throws SQLException {
+        Instant availableAt = d.availableAt(now);
+        setInstantOrNull(nack, 1, availableAt);
+        nack.setLong(2, d.id().value());
+        nack.setLong(3, token.value());
+        try (ResultSet rs = nack.executeQuery()) {
+            if (!rs.next()) {
+                return 0;
+            }
+            long queueId = rs.getLong(1);
+            tx.leased(queueId, -1);
+            if (availableAt == null) {
+                tx.ready(queueId, 1);
+            } else {
+                tx.delayed(queueId, 1);
+            }
+            return 1;
+        }
     }
 
     private static int reject(
@@ -955,23 +1001,14 @@ public final class SqliteStorage implements Storage {
 
     @Override
     @PolicyException(
-            rule = "PMD.ExceptionAsFlowControl",
-            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Snapshot cleanup must remove its temporary file for both I/O and runtime failures.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.ExceptionAsFlowControl")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     public void snapshot(Path target) {
         try {
-            Path realTarget = realPathOf(target);
-            Path realDb = realPathOf(path);
-            if (realTarget.equals(realDb)
-                    || realTarget.equals(realDb.resolveSibling(realDb.getFileName() + "-wal"))
-                    || realTarget.equals(StorageLock.lockPathOf(realDb))) {
-                throw new IllegalArgumentException("snapshot target overlaps the live database: " + target);
-            }
-            if (Files.exists(target)) {
-                throw new FileAlreadyExistsException(target.toString());
-            }
+            validateSnapshotTarget(target);
             Path parent = target.toAbsolutePath().getParent();
             if (parent == null) {
                 throw new IllegalArgumentException("not a file path: " + target);
@@ -1003,6 +1040,19 @@ public final class SqliteStorage implements Storage {
             }
         } catch (IOException e) {
             throw new SmqStorageException("cannot snapshot to " + target, e);
+        }
+    }
+
+    private void validateSnapshotTarget(Path target) throws IOException {
+        Path realTarget = realPathOf(target);
+        Path realDb = realPathOf(path);
+        if (realTarget.equals(realDb)
+                || realTarget.equals(realDb.resolveSibling(realDb.getFileName() + "-wal"))
+                || realTarget.equals(StorageLock.lockPathOf(realDb))) {
+            throw new IllegalArgumentException("snapshot target overlaps the live database: " + target);
+        }
+        if (Files.exists(target)) {
+            throw new FileAlreadyExistsException(target.toString());
         }
     }
 

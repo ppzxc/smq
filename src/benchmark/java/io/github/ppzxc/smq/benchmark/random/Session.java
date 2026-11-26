@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.benchmark.Json;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -126,6 +127,12 @@ final class Session {
                 || (failed.verdict() == Verdict.ERROR && consecutiveErrors < MAX_CONSECUTIVE_ERRORS);
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "An executor runtime failure is recorded as a run result so the session can report it.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private RunResult runOne(RunParams params) {
         Path dir = outDir.resolve("work").resolve(Long.toString(params.seed()));
         RunResult result;

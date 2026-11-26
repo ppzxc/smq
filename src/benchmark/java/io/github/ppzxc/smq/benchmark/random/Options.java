@@ -1,6 +1,7 @@
 package io.github.ppzxc.smq.benchmark.random;
 
 import io.github.ppzxc.smq.Durability;
+import io.github.ppzxc.smq.PolicyException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -170,6 +171,12 @@ record Options(
     }
 
     /** {@code 30m}, {@code 90s}, {@code 2h}, {@code 1500ms}, {@code PT30M}. 단위가 없으면 초. */
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Invalid durations, overflow, and empty input all become the same option error with their cause.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static Duration parseDuration(String v) {
         String s = v.trim();
         try {

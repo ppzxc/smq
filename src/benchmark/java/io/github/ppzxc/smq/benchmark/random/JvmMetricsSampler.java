@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.benchmark.Json;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -208,6 +209,12 @@ final class JvmMetricsSampler implements AutoCloseable {
         }
     }
 
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "Platform-specific management beans are optional; unsupported metrics must not fail the workload.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void sample() {
         long now = System.currentTimeMillis();
         MemoryUsage heap = memory.getHeapMemoryUsage();
@@ -286,6 +293,13 @@ final class JvmMetricsSampler implements AutoCloseable {
     }
 
     /** 이 프로세스의 상주 메모리(바이트). Linux의 {@code /proc/self/status}에서만 읽고, 못 읽으면 -1이다. */
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason =
+                    "Unavailable or malformed platform metrics are reported as unknown instead of failing the benchmark.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     static long readRssBytes() {
         try {
             return parseVmRssBytes(Files.readAllLines(Path.of("/proc/self/status")));

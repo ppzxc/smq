@@ -128,7 +128,7 @@ class JavaQualityPlugin : Plugin<Project> {
                 classpath = project.files(sourceSet.output, sourceSet.compileClasspath)
                 ruleSetFiles = project.files(shouldRules)
                 ruleSets = emptyList()
-                setIgnoreFailures(sourceSet.name != "main")
+                setIgnoreFailures(sourceSet.name == "benchmark")
                 setConsoleOutput(true)
                 reports {
                     xml.required.set(true)

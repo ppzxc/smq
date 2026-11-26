@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <ruleset xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="smq PMD SHOULD rules" xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
-    <description>Strict Java 25 / PMD 7.29.0 SHOULD rules. Main violations fail the build; test and benchmark violations are advisory.</description>
+    <description>Strict Java 25 / PMD 7.29.0 SHOULD rules. Main and test violations fail the build; benchmark violations are advisory.</description>
     <!-- Run with minimum priority 5. Custom policy rules and other analyzers are configured separately. -->
     <!-- Record compact constructors may require defensive-copy parameter reassignment. -->
     <!-- bestpractices -->

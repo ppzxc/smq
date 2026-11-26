@@ -96,4 +96,8 @@
     <!-- security -->
     <rule ref="category/java/security.xml/HardCodedCryptoKey" />
     <rule ref="category/java/security.xml/InsecureCryptoIv" />
+    <rule name="PolicyException" language="java" message="Invalid policy exception" class="io.github.ppzxc.smq.pmd.PolicyExceptionRule">
+        <description>Validate PMD suppression approvals.</description>
+        <priority>1</priority>
+    </rule>
 </ruleset>

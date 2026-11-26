@@ -106,7 +106,7 @@ public final class BacklogBench {
                     }
                     if (now - lastReport >= SECOND) {
                         System.out.printf(
-                                Locale.ROOT,
+                                Locale.getDefault(Locale.Category.FORMAT),
                                 "t=%.1fs in=%d ack=%d depth=%d targetIn=%.0f%n",
                                 (now - started) / (double) SECOND,
                                 published,
@@ -130,7 +130,12 @@ public final class BacklogBench {
                 if (acked.get() != published || counts.ready() != 0 || counts.leased() != 0 || counts.delayed() != 0) {
                     throw new IllegalStateException("Final counts do not match: " + counts);
                 }
-                System.out.printf(Locale.ROOT, "PASS peak=%d published=%d acked=%d%n", peak, published, acked.get());
+                System.out.printf(
+                        Locale.getDefault(Locale.Category.FORMAT),
+                        "PASS peak=%d published=%d acked=%d%n",
+                        peak,
+                        published,
+                        acked.get());
             } finally {
                 consumer.cancel(true);
             }

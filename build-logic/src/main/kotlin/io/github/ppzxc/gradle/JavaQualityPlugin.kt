@@ -24,7 +24,11 @@ class JavaQualityPlugin : Plugin<Project> {
         project.pluginManager.apply("pmd")
 
         project.tasks.withType(Pmd::class.java).configureEach {
-            exclude("**/module-info.java")
+            if (!name.endsWith("Comments")) exclude("**/module-info.java")
+            if (name in setOf("pmdMain", "pmdTest", "pmdBenchmark")) {
+                inputs.property("policyReviewDate", java.time.LocalDate.now().toString())
+                incrementalAnalysis.set(false)
+            }
         }
 
         configurePmd(project)

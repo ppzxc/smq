@@ -27,6 +27,46 @@ class CommentPolicyRuleTest {
         }
     }
 
+    @Test void policyExceptionsRejectMissingAndExpiredApprovals() {
+        var rule = new PolicyExceptionRule();
+        rule.setLanguage(net.sourceforge.pmd.lang.java.JavaLanguageModule.getInstance());
+        rule.setName("PolicyException");
+        rule.setMessage("Invalid exception");
+        try (var pmd = PmdAnalysis.create(new PMDConfiguration())) {
+            pmd.addRuleSet(RuleSet.forSingleRule(rule));
+            pmd.files().addSourceFile(FileId.fromPathLikeString("Example.java"), "class Example { @SuppressWarnings(\"PMD.SystemPrintln\") void run() {} @PolicyException(rule=\"PMD.SystemPrintln\", reason=\"CLI output\", approvedBy=\"owner\", reviewBy=\"2000-01-01\") void old() {} }");
+            assertEquals(2, pmd.performAnalysisAndCollectReport().getViolations().size());
+        }
+    }
+
+    @Test void policyExceptionRejectsBlankApprover() {
+        var rule = new PolicyExceptionRule();
+        rule.setLanguage(net.sourceforge.pmd.lang.java.JavaLanguageModule.getInstance());
+        rule.setName("PolicyException");
+        rule.setMessage("Invalid exception");
+        try (var pmd = PmdAnalysis.create(new PMDConfiguration())) {
+            pmd.addRuleSet(RuleSet.forSingleRule(rule));
+            pmd.files().addSourceFile(FileId.fromPathLikeString("Example.java"),
+                    "class Example { @PolicyException(rule=\"PMD.SystemPrintln\", reason=\"CLI output\", approvedBy=\"\", reviewBy=\"2099-01-01\") @SuppressWarnings(\"PMD.SystemPrintln\") void run() {} }");
+            assertEquals(1, pmd.performAnalysisAndCollectReport().getViolations().size());
+        }
+    }
+
+    @Test void policyExceptionAllowsMatchingUnexpiredApproval() {
+        var rule = new PolicyExceptionRule();
+        rule.setLanguage(net.sourceforge.pmd.lang.java.JavaLanguageModule.getInstance());
+        rule.setName("PolicyException");
+        rule.setMessage("Invalid exception");
+        try (var pmd = PmdAnalysis.create(new PMDConfiguration())) {
+            pmd.addRuleSet(RuleSet.forSingleRule(rule));
+            pmd.files().addSourceFile(FileId.fromPathLikeString("Example.java"),
+                    "class Example { @PolicyException(rule=\"PMD.SystemPrintln\", reason=\"CLI output\", approvedBy=\"owner\", reviewBy=\"2099-01-01\") @SuppressWarnings(\"PMD.SystemPrintln\") void run() {} }");
+            var report = pmd.performAnalysisAndCollectReport();
+            assertEquals(List.of(), report.getProcessingErrors());
+            assertEquals(0, report.getViolations().size());
+        }
+    }
+
     @Test void onlyPublicApiAndLicenseAreAllowed() {
         String source = """
             /* Copyright Example */
@@ -47,6 +87,13 @@ class CommentPolicyRuleTest {
         assertEquals(1, scan("Example.java", "/* TODO: fix license handling */\npublic class Example {}").size());
     }
 
+    @Test void rejectsTodoInPublicDocsAndOrdinaryLicenseMention() {
+        assertEquals(1, scan("Example.java", "/** TODO: remove workaround */ public class Example {} ").size());
+        assertEquals(1, scan("Example.java", "/* Update license cache before startup. */ public class Example {} ").size());
+        assertEquals(1, scan("Example.java", "/* Update copyright display. */ public class Example {} ").size());
+        assertEquals(0, scan("Example.java", "/* Licensed under the Apache License, Version 2.0. */ public class Example {} ").size());
+    }
+
     @Test void rejectsImplementationAndSuppressionComments() {
         String source = """
             public class Example {
@@ -63,6 +110,10 @@ class CommentPolicyRuleTest {
         assertEquals(1, scan("Example.java", "class Example { @SuppressWarnings(\"NonApiType\") // TODO fix\n void x() {} }").size());
         assertEquals(1, scan("Example.java", "class Example { @SuppressWarnings(\"NonApiType\") // TreeMap keeps messages in FIFO order for pulls.\n void x() {} }").size());
         assertEquals(0, scan("src/main/java/io/github/ppzxc/smq/storage/memory/MemoryStorage.java", "class Example { @SuppressWarnings(\"NonApiType\") // TreeMap keeps messages in FIFO order for pulls.\n void x() {} }").size());
+    }
+
+    @Test void parsesRealModuleDescriptor() {
+        assertEquals(1, scan("module-info.java", "// TODO fix\nmodule example { requires static            org.jspecify; }").size());
     }
 
     @Test void packageDocsAndGeneratedFiles() {

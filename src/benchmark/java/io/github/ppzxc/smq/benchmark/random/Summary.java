@@ -34,10 +34,17 @@ final class Summary {
     private static String table(String title, List<RunResult> rows) {
         StringBuilder sb = new StringBuilder(title).append('\n');
         sb.append(String.format(
-                Locale.getDefault(), "  %-20s %10s %8s %9s %9s  %s%n", "seed", "msg/s", "MB/s", "p50", "p99", "판정"));
+                Locale.getDefault(Locale.Category.FORMAT),
+                "  %-20s %10s %8s %9s %9s  %s%n",
+                "seed",
+                "msg/s",
+                "MB/s",
+                "p50",
+                "p99",
+                "판정"));
         for (RunResult r : rows) {
             sb.append(String.format(
-                    Locale.getDefault(),
+                    Locale.getDefault(Locale.Category.FORMAT),
                     "  %-20d %10.0f %8.2f %9s %9s  %s%n",
                     r.params().seed(),
                     r.msgPerSec(),
@@ -51,6 +58,6 @@ final class Summary {
 
     private static String ms(RunResult r, Function<RunResult, Double> f) {
         Double v = f.apply(r);
-        return v == null ? "-" : String.format(Locale.getDefault(), "%.0fms", v);
+        return v == null ? "-" : String.format(Locale.getDefault(Locale.Category.FORMAT), "%.0fms", v);
     }
 }

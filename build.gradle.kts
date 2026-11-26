@@ -243,16 +243,45 @@ val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
 tasks.check { dependsOn(verifyJarExcludesBenchmark, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
 
 val commentRules = layout.projectDirectory.file("config/pmd/comments.xml")
+// PMD 7.29 cannot parse both requires modifiers. Keep the line length for comment locations.
+val moduleCommentSource = tasks.register("prepareModuleCommentSource") {
+    val module = layout.projectDirectory.file("src/main/java/module-info.java")
+    val output = layout.buildDirectory.file("pmd-module/module-info.java")
+    inputs.file(module)
+    outputs.file(output)
+    doLast {
+        val target = output.get().asFile
+        target.parentFile.mkdirs()
+        target.writeText(module.asFile.readText().replace(Regex("(?m)(\\brequires\\s+static\\s+)transitive\\b")) { match ->
+            match.groupValues[1] + "          "
+        })
+    }
+}
 listOf("main", "test").forEach { sourceName ->
     val sourceSet = sourceSets[sourceName]
     val task = tasks.register<org.gradle.api.plugins.quality.Pmd>("pmd${sourceName.replaceFirstChar(Char::uppercase)}Comments") {
         group = "verification"
-        source(sourceSet.allJava)
+        if (sourceName == "main") {
+            source(sourceSet.allJava.matching { exclude("**/module-info.java") })
+            source(moduleCommentSource)
+        } else {
+            source(sourceSet.allJava)
+        }
         exclude("**/generated/**", "**/generated-sources/**")
         classpath = files(sourceSet.output, sourceSet.compileClasspath)
         ruleSetFiles = files(commentRules)
         ruleSets = emptyList()
         ignoreFailures = false
+        reports.xml.required.set(true)
+        doLast {
+            val report = reports.xml.outputLocation.get().asFile
+            val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            factory.isNamespaceAware = true
+            val document = factory.newDocumentBuilder().parse(report)
+            check(document.getElementsByTagNameNS("*", "error").length == 0) {
+                "PMD could not parse a source file; see $report"
+            }
+        }
     }
     tasks.check { dependsOn(task) }
 }

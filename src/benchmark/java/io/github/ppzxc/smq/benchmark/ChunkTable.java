@@ -26,16 +26,23 @@ final class ChunkTable {
 
     static String render(Map<String, Double> results) {
         StringBuilder sb = new StringBuilder("청크 1 대 묶음 (빈 큐, msg/s)\n");
-        sb.append(String.format(Locale.ROOT, "%-18s %-6s %10s %10s %8s%n", "조건", "크기", "청크 1", "묶음", "배수"));
+        sb.append(String.format(
+                Locale.getDefault(Locale.Category.FORMAT),
+                "%-18s %-6s %10s %10s %8s%n",
+                "조건",
+                "크기",
+                "청크 1",
+                "묶음",
+                "배수"));
         for (Row row : ROWS) {
             for (Pair p : PAIRS) {
                 Double single = results.get(Keys.throughput(key(row, p.single())));
                 Double batch = results.get(Keys.throughput(key(row, p.batch())));
                 String ratio = single == null || batch == null || single <= 0
                         ? "-"
-                        : String.format(Locale.ROOT, "%.1fx", batch / single);
+                        : String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1fx", batch / single);
                 sb.append(String.format(
-                        Locale.ROOT,
+                        Locale.getDefault(Locale.Category.FORMAT),
                         "%-18s %-6s %10s %10s %8s%n",
                         row.label(),
                         p.size(),
@@ -52,6 +59,6 @@ final class ChunkTable {
     }
 
     private static String fmt(Double v) {
-        return v == null ? "-" : String.format(Locale.ROOT, "%,.0f", v);
+        return v == null ? "-" : String.format(Locale.getDefault(Locale.Category.FORMAT), "%,.0f", v);
     }
 }

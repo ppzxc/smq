@@ -79,7 +79,7 @@ final class Session {
             long seed = seeds.next();
             RunParams params = RunParams.fromSeed(seed, limits);
             n++;
-            out.printf(Locale.getDefault(), "[%d] seed=%d %s 실행%n", n, seed, params.durability());
+            out.printf(Locale.getDefault(Locale.Category.FORMAT), "[%d] seed=%d %s 실행%n", n, seed, params.durability());
             RunResult result = runOne(params);
             results.add(result);
             if (!result.passed()) {
@@ -93,7 +93,7 @@ final class Session {
             }
             consecutiveErrors = 0;
             out.printf(
-                    Locale.getDefault(),
+                    Locale.getDefault(Locale.Category.FORMAT),
                     "    PASS  %.0f msg/s, %.2f MB/s, p50 %s, p99 %s%n",
                     result.msgPerSec(),
                     result.mbPerSec(),
@@ -104,7 +104,11 @@ final class Session {
             }
         }
         out.print(Summary.render(results, SUMMARY_ROWS));
-        out.printf(Locale.getDefault(), "합계: %d회 실행, %s%n", results.size(), exit == EXIT_OK ? "위반 없음" : "실패");
+        out.printf(
+                Locale.getDefault(Locale.Category.FORMAT),
+                "합계: %d회 실행, %s%n",
+                results.size(),
+                exit == EXIT_OK ? "위반 없음" : "실패");
         return exit;
     }
 
@@ -267,7 +271,7 @@ final class Session {
 
     private static String soakLine(SoakJudge.Report r) {
         return String.format(
-                Locale.getDefault(),
+                Locale.getDefault(Locale.Category.FORMAT),
                 "목표 %d msg/s, 달성률 %.0f%%, ACK %.0f msg/s, 백로그 기울기 %.1f개/초, 최대 깊이 %d%s",
                 r.targetRate(),
                 r.achievedRatio() * 100,
@@ -278,7 +282,7 @@ final class Session {
     }
 
     private static String ms(Double d) {
-        return d == null ? "-" : String.format(Locale.getDefault(), "%.0fms", d);
+        return d == null ? "-" : String.format(Locale.getDefault(Locale.Category.FORMAT), "%.0fms", d);
     }
 
     /** SQLite 파일(본체, WAL, 공유 메모리)과 발행·전달 기록만 지운다. 긴 실행에서는 둘 다 크다. */

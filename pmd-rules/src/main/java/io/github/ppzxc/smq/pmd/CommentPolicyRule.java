@@ -42,9 +42,9 @@ public class CommentPolicyRule extends AbstractJavaRule {
             boolean license = !comment.isSingleLine() && !licenseSeen
                     && comment.getToken().getRegion().getStartOffset() < firstDeclaration
                     && !lower.contains("todo") && !lower.contains("fixme")
-                    && (lower.contains("copyright") || lower.contains("license") || lower.contains("spdx") || lower.contains("all rights reserved"));
+                    && lower.matches("(?s)/\\*+\\s*(?:\\*\\s*)?(?:copyright\\b|spdx-license-identifier:|all rights reserved\\b|licensed under\\b).*");
             if (license) { licenseSeen = true; continue; }
-            if (comment instanceof JavadocComment doc
+            if (!lower.contains("todo") && !lower.contains("fixme") && comment instanceof JavadocComment doc
                     && ((doc.getOwner() instanceof ASTPackageDeclaration)
                             || publicApi(doc))) continue;
             int line = comment.getReportLocation().getStartLine();

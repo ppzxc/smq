@@ -59,9 +59,17 @@ public final class BenchMain {
         for (int round = 0; round < rounds.size(); round++) {
             for (RunSpec spec : rounds.get(round)) {
                 n++;
-                System.out.printf(Locale.ROOT, "[%d/%d] 바퀴 %d/%d %s%n", n, total, round + 1, rounds.size(), spec.key());
+                System.out.printf(
+                        Locale.getDefault(Locale.Category.FORMAT),
+                        "[%d/%d] 바퀴 %d/%d %s%n",
+                        n,
+                        total,
+                        round + 1,
+                        rounds.size(),
+                        spec.key());
                 Map<String, Double> m = runner.run(spec);
-                m.forEach((k, v) -> System.out.printf(Locale.ROOT, "        %s = %.2f%n", k, v));
+                m.forEach((k, v) ->
+                        System.out.printf(Locale.getDefault(Locale.Category.FORMAT), "        %s = %.2f%n", k, v));
                 measured.add(m);
             }
         }

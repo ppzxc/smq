@@ -16,7 +16,9 @@ import io.github.ppzxc.smq.benchmark.random.Delivery.Action;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Pull;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Settle;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -578,8 +580,10 @@ final class RandomRun {
         }
         try {
             walMax = Math.max(walMax, Files.size(wal));
-        } catch (java.io.IOException e) {
-            // 아직 없거나 닫히며 지워졌다.
+        } catch (NoSuchFileException e) {
+            return;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

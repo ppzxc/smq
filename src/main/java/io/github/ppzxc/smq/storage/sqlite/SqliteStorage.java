@@ -84,7 +84,7 @@ public final class SqliteStorage implements Storage {
                 OR EXISTS(SELECT 1 FROM message WHERE queue_id = %1$s AND lease_deadline <= ?)
                 OR EXISTS(SELECT 1 FROM message WHERE queue_id = %1$s AND available_at <= ?),
                 EXISTS(SELECT 1 FROM queue WHERE name = ?)
-            """.formatted(QUEUE_ID_BY_NAME, STORED_READY);
+            """.replace("%1$s", QUEUE_ID_BY_NAME).replace("%2$s", STORED_READY);
 
     private static final String STORED_READY_FROM_WHERE = " FROM message WHERE queue_id = ? AND " + STORED_READY;
     private static final String PULLABLE_FROM_WHERE =
@@ -972,12 +972,17 @@ public final class SqliteStorage implements Storage {
             if (Files.exists(target)) {
                 throw new FileAlreadyExistsException(target.toString());
             }
-            Path temp = Files.createTempFile(target.toAbsolutePath().getParent(), "smq-snapshot-", ".tmp");
+            Path parent = target.toAbsolutePath().getParent();
+            if (parent == null) {
+                throw new IllegalArgumentException("not a file path: " + target);
+            }
+            Path temp = Files.createTempFile(parent, "smq-snapshot-", ".tmp");
             try {
                 executor.executeOutsideTransaction(() -> {
                     StatementCachingConnection.releaseStatements(executor.connection());
-                    try (Statement s = executor.connection().createStatement()) {
-                        s.execute("VACUUM INTO '" + temp.toString().replace("'", "''") + "'");
+                    try (PreparedStatement s = executor.connection().prepareStatement("VACUUM INTO ?")) {
+                        s.setString(1, temp.toString());
+                        s.execute();
                         return Boolean.TRUE;
                     }
                 });

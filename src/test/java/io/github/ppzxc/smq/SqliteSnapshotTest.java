@@ -65,6 +65,23 @@ class SqliteSnapshotTest {
     }
 
     @Test
+    void 작은따옴표가_있는_경로에_스냅샷을_만들고_기존_파일을_보존한다() throws Exception {
+        Path quotedDir = Files.createDirectory(dir.resolve("consumer's snapshots"));
+        Path target = quotedDir.resolve("snapshot.db");
+        try (Smq smq = open()) {
+            smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
+            smq.snapshot(target);
+            byte[] snapshot = Files.readAllBytes(target);
+
+            assertThrows(SmqStorageException.class, () -> smq.snapshot(target));
+            assertArrayEquals(snapshot, Files.readAllBytes(target));
+        }
+        try (Connection c = external(target)) {
+            assertEquals(List.of("a"), payloads(c));
+        }
+    }
+
+    @Test
     void 스냅샷은_외부_SQLite로_열어_원본과_같은_메시지를_보여_준다() throws Exception {
         Path target = dir.resolve("snap.db");
         try (Smq smq = open()) {

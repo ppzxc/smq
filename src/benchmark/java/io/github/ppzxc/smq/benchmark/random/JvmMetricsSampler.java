@@ -123,6 +123,12 @@ final class JvmMetricsSampler implements AutoCloseable {
      * 메트릭 파일 하나에서 요약을 다시 만든다. 파일이 없으면
      * 표본 0개의 요약이다. GC 횟수와 시간은 마지막 표본의 누적값이다. CPU 필드가 없으면 -1이다.
      */
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "The summary aggregates independent optional fields while reading each metrics sample once.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     static Summary summarize(Path file) {
         long peakHeap = 0;
         long peakNonHeap = 0;

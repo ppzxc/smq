@@ -67,6 +67,12 @@ final class Session {
      * @param budgetMillis 새 실행을 시작할 수 있는 시간. 지나면 더 시작하지 않는다(이미 도는 실행은 끝낸다)
      * @return 모두 통과하면 {@link #EXIT_OK}, 실패가 있으면 {@link #EXIT_FAILED}. 고정 속도 모드에서는 백로그 증가({@link Verdict#BACKLOG_GROWING}), 달성률 미달({@link Verdict#UNDER_RATE}), 예외(연속 {@link #MAX_CONSECUTIVE_ERRORS}번 미만)를 기록만 하고 계속 돌고, 다른 실패는 거기서 멈춘다
      */
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The session loop keeps budget, failure continuation, and reporting decisions in execution order.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     int run(Iterator<Long> seeds, long budgetMillis) {
         long start = System.nanoTime();
         List<RunResult> results = new ArrayList<>();
@@ -132,7 +138,12 @@ final class Session {
             reason = "An executor runtime failure is recorded as a run result so the session can report it.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Run cleanup depends on pass, soak mode, and verdict to retain the right evidence.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CyclomaticComplexity"})
     private RunResult runOne(RunParams params) {
         Path dir = outDir.resolve("work").resolve(Long.toString(params.seed()));
         RunResult result;

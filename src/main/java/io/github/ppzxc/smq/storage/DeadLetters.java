@@ -38,7 +38,11 @@ public final class DeadLetters {
     }
 
     /** 옮겨지기 전 원래 메시지의 위치와 상태. */
-    public record Origin(String queue, MessageId id, Map<String, String> headers, int deliveryCount) {}
+    public record Origin(String queue, MessageId id, Map<String, String> headers, int deliveryCount) {
+        public Origin {
+            headers = Map.copyOf(headers);
+        }
+    }
 
     private DeadLetters() {}
 

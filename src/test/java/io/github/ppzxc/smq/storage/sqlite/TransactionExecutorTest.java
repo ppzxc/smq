@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage.sqlite;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.SmqStorageException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
@@ -468,6 +469,12 @@ class TransactionExecutorTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The proxy delegates to memory, whose try-with-resources owns and closes the connection.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void 파일_없는_데이터베이스에서는_WAL_위치를_한_번만_확인한다() throws Exception {
         int every = TransactionExecutor.CHECKPOINT_CHECK_EVERY_COMMITS;
         try (Connection memory = java.sql.DriverManager.getConnection("jdbc:sqlite::memory:")) {

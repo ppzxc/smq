@@ -147,8 +147,10 @@ class SqliteSingleProcessLockTest {
                         db.toString())
                 .redirectError(ProcessBuilder.Redirect.INHERIT)
                 .start();
-        BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
-        assertEquals("READY", in.readLine());
+        try (BufferedReader in =
+                new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+            assertEquals("READY", in.readLine());
+        }
         return p;
     }
 }

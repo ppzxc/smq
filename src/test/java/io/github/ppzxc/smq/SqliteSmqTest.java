@@ -60,12 +60,15 @@ class SqliteSmqTest extends SmqConformanceTest {
 
     @Test
     void 같은_SQLite_파일을_다시_열면_이전_세션의_청크를_거부한다() throws Exception {
-        Smq first = builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open();
-        Queue original = first.declare("q", QueueOptions.defaults());
-        original.publish(msg("a"));
-        Chunk oldChunk = original.pull(1, Duration.ZERO);
-        Settlement oldSettlement = oldChunk.ackAll();
-        first.close();
+        Settlement oldSettlement;
+        Chunk oldChunk;
+        try (Smq first =
+                builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open()) {
+            Queue original = first.declare("q", QueueOptions.defaults());
+            original.publish(msg("a"));
+            oldChunk = original.pull(1, Duration.ZERO);
+            oldSettlement = oldChunk.ackAll();
+        }
 
         try (Smq reopened =
                 builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open()) {
@@ -82,7 +85,12 @@ class SqliteSmqTest extends SmqConformanceTest {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.AvoidThrowingRawExceptionTypes"})
     void lock을_기다리는_꺼내기를_interrupt하면_메시지는_준비_상태로_남는다() throws Exception {
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -290,6 +298,12 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The fixture registers this Smq in direct and closes it after each test.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     void lock_대기_하한을_없애_빈_청크가_실제로_나오는_조건에서도_동시_꺼내기_계약을_지킨다() throws Exception {
         Smq smq = builder()
                 .clock(clock)

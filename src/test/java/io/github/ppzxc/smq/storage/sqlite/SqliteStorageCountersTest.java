@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.storage.sqlite;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.QueueNotFoundException;
 import io.github.ppzxc.smq.QueueOptions;
@@ -53,6 +54,17 @@ class SqliteStorageCountersTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The seeded operation sequence checks stored counts after every operation and after reopening.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "The seeded operation sequence covers distinct queue operations and verifies each step.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     void 무작위_연산_뒤에도_메모리_개수가_저장된_상태_집계와_같고_다시_열어도_같다() {
         Path db = dir.resolve("smq.db");
         Random random = new Random(20261106);

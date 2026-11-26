@@ -18,6 +18,12 @@ class BuilderSmokeTest {
     Path dir;
 
     @Test
+    @PolicyException(
+            rule = "PMD.UnitTestShouldIncludeAssert",
+            reason = "The shared roundTrip helper asserts the complete publish and pull contract.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.UnitTestShouldIncludeAssert")
     void 메모리_builder로_한_바퀴_돌고_시각과_리스_기간이_반영된다() throws Exception {
         MutableClock clock = new MutableClock(T0);
         try (Smq smq = Smq.inMemory().clock(clock).leaseDuration(LEASE).open()) {
@@ -26,6 +32,12 @@ class BuilderSmokeTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.UnitTestShouldIncludeAssert",
+            reason = "The shared roundTrip helper asserts the complete publish and pull contract.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.UnitTestShouldIncludeAssert")
     void SQLite_builder로_한_바퀴_돌고_시각과_리스_기간이_반영된다() throws Exception {
         MutableClock clock = new MutableClock(T0);
         try (Smq smq = Smq.sqlite(dir.resolve("smq.db"))

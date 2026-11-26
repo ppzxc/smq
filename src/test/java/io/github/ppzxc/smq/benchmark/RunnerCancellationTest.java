@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -14,6 +15,12 @@ import org.junit.jupiter.api.Test;
 class RunnerCancellationTest {
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidCatchingGenericException",
+            reason = "The worker forwards every failure, including assertion errors, to the test thread.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     void 취소가_호출자에게_전달되기_전에_작업_디렉터리를_정리한다() throws Exception {
         String previousModulePath = System.getProperty("jdk.module.path");
         System.setProperty("jdk.module.path", System.getProperty("java.class.path"));

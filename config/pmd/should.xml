@@ -12,6 +12,10 @@
         </rule>
     <rule ref="category/java/bestpractices.xml/UnitTestShouldIncludeAssert" />
     <!-- Include MUST rules with suppressions so this rule can validate them. -->
+    <rule ref="category/java/bestpractices.xml/SystemPrintln" />
+    <rule ref="category/java/bestpractices.xml/UnusedLocalVariable" />
+    <rule ref="category/java/design.xml/AvoidThrowingRawExceptionTypes" />
+    <rule ref="category/java/errorprone.xml/DoNotCallGarbageCollectionExplicitly" />
     <rule ref="category/java/bestpractices.xml/UseTryWithResources" />
     <rule ref="category/java/bestpractices.xml/PreserveStackTrace" />
     <rule ref="category/java/bestpractices.xml/ExhaustiveSwitchHasDefault" />

@@ -1,0 +1,7 @@
+# Exceptions must include an expiry and a statement with both the rationale and approver.
+# Example:
+# vulnerabilities:
+#   - id: CVE-YYYY-NNNN
+#     expired_at: YYYY-MM-DD
+#     statement: "Rationale: <why accepted>; Approved by: @<maintainer>"
+vulnerabilities: []

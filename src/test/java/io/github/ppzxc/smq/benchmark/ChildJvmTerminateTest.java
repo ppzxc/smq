@@ -51,8 +51,9 @@ class ChildJvmTerminateTest {
         long pid;
         try {
             long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-            while (!Files.exists(pidFile) && System.nanoTime() < deadline) Thread.sleep(10);
-            assertTrue(Files.exists(pidFile), "child should publish its pid");
+            while ((!Files.exists(pidFile) || Files.size(pidFile) == 0) && System.nanoTime() < deadline)
+                Thread.sleep(10);
+            assertTrue(Files.exists(pidFile) && Files.size(pidFile) > 0, "child should publish its pid");
             pid = Long.parseLong(Files.readString(pidFile));
 
             AtomicReference<Throwable> result = new AtomicReference<>();
@@ -75,7 +76,7 @@ class ChildJvmTerminateTest {
             assertInstanceOf(InterruptedException.class, result.get());
             assertFalse(aliveWhenInterrupted.get(), "child should be gone when interruption reaches the caller");
         } finally {
-            if (Files.exists(pidFile)) {
+            if (Files.exists(pidFile) && Files.size(pidFile) > 0) {
                 ProcessHandle.of(Long.parseLong(Files.readString(pidFile))).ifPresent(process -> {
                     process.destroyForcibly();
                     process.onExit().join();
@@ -112,8 +113,9 @@ class ChildJvmTerminateTest {
         ChildJvm child = ChildJvm.start(WaitingChild.class.getName(), List.of(pidFile.toString()), output, "timeout");
         try {
             long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-            while (!Files.exists(pidFile) && System.nanoTime() < deadline) Thread.sleep(10);
-            assertTrue(Files.exists(pidFile), "child should publish its pid");
+            while ((!Files.exists(pidFile) || Files.size(pidFile) == 0) && System.nanoTime() < deadline)
+                Thread.sleep(10);
+            assertTrue(Files.exists(pidFile) && Files.size(pidFile) > 0, "child should publish its pid");
             long pid = Long.parseLong(Files.readString(pidFile));
 
             IllegalStateException error = assertThrows(IllegalStateException.class, () -> child.await(1));
@@ -121,7 +123,7 @@ class ChildJvmTerminateTest {
             assertTrue(error.getMessage().contains("제한 시간"));
             assertFalse(ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
         } finally {
-            if (Files.exists(pidFile)) {
+            if (Files.exists(pidFile) && Files.size(pidFile) > 0) {
                 ProcessHandle.of(Long.parseLong(Files.readString(pidFile))).ifPresent(process -> {
                     process.destroyForcibly();
                     process.onExit().join();
@@ -138,8 +140,10 @@ class ChildJvmTerminateTest {
         private WaitingChild() {}
 
         public static void main(String[] args) throws Exception {
-            Files.writeString(
-                    Path.of(args[0]), Long.toString(ProcessHandle.current().pid()));
+            Path pidFile = Path.of(args[0]);
+            Files.createFile(pidFile);
+            Thread.sleep(50);
+            Files.writeString(pidFile, Long.toString(ProcessHandle.current().pid()));
             while (true) Thread.sleep(1_000);
         }
     }

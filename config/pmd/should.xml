@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<ruleset name="smq PMD SHOULD rules"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>OBJ-008 SHOULD: report arrays stored or returned without defensive copies.</description>
+    <rule ref="category/java/bestpractices.xml/ArrayIsStoredDirectly">
+        <priority>3</priority>
+    </rule>
+    <rule ref="category/java/bestpractices.xml/MethodReturnsInternalArray">
+        <priority>3</priority>
+    </rule>
+</ruleset>

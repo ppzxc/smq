@@ -403,6 +403,39 @@ class SqliteStorageTest {
     }
 
     @Test
+    void cachedStatementIsReusedAndClosedWithStorage() throws Exception {
+        List<PreparedStatement> prepared = new ArrayList<>();
+        try (SqliteStorage storage = SqliteStorage.open(
+                dir.resolve("statement-cache.db"),
+                Durability.PROCESS_CRASH,
+                Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                (path, durability) -> {
+                    Connection real = SqliteStorage.connect(path, durability);
+                    return (Connection) Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (p, m, a) -> {
+                                try {
+                                    Object result = m.invoke(real, a);
+                                    if (m.getName().equals("prepareStatement")
+                                            && a != null
+                                            && "SELECT id FROM queue WHERE name = ?".equals(a[0])) {
+                                        prepared.add((PreparedStatement) result);
+                                    }
+                                    return result;
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                            });
+                })) {
+            storage.declare("q", QueueOptions.defaults());
+            storage.counts("q");
+            storage.counts("q");
+            assertEquals(1, prepared.size());
+            assertFalse(prepared.get(0).isClosed());
+        }
+        assertTrue(prepared.get(0).isClosed());
+    }
+
+    @Test
     void pullTransfersLargePromotionCountWithoutOverflow() {
         long promoted = (long) Integer.MAX_VALUE + 1;
         try (SqliteStorage s = SqliteStorage.open(

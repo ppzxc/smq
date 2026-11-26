@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -73,6 +74,13 @@ final class StatementCachingConnection {
                 (proxy, method, args) -> method.getName().equals("close") ? null : invoke(statement, method, args));
     }
 
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason =
+                    "The loop closes each statement retained by the connection cache; failures do not stop other closes.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CloseResource")
     private static void closeAll(Map<String, PreparedStatement> cache) {
         for (PreparedStatement statement : cache.values()) {
             try {

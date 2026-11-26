@@ -138,6 +138,10 @@ final class SqliteSchema {
             s.execute("""
                     CREATE INDEX IF NOT EXISTS message_delayed_id ON message(queue_id, id)
                       WHERE available_at IS NOT NULL""");
+            s.execute("""
+                    CREATE INDEX IF NOT EXISTS message_delayed_exhausted
+                      ON message(queue_id, delivery_count, available_at)
+                      WHERE available_at IS NOT NULL AND delivery_count > 0""");
         }
     }
 

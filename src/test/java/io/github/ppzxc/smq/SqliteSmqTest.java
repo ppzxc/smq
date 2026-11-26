@@ -50,6 +50,21 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    void 이름이_memory인_경로도_파일에_저장한다() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeFalse(
+                System.getProperty("os.name").startsWith("Windows"));
+        var path = dir.resolve(":memory:");
+        try (Smq smq = Smq.sqlite(path).durability(durability).open()) {
+            smq.declare("q", QueueOptions.defaults()).publish(msg("saved"));
+        }
+        try (Smq smq = Smq.sqlite(path).durability(durability).open()) {
+            assertEquals(
+                    "saved",
+                    text(smq.queue("q").pull(1, Duration.ZERO).messages().getFirst()));
+        }
+    }
+
+    @Test
     void 같은_SQLite_파일을_다시_열면_이전_세션의_청크를_거부한다() throws Exception {
         Smq first = builder().clock(clock).leaseDuration(Duration.ofSeconds(10)).open();
         Queue original = first.declare("q", QueueOptions.defaults());

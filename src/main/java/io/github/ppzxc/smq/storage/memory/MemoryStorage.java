@@ -281,9 +281,13 @@ public final class MemoryStorage implements Storage {
         try {
             Instant now = clock.instant();
             requireDeadLetterQueues(token, items);
-            List<Result> results = new ArrayList<>(items.size());
+            List<@Nullable Instant> availableAt = new ArrayList<>(items.size());
             for (Disposition d : items) {
-                results.add(new Result(d.id(), settleOne(token, d, now)));
+                availableAt.add(d.kind() == Disposition.Kind.NACK ? d.availableAt(now) : null);
+            }
+            List<Result> results = new ArrayList<>(items.size());
+            for (int i = 0; i < items.size(); i++) {
+                results.add(new Result(items.get(i).id(), settleOne(token, items.get(i), now, availableAt.get(i))));
             }
             return results;
         } finally {
@@ -306,7 +310,7 @@ public final class MemoryStorage implements Storage {
         }
     }
 
-    private Outcome settleOne(LeaseToken token, Disposition d, Instant now) {
+    private Outcome settleOne(LeaseToken token, Disposition d, Instant now, @Nullable Instant availableAt) {
         Located found = locate(d.id());
         if (found == null || !holds(found.entry, token)) {
             return Outcome.STALE;
@@ -323,7 +327,7 @@ public final class MemoryStorage implements Storage {
             case NACK -> {
                 found.entry.leaseToken = null;
                 found.entry.leaseDeadline = null;
-                found.entry.availableAt = d.availableAt(now);
+                found.entry.availableAt = availableAt;
             }
         }
         return Outcome.OK;

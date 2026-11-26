@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 
@@ -10,6 +11,12 @@ public record OutgoingMessage(byte[] payload, Map<String, String> headers, Durat
     public OutgoingMessage {
         payload = payload.clone();
         headers = Map.copyOf(headers);
+        headers.forEach((key, value) -> {
+            if (!StandardCharsets.UTF_8.newEncoder().canEncode(key)
+                    || !StandardCharsets.UTF_8.newEncoder().canEncode(value)) {
+                throw new IllegalArgumentException("headers must be valid UTF-8 strings");
+            }
+        });
         if (delay == null || delay.isNegative() || delay.compareTo(Validation.MAX_DELAY_OR_LEASE) > 0) {
             throw new IllegalArgumentException("delay must be between zero and 36500 days: " + delay);
         }

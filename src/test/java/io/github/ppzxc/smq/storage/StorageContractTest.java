@@ -688,6 +688,38 @@ abstract class StorageContractTest {
                         .size());
     }
 
+    @Test
+    void 잘못된_NACK_시각은_앞선_ACK도_반영하지_않는다() {
+        storage.declare("q", QueueOptions.defaults());
+        storage.publish("q", List.of(message(1), message(2)), InstantSource.fixed(T0));
+        PullResult pulled = storage.pull("q", 2, LEASE, InstantSource.fixed(T0));
+        Instant nearMaximum = Instant.MAX.minusSeconds(2);
+
+        assertThrows(
+                java.time.DateTimeException.class,
+                () -> storage.settle(
+                        pulled.token(),
+                        List.of(
+                                new Disposition(pulled.messages().get(0).id(), Disposition.Kind.ACK),
+                                new Disposition(
+                                        pulled.messages().get(1).id(), Disposition.Kind.NACK, Duration.ofSeconds(3))),
+                        InstantSource.fixed(nearMaximum)));
+
+        assertEquals(new QueueCounts(0, 2, 0), storage.counts("q"));
+        assertEquals(
+                List.of(Outcome.OK, Outcome.OK),
+                storage
+                        .settle(
+                                pulled.token(),
+                                pulled.messages().stream()
+                                        .map(message -> new Disposition(message.id(), Disposition.Kind.ACK))
+                                        .toList(),
+                                InstantSource.fixed(T0))
+                        .stream()
+                        .map(Result::outcome)
+                        .toList());
+    }
+
     /** 최대 전달 횟수 1인 큐에 count개를 발행해 한 번씩 꺼내고 리스가 만료된 시각에 다시 꺼낸 결과를 돌려준다. */
     private PullResult pullAfterExhausting(String queue, int count) {
         storage.declare("dead-" + queue, QueueOptions.defaults());

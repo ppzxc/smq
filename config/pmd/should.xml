@@ -35,7 +35,7 @@
         <properties>
             <property name="methodReportLevel" value="10" />
             <property name="classReportLevel" value="80" />
-            <property name="violationSuppressXPath" value=".[self::ClassDeclaration[@SimpleName = 'SqliteStorage']]" />
+            <property name="violationSuppressXPath" value=".[self::ClassDeclaration[@SimpleName = ('SqliteStorage', 'RandomRun')]]" />
         </properties>
     </rule>
     <rule ref="category/java/design.xml/MutableStaticState" />

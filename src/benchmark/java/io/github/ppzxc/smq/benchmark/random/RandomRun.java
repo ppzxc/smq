@@ -39,6 +39,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>시각 규약: 발행과 정산은 호출 직전 벽시계를, 꺼내기는 호출이 돌아온 직후 벽시계를 기록한다. 검사기의 부등식이 모두 거짓 위반을 내지
  * 않는 쪽으로 기울도록 하는 것이다(발행·정산 시각은 실제보다 이르고, 꺼낸 시각은 실제보다 늦다).
  */
+@PolicyException(
+        rule = "PMD.CyclomaticComplexity",
+        reason =
+                "The run coordinates independent workload, recording, and judgment phases; each method remains subject to the complexity limit.",
+        approvedBy = "ppzxc",
+        reviewBy = "2027-11-26")
 final class RandomRun {
 
     static final String TARGET = "random-target";

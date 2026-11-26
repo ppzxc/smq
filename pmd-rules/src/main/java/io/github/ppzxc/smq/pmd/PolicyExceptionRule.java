@@ -41,7 +41,7 @@ public class PolicyExceptionRule extends AbstractJavaRule {
                 }
             }
         }
-        if (!approved.containsAll(suppressed)) {
+        if (suppressed.contains("PMD") || !approved.containsAll(suppressed)) {
             asCtx(data).addViolationNoSuppress(modifiers, modifiers.getAstInfo(), "PMD suppression requires a matching PolicyException");
         }
         return super.visit(modifiers, data);

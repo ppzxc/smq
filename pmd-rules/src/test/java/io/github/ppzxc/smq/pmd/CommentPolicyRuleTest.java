@@ -52,6 +52,19 @@ class CommentPolicyRuleTest {
         }
     }
 
+    @Test void policyExceptionRejectsBroadSuppressionEvenWithApproval() {
+        var rule = new PolicyExceptionRule();
+        rule.setLanguage(net.sourceforge.pmd.lang.java.JavaLanguageModule.getInstance());
+        rule.setName("PolicyException");
+        rule.setMessage("Invalid exception");
+        try (var pmd = PmdAnalysis.create(new PMDConfiguration())) {
+            pmd.addRuleSet(RuleSet.forSingleRule(rule));
+            pmd.files().addSourceFile(FileId.fromPathLikeString("Example.java"),
+                    "class Example { @PolicyException(rule=\"PMD\", reason=\"reason\", approvedBy=\"owner\", reviewBy=\"2099-01-01\") @SuppressWarnings(\"PMD\") void run() {} }");
+            assertEquals(1, pmd.performAnalysisAndCollectReport().getViolations().size());
+        }
+    }
+
     @Test void policyExceptionAllowsMatchingUnexpiredApproval() {
         var rule = new PolicyExceptionRule();
         rule.setLanguage(net.sourceforge.pmd.lang.java.JavaLanguageModule.getInstance());
@@ -118,7 +131,8 @@ class CommentPolicyRuleTest {
 
     @Test void packageDocsAndGeneratedFiles() {
         assertEquals(0, scan("package-info.java", "/** Package docs */ package sample;").size());
-        assertEquals(0, scan("build/generated/Example.java", "// generated\nclass Example {} ").size());
+        assertEquals(1, scan("build/generated/Example.java", "// generated\nclass Example {} ").size());
+        assertEquals(1, scan("Example.java", "/** Package docs */ package sample; class Example {}").size());
         assertEquals(1, scan("package-info.java", "package sample;\nclass Example { /** forbidden */ void method() {} }").size());
         assertEquals(1, scan("module-info.java", "// TODO forbidden\nmodule sample {} ").size());
     }

@@ -252,8 +252,12 @@ val moduleCommentSource = tasks.register("prepareModuleCommentSource") {
     doLast {
         val target = output.get().asFile
         target.parentFile.mkdirs()
-        target.writeText(module.asFile.readText().replace(Regex("(?m)(\\brequires\\s+static\\s+)transitive\\b")) { match ->
-            match.groupValues[1] + "          "
+        val trivia = "(?:\\s|/\\*[\\s\\S]*?\\*/|//[^\\r\\n]*(?:\\r?\\n|$))+"
+        val modifiers = Regex("\\brequires${trivia}(?:static${trivia}(transitive)|(transitive)${trivia}static)\\b")
+        target.writeText(module.asFile.readText().replace(modifiers) { match ->
+            val transitive = match.groups[1] ?: match.groups[2]!!
+            val start = transitive.range.first - match.range.first
+            match.value.replaceRange(start, start + transitive.value.length, " ".repeat(transitive.value.length))
         })
     }
 }

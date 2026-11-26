@@ -151,12 +151,12 @@ public final class SqliteStorage implements Storage {
 
     @PolicyException(
             rule = "PMD.PreserveStackTrace",
-            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            reason = "A non-database file is reported as a domain error without exposing the SQLite cause.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @PolicyException(
             rule = "PMD.UseTryWithResources",
-            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            reason = "The connection transfers to the storage object, which closes it when the storage closes.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.UseTryWithResources", "PMD.PreserveStackTrace"})
@@ -531,7 +531,7 @@ public final class SqliteStorage implements Storage {
     @Override
     @PolicyException(
             rule = "PMD.PreserveStackTrace",
-            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            reason = "The original InterruptedException is rethrown; deadline expiry returns an empty result.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.PreserveStackTrace")
@@ -563,7 +563,7 @@ public final class SqliteStorage implements Storage {
     @Override
     @PolicyException(
             rule = "PMD.PreserveStackTrace",
-            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            reason = "The original InterruptedException is rethrown; deadline expiry returns no ready time.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.PreserveStackTrace")

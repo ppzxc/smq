@@ -19,7 +19,6 @@ public class CommentPolicyRule extends AbstractJavaRule {
 
     @Override public Object visit(ASTCompilationUnit unit, Object data) {
         String path = unit.getTextDocument().getFileId().getAbsolutePath().replace('\\', '/');
-        if (path.contains("/generated/") || path.contains("/generated-sources/")) return data;
         int firstDeclaration = unit.getFirstChild() == null ? Integer.MAX_VALUE
                 : unit.getFirstChild().getTextRegion().getStartOffset();
         boolean licenseSeen = false;
@@ -45,7 +44,7 @@ public class CommentPolicyRule extends AbstractJavaRule {
                     && lower.matches("(?s)/\\*+\\s*(?:\\*\\s*)?(?:copyright\\b|spdx-license-identifier:|all rights reserved\\b|licensed under\\b).*");
             if (license) { licenseSeen = true; continue; }
             if (!lower.contains("todo") && !lower.contains("fixme") && comment instanceof JavadocComment doc
-                    && ((doc.getOwner() instanceof ASTPackageDeclaration)
+                    && ((doc.getOwner() instanceof ASTPackageDeclaration && (path.endsWith("/package-info.java") || path.equals("package-info.java")))
                             || publicApi(doc))) continue;
             int line = comment.getReportLocation().getStartLine();
             String prefix = lines[line - 1].substring(0, Math.min(lines[line - 1].length(), comment.getReportLocation().getStartColumn() - 1));

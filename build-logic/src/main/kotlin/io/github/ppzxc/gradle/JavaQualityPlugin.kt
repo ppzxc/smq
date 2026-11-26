@@ -6,6 +6,9 @@ import net.ltgt.gradle.errorprone.errorprone
 import net.ltgt.gradle.nullaway.nullaway
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.plugins.quality.Pmd
+import org.gradle.api.plugins.quality.PmdExtension
+import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.compile.JavaCompile
 
 class JavaQualityPlugin : Plugin<Project> {
@@ -13,6 +16,13 @@ class JavaQualityPlugin : Plugin<Project> {
         project.pluginManager.apply("net.ltgt.errorprone")
         project.pluginManager.apply("net.ltgt.nullaway")
         project.pluginManager.apply("com.diffplug.spotless")
+        project.pluginManager.apply("pmd")
+
+        project.tasks.withType(Pmd::class.java).configureEach {
+            exclude("**/module-info.java")
+        }
+
+        configurePmd(project)
 
         project.dependencies.add("errorprone", "com.google.errorprone:error_prone_core:2.51.0")
         project.dependencies.add("errorprone", "com.uber.nullaway:nullaway:0.14.3")
@@ -53,7 +63,45 @@ class JavaQualityPlugin : Plugin<Project> {
         }
     }
 
+    private fun configurePmd(project: Project) {
+        val mustRules = project.rootProject.file("config/pmd/must.xml")
+        val shouldRules = project.rootProject.file("config/pmd/should.xml")
+
+        project.extensions.configure(PmdExtension::class.java) {
+            toolVersion = PMD_VERSION
+            ruleSetFiles = project.files(mustRules)
+            ruleSets = emptyList()
+            setIgnoreFailures(false)
+        }
+
+        val sourceSets = project.extensions.getByType(SourceSetContainer::class.java)
+        sourceSets.configureEach {
+            if (name !in PMD_SOURCE_SETS) return@configureEach
+
+            val sourceSet = this
+            val taskName = "pmd${name.replaceFirstChar(Char::uppercase)}Should"
+            val shouldTask = project.tasks.register(taskName, Pmd::class.java) {
+                group = "verification"
+                description = "Reports PMD SHOULD violations in the ${sourceSet.name} Java sources."
+                source(sourceSet.allJava)
+                classpath = project.files(sourceSet.output, sourceSet.compileClasspath)
+                ruleSetFiles = project.files(shouldRules)
+                ruleSets = emptyList()
+                setIgnoreFailures(true)
+                setConsoleOutput(true)
+                reports {
+                    xml.required.set(true)
+                    html.required.set(true)
+                }
+            }
+            project.tasks.named("check").configure { dependsOn(shouldTask) }
+        }
+    }
+
     private companion object {
+        const val PMD_VERSION = "7.29.0"
+        val PMD_SOURCE_SETS = setOf("main", "test", "benchmark")
+
         val MUST_ERROR_PRONE_CHECKS = listOf(
             "ArrayEquals",
             "ArrayToString",

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<ruleset name="smq PMD MUST rules"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>ERR-007 MUST: do not hide failures in empty catch blocks.</description>
+    <rule ref="category/java/errorprone.xml/EmptyCatchBlock">
+        <priority>1</priority>
+    </rule>
+</ruleset>

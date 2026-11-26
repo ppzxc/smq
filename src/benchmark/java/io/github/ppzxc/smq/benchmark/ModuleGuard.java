@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.Smq;
 import java.util.List;
 
@@ -23,6 +24,12 @@ public final class ModuleGuard {
     }
 
     /** 부모·자식 JVM이 시작할 때 부른다. smq가 모듈 경로에 없으면 실패하고, 있으면 그 사실을 한 줄로 알린다. */
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.SystemPrintln")
     public static void requireSmqModule(String role) {
         String name = requireNamed(Smq.class);
         if (!SMQ_MODULE.equals(name)) throw new IllegalStateException("예상하지 못한 모듈: " + name);

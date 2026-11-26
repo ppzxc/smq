@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
-/** 목표 속도에 맞춘 발행 시각 계산. 시계를 읽지 않는 순수 로직이라 정확한 값으로 확인한다. */
 class PacedScheduleTest {
 
     private static final long SEC = 1_000_000_000L;
@@ -33,7 +32,7 @@ class PacedScheduleTest {
         s.sent();
         s.sent();
         s.sent();
-        // 10초 늦게 와도 다음 시각은 원래 격자 위(0.6초)이므로 밀린 만큼 연달아 나간다.
+
         assertEquals(3 * SEC / 5, s.nextDueNanos());
         assertEquals(0, s.waitNanos(10 * SEC), "늦었으면 기다리지 않는다");
     }

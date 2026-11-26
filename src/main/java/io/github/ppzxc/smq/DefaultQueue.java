@@ -170,7 +170,6 @@ final class DefaultQueue implements Queue {
         destination.ifPresentOrElse(waiter::wake, waiter::wake);
     }
 
-    /** 정산과 연장은 이 세션의 같은 큐에서 꺼낸 청크로만 할 수 있다. */
     private void requireOwn(String sourceQueue, Object sourceSession, String what) {
         if (!name.equals(sourceQueue) || !session.equals(sourceSession)) {
             throw new IllegalArgumentException(what + " is not from this queue session");

@@ -5,17 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.zip.CRC32C;
 import org.junit.jupiter.api.Test;
 
-/**
- * 시드 재현성 고정. 기대값은 다중 프로세스 흔적을 걷어내기 전 커밋(5dd43a9)에서 뽑은 것이다(기대값을 뽑은 커밋).
- *
- * <p>골든 갱신 규칙:
- *
- * <ul>
- *   <li>시드에서 워크로드를 만드는 방식을 의도적으로 바꾸는 커밋에서만 다시 뽑는다.
- *   <li>그 커밋 메시지에 "시드 재현 깨짐"을 적고, "기대값을 뽑은 커밋" 주석을 갱신한다.
- *   <li>다른 리팩터링 중에 골든이 깨지면 리팩터링을 고친다.
- * </ul>
- */
 class ScriptGoldenTest {
 
     private static final Limits FULL = Limits.full(10_000);
@@ -30,7 +19,7 @@ class ScriptGoldenTest {
             Script.Planned p = script.message(tag);
             crc.update(p.message().payload());
             var hs = new java.util.TreeMap<>(p.content().headers());
-            hs.remove(Script.TAG_HEADER); // 태그 문자열 형식은 바뀐다
+            hs.remove(Script.TAG_HEADER);
             crc.update(hs.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             crc.update(Long.toString(p.delayMillis()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             for (int dc = 1; dc <= 3; dc++) {
@@ -41,7 +30,6 @@ class ScriptGoldenTest {
         return crc.getValue();
     }
 
-    // 다이제스트는 RunParams.toString()을 포함한다. minAchieved 필드를 더하면서 값을 다시 고정했다(작업량 생성 코드는 건드리지 않았다).
     @Test
     void generatedWorkloadIsPinnedForFixedSeeds() {
         assertEquals(2987651438L, digest(1));

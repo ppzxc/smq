@@ -122,15 +122,10 @@ public interface Smq extends AutoCloseable {
             return this;
         }
 
-        /** 지금 고른 내구성 수준. 기본값을 확인하는 테스트용이다. */
         Durability durability() {
             return durability;
         }
 
-        /**
-         * 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간을 바꾼다. 기본은 100ms다.
-         * 공개 옵션이 아니라 테스트용이다. 0 이상이다.
-         */
         SqliteBuilder lockWaitFloor(Duration lockWaitFloor) {
             Objects.requireNonNull(lockWaitFloor, "lockWaitFloor");
             if (lockWaitFloor.isNegative()) {

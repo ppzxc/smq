@@ -10,14 +10,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 준비한 문장을 SQL 문자열마다 하나씩 붙들어 두는 {@link Connection}. 연산마다 문장을 새로 준비하고 해제하는
- * 비용이 단건 처리량의 큰 몫이어서 둔다. 문장 {@code close()}는 바인딩만 비우고 문장을 살려 두며, 연결을
- * 닫을 때 한꺼번에 해제한다.
- *
- * <p>동시에 쓰면 안 된다. 연결이 하나이고 {@link SqliteStorage}가 락으로 직렬화하므로 거기서는 그대로 성립한다.
- * 호출자는 쓴 문장의 {@code ResultSet}을 닫아야 한다(문장이 살아 있으므로 열린 채 두면 읽기 트랜잭션이 남는다).
- */
 final class StatementCachingConnection {
 
     private static final System.Logger LOG = System.getLogger(StatementCachingConnection.class.getName());
@@ -31,10 +23,6 @@ final class StatementCachingConnection {
                 Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, handler);
     }
 
-    /**
-     * 붙들어 둔 문장을 모두 해제한다. {@code executeUpdate}가 끝난 문장은 다시 실행하기 전까지 리셋되지 않아 SQLite가 "실행 중인
-     * 문장"으로 세므로, 그런 문장이 있으면 {@code VACUUM}이 거부된다. 해제한 문장은 다음에 쓸 때 다시 준비한다.
-     */
     static void releaseStatements(Connection wrapped) {
         if (Proxy.isProxyClass(wrapped.getClass())
                 && Proxy.getInvocationHandler(wrapped) instanceof CacheHandler handler) {
@@ -59,7 +47,6 @@ final class StatementCachingConnection {
         }
     }
 
-    /** 캐시하는 것은 {@code prepareStatement(sql)}과 {@code prepareStatement(sql, keys)}뿐이다. 나머지 형태는 그대로 넘긴다. */
     private static Object prepare(
             Connection connection, Map<String, PreparedStatement> cache, Method method, Object[] args)
             throws Throwable {
@@ -79,7 +66,6 @@ final class StatementCachingConnection {
         return retained(statement);
     }
 
-    /** {@code close()}를 바인딩 비우기로 바꾼 문장 뷰. */
     private static PreparedStatement retained(PreparedStatement statement) {
         return (PreparedStatement) Proxy.newProxyInstance(
                 PreparedStatement.class.getClassLoader(),

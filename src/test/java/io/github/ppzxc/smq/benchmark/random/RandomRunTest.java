@@ -11,7 +11,6 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** 하네스 전체를 짧게 한 번 돌려 본다(SQLite). 실제 시계를 쓰므로 수치는 단언하지 않고 판정만 본다. */
 class RandomRunTest {
 
     @TempDir
@@ -31,10 +30,10 @@ class RandomRunTest {
     @Test
     void checkerViolationsMakeTheVerdictAViolation() {
         RunParams p = RunParams.fromSeed(5, Limits.smoke(300));
-        Violation v = new Violation(Invariant.GHOST, java.util.List.of(), java.util.List.of(), "합성");
-        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> java.util.List.of(v));
+        Violation v = new Violation(Invariant.GHOST, List.of(), List.of(), "합성");
+        RunResult r = RandomRun.execute(p, dir, (c, pub, del, smp) -> List.of(v));
         assertEquals(Verdict.VIOLATION, r.verdict());
-        assertEquals(java.util.List.of(v), r.violations());
+        assertEquals(List.of(v), r.violations());
     }
 
     @Test
@@ -50,8 +49,6 @@ class RandomRunTest {
         assertEquals("검사기가 터졌다", d.message());
         assertTrue(d.stackTrace().contains("\tat "));
     }
-
-    // ---- WAL 최대 크기
 
     @Test
     void everyRunRecordsTheLargestWalSizeSeen() {
@@ -72,8 +69,6 @@ class RandomRunTest {
         assertNotNull(r.walMaxBytes());
     }
 
-    // ---- 고정 속도 모드
-
     @Test
     void 고정_속도로_돌면_달성률과_백로그_보고가_붙는다() {
         Limits soak = Limits.smoke(2_000).withRate(200);
@@ -82,7 +77,7 @@ class RandomRunTest {
         assertEquals(Verdict.PASS, r.verdict(), r.violations() + " " + r.error() + " " + r.soak());
         assertNotNull(r.soak());
         assertEquals(200, r.soak().targetRate());
-        // 속도 조절이 없으면 2초에 수천 건이라 비율이 크게 넘는다. 실제 시계라 아래쪽은 느린 환경을 봐서 넉넉히, 위쪽만 조인다.
+
         assertTrue(r.soak().achievedRatio() > 0.2 && r.soak().achievedRatio() < 1.5, "달성률: " + r.soak());
 
         RunResult plain = RandomRun.execute(
@@ -94,17 +89,17 @@ class RandomRunTest {
     void 백로그_증가는_불변식이_멀쩡해도_실패이고_위반과_소진_실패가_우선한다() {
         SoakJudge.Report growing = new SoakJudge.Report(500, 1.0, 100, 200, 5_000, true);
         SoakJudge.Report fine = new SoakJudge.Report(500, 0.3, 100, 0, 10, false);
-        Violation v = new Violation(Invariant.GHOST, java.util.List.of(), java.util.List.of(), "합성");
-        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, java.util.List.of(), growing, 0));
-        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), fine, 0), "달성률이 낮아도 보고만 한다");
-        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), null, 0.95));
-        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), growing, 0));
-        assertEquals(Verdict.DRAIN_TIMEOUT, RandomRun.verdict(false, java.util.List.of(v), growing, 0));
-        // 달성률 판정은 --min-achieved가 있을 때만 한다. 백로그 증가와 위반이 먼저다.
-        assertEquals(Verdict.UNDER_RATE, RandomRun.verdict(true, java.util.List.of(), fine, 0.95));
-        assertEquals(Verdict.PASS, RandomRun.verdict(true, java.util.List.of(), fine, 0.3), "기준과 같으면 통과다");
-        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, java.util.List.of(), growing, 1.0));
-        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, java.util.List.of(v), fine, 0.95));
+        Violation v = new Violation(Invariant.GHOST, List.of(), List.of(), "합성");
+        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, List.of(), growing, 0));
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, List.of(), fine, 0), "달성률이 낮아도 보고만 한다");
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, List.of(), null, 0.95));
+        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, List.of(v), growing, 0));
+        assertEquals(Verdict.DRAIN_TIMEOUT, RandomRun.verdict(false, List.of(v), growing, 0));
+
+        assertEquals(Verdict.UNDER_RATE, RandomRun.verdict(true, List.of(), fine, 0.95));
+        assertEquals(Verdict.PASS, RandomRun.verdict(true, List.of(), fine, 0.3), "기준과 같으면 통과다");
+        assertEquals(Verdict.BACKLOG_GROWING, RandomRun.verdict(true, List.of(), growing, 1.0));
+        assertEquals(Verdict.VIOLATION, RandomRun.verdict(true, List.of(v), fine, 0.95));
     }
 
     private Path subdir(String name) {
@@ -115,7 +110,6 @@ class RandomRunTest {
         }
     }
 
-    /** 부하 구간 후반 절반의 깊이 표본 중앙값. 마지막 한 표본은 청크 몇 개가 한꺼번에 빠진 순간일 수 있다. */
     private static long lateLoadMedianDepth(RunResult r) {
         List<Long> depths = new ArrayList<>();
         for (CountsSample c : r.records().samples()) {
@@ -130,7 +124,7 @@ class RandomRunTest {
 
     @Test
     void 깊은_큐_모드는_깊이가_목표_이하면_컨슈머가_쉬어서_미리_채운_깊이가_유지된다() {
-        // 청크 x 컨슈머 수(최대 2,000)보다 충분히 깊어야 한 번에 몇 청크가 빠져도 목표 근처에 머문다. 실제 설정은 10만 건이다.
+
         Limits standingLimits =
                 Limits.smoke(2_500).withRate(200).withDepth(20_000).withStandingQueue(true);
         RunParams standing = RunParams.fromSeed(1, standingLimits);
@@ -140,8 +134,6 @@ class RandomRunTest {
                 lateLoadMedianDepth(kept) > standing.prefillDepth() * 0.5,
                 "깊이가 유지돼야 한다: " + lateLoadMedianDepth(kept) + " / " + standing.prefillDepth());
 
-        // 대조군: 조절 없이 기본 깊이(2,000)면 컨슈머가 비운다. 깊이가 달라 직접 비교는 아니고, 조절이 없으면 비워진다는 것만 확인한다.
-        // (깊이 20,000은 이 짧은 부하에서 비워지지 않아 대조군이 되지 못한다.)
         Limits drainingLimits = Limits.smoke(2_500).withRate(200);
         RunParams draining = RunParams.fromSeed(1, drainingLimits);
         RunResult drained = RandomRun.execute(draining, subdir("draining"), InvariantChecker::check);
@@ -156,7 +148,7 @@ class RandomRunTest {
         RunParams plain = RunParams.fromSeed(7, base);
         RunParams standing = RunParams.fromSeed(7, base.withStandingQueue(true));
         assertEquals(plain.leaseMillis(), standing.leaseMillis(), "같은 시드라 리스 기한은 같다");
-        // 소진은 초당 2,000건 이상을 가정한다. 깊이가 유지되면 부하가 끝날 때 그만큼 남아 있다.
+
         assertEquals(
                 standing.prefillDepth() / 2,
                 RandomRun.drainLimit(standing) - RandomRun.drainLimit(plain),
@@ -166,7 +158,7 @@ class RandomRunTest {
 
     @Test
     void 포화_판정_기준은_어떤_메시지_크기와_깊이_조합에서도_깊이_유지_수준보다_높다() {
-        // 미리 채운 깊이는 데이터 256MB 추정으로도 제한되므로, 큰 메시지 + 깊은 큐 조합에서도 정상 깊이가 포화로 판정되지 않아야 한다.
+
         Limits full = Limits.full(10_000).withRate(500);
         for (int bytes : new int[] {256, 1_024, 4_096, 16_384, 60_000}) {
             for (int depth : new int[] {100_000, 300_000, 5_000_000}) {

@@ -23,6 +23,19 @@ class ChunkTableTest {
     }
 
     @Test
+    void usesFormatLocaleForRatios() {
+        var old = java.util.Locale.getDefault(java.util.Locale.Category.FORMAT);
+        try {
+            java.util.Locale.setDefault(java.util.Locale.Category.FORMAT, java.util.Locale.GERMANY);
+            var results = Map.of(
+                    "sqlite/S1/P0/POWER_LOSS/empty:msgPerSec", 500.0, "sqlite/S1/P1/POWER_LOSS/empty:msgPerSec", 750.0);
+            assertTrue(ChunkTable.render(results).contains("1,5x"));
+        } finally {
+            java.util.Locale.setDefault(java.util.Locale.Category.FORMAT, old);
+        }
+    }
+
+    @Test
     void missingPairsShowDashes() {
         String t = ChunkTable.render(Map.of());
         assertTrue(t.contains("-"), t);

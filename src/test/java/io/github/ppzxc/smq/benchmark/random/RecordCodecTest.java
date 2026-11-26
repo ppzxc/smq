@@ -11,10 +11,8 @@ import java.io.DataOutputStream;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** 기록의 이진 형식. 디스크에 쌓았다 읽어도 같은 기록이어야 하고, 쓰다 죽은 파일의 꼬리는 없는 기록으로 본다. */
 class RecordCodecTest {
 
-    /** 2^53을 넘어 double로는 표현이 갈리는 값. JSON(double) 왕복이면 아래 비트를 잃는다. */
     private static final long BIG = Long.MAX_VALUE - 1;
 
     private static Published published() {

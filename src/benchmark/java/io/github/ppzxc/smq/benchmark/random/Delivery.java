@@ -1,5 +1,7 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import java.io.IOException;
+
 /**
  * 컨슈머의 전달 기록. 꺼낸 메시지마다 하나.
  *
@@ -22,11 +24,31 @@ record Delivery(
     record Pull(long chunk, int position, long atMillis, long leaseDeadlineMillis) {}
 
     enum Action {
-        ACK,
-        NACK,
-        REJECT,
+        ACK(0),
+        NACK(1),
+        REJECT(2),
         /** 정산을 시도하지 않았다. */
-        NONE
+        NONE(3);
+
+        private final int spoolCode;
+
+        Action(int spoolCode) {
+            this.spoolCode = spoolCode;
+        }
+
+        int spoolCode() {
+            return spoolCode;
+        }
+
+        static Action fromSpoolCode(int code) throws IOException {
+            return switch (code) {
+                case 0 -> ACK;
+                case 1 -> NACK;
+                case 2 -> REJECT;
+                case 3 -> NONE;
+                default -> throw new IOException("Unknown action code: " + code);
+            };
+        }
     }
 
     /**

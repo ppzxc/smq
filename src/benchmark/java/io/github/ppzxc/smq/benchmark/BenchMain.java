@@ -1,11 +1,13 @@
 package io.github.ppzxc.smq.benchmark;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -25,13 +27,19 @@ public final class BenchMain {
 
     private BenchMain() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws Exception {
         ModuleGuard.requireSmqModule("부모 JVM");
         Map<String, String> opts = parse(args);
         boolean full = opts.getOrDefault("mode", "smoke").equals("full");
         if (!full && !opts.getOrDefault("mode", "smoke").equals("smoke"))
             throw new IllegalArgumentException("--mode는 smoke 또는 full");
-        Storage storage = Storage.valueOf(opts.getOrDefault("storage", "sqlite").toUpperCase());
+        Storage storage = Storage.valueOf(opts.getOrDefault("storage", "sqlite").toUpperCase(Locale.ROOT));
         Path workDir =
                 Path.of(opts.getOrDefault("work-dir", "build/benchmark/work")).toAbsolutePath();
         Files.createDirectories(workDir);
@@ -50,9 +58,18 @@ public final class BenchMain {
         int n = 0;
         for (int round = 0; round < rounds.size(); round++) {
             for (RunSpec spec : rounds.get(round)) {
-                System.out.printf("[%d/%d] 바퀴 %d/%d %s%n", ++n, total, round + 1, rounds.size(), spec.key());
+                n++;
+                System.out.printf(
+                        Locale.getDefault(Locale.Category.FORMAT),
+                        "[%d/%d] 바퀴 %d/%d %s%n",
+                        n,
+                        total,
+                        round + 1,
+                        rounds.size(),
+                        spec.key());
                 Map<String, Double> m = runner.run(spec);
-                m.forEach((k, v) -> System.out.printf("        %s = %.2f%n", k, v));
+                m.forEach((k, v) ->
+                        System.out.printf(Locale.getDefault(Locale.Category.FORMAT), "        %s = %.2f%n", k, v));
                 measured.add(m);
             }
         }
@@ -82,6 +99,12 @@ public final class BenchMain {
         System.exit(Comparator.exitCode(checks));
     }
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.SystemPrintln")
     private static Map<String, Double> loadBaseline(String path) throws IOException {
         if (path == null || !Files.exists(Path.of(path))) {
             System.out.println("기준선 파일이 없어 하한만 검사한다: " + path);
@@ -95,7 +118,9 @@ public final class BenchMain {
         for (int i = 0; i < args.length; i++) {
             if (!args[i].startsWith("--") || i + 1 >= args.length)
                 throw new IllegalArgumentException("잘못된 인자: " + args[i]);
-            m.put(args[i].substring(2), args[++i]);
+            String name = args[i].substring(2);
+            i++;
+            m.put(name, args[i]);
         }
         return m;
     }

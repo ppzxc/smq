@@ -124,6 +124,9 @@ final class RandomRun {
         RandomRun run = new RandomRun(params, checker, drainLimit(params));
         try {
             return run.runIn(dir);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return run.errorResult(e);
         } catch (Throwable t) {
             return run.errorResult(t);
         }
@@ -135,7 +138,7 @@ final class RandomRun {
         return RunResult.error(params, detail, String.valueOf(t), walMax < 0 ? null : walMax);
     }
 
-    private RunResult runIn(Path dir) throws Exception {
+    private RunResult runIn(Path dir) throws IOException, InterruptedException {
         boolean drained;
         Path db = dir.resolve("smq.db");
         runDir = dir;
@@ -580,10 +583,10 @@ final class RandomRun {
         }
         try {
             walMax = Math.max(walMax, Files.size(wal));
-        } catch (NoSuchFileException e) {
-            return;
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            if (!(e instanceof NoSuchFileException)) {
+                throw new UncheckedIOException(e);
+            }
         }
     }
 

@@ -5,7 +5,6 @@ import java.time.Duration;
 import java.time.InstantSource;
 import java.util.Objects;
 
-/** 저장소와 상관없이 모든 빌더가 공유하는 설정. */
 final class BuilderSettings {
 
     private InstantSource clock = InstantSource.system();

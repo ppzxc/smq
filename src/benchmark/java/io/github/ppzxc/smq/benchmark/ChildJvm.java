@@ -37,7 +37,7 @@ public final class ChildJvm {
     }
 
     /** 끝나기를 기다린다. 시간을 넘기거나 종료 코드가 0이 아니면 예외를 낸다. */
-    public void await(long timeoutMs) throws Exception {
+    public void await(long timeoutMs) throws InterruptedException {
         try {
             if (!process.waitFor(Math.max(timeoutMs, 1_000), TimeUnit.MILLISECONDS)) {
                 terminate(process);

@@ -20,7 +20,6 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** 메모리 개수가 DB의 저장된 상태를 세어 얻은 값과 같은지 본다(ADR-0018). 시각 기준의 정확한 개수와는 다를 수 있다. */
 class SqliteStorageCountersTest {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");

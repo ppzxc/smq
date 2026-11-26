@@ -17,9 +17,6 @@ import java.util.Map;
  */
 final class RecordCodec {
 
-    private static final Action[] ACTIONS = Action.values();
-    private static final QueueKind[] QUEUES = QueueKind.values();
-
     private RecordCodec() {}
 
     static void write(DataOutput out, Published p) throws IOException {
@@ -30,7 +27,7 @@ final class RecordCodec {
     }
 
     static void write(DataOutput out, Delivery d) throws IOException {
-        out.writeByte(d.queue().ordinal());
+        out.writeByte(d.queue().spoolCode());
         writeTag(out, d.tag());
         out.writeLong(d.messageId());
         out.writeInt(d.deliveryCount());
@@ -39,7 +36,7 @@ final class RecordCodec {
         out.writeInt(d.pull().position());
         out.writeLong(d.pull().atMillis());
         out.writeLong(d.pull().leaseDeadlineMillis());
-        out.writeByte(d.settle().action().ordinal());
+        out.writeByte(d.settle().action().spoolCode());
         out.writeBoolean(d.settle().applied());
         out.writeLong(d.settle().atMillis());
         out.writeLong(d.settle().nackDelayMillis());
@@ -59,13 +56,13 @@ final class RecordCodec {
     /** 다음 전달 기록. 파일 끝(또는 잘린 기록)이면 null. */
     static Delivery readDelivery(DataInput in) throws IOException {
         try {
-            QueueKind queue = QUEUES[in.readUnsignedByte()];
+            QueueKind queue = QueueKind.fromSpoolCode(in.readUnsignedByte());
             Tag tag = readTag(in);
             long messageId = in.readLong();
             int deliveryCount = in.readInt();
             Content content = readContent(in);
             Pull pull = new Pull(in.readLong(), in.readInt(), in.readLong(), in.readLong());
-            Action action = ACTIONS[in.readUnsignedByte()];
+            Action action = Action.fromSpoolCode(in.readUnsignedByte());
             Settle settle = new Settle(action, in.readBoolean(), in.readLong(), in.readLong());
             return new Delivery(queue, tag, messageId, deliveryCount, content, pull, settle);
         } catch (EOFException e) {

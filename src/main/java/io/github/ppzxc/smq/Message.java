@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 
-@SuppressWarnings("ArrayRecordComponent")
+@SuppressWarnings("ArrayRecordComponent") // Payload is copied at construction and access.
 public record Message(
         MessageId id, byte[] payload, Map<String, String> headers, int deliveryCount, Instant publishedAt) {
 

@@ -25,6 +25,12 @@ public final class SchemaSampleGenerator {
 
     private SchemaSampleGenerator() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws Exception {
         Path out = Path.of(
                 args.length > 0
@@ -49,13 +55,11 @@ public final class SchemaSampleGenerator {
             Queue orders = smq.declare("v1-orders", QueueOptions.defaults().maxDeliveries(3, "v1-dead"));
             Queue serial = smq.declare("v1-serial", QueueOptions.defaults().singleActiveConsumer(true));
 
-            // dead letter 큐에 reject된 메시지 하나
             orders.publish(msg("poison", Map.of("kind", "poison")));
             Chunk poison = orders.pull(1, Duration.ZERO);
             orders.settle(
                     poison.settle().reject(poison.messages().getFirst().id()).build());
 
-            // orders: m1은 한 번 NACK되어 전달 2회로 다시 리스 중, m2는 리스 중, m3 m4는 준비, m5는 지연됨
             orders.publish(List.of(
                     msg("m1", Map.of("kind", "retried", "n", "1")),
                     msg("m2", Map.of("kind", "leased")),
@@ -66,7 +70,6 @@ public final class SchemaSampleGenerator {
             orders.settle(first.settle().nack(first.messages().getFirst().id()).build());
             orders.pull(2, Duration.ZERO);
 
-            // serial: 단일 활성 컨슈머 큐에서 s1이 리스 중이라 s2는 준비 상태로 기다린다
             serial.publish(List.of(msg("s1", Map.of()), msg("s2", Map.of())));
             serial.pull(1, Duration.ZERO);
         }

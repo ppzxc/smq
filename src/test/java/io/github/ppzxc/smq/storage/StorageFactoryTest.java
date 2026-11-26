@@ -14,7 +14,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** factory가 파일 저장소를 다시 여는 방식을 지킨다. 재오픈은 데이터를 보존해야 하고, 견본 복사는 덮어쓴다. */
 class StorageFactoryTest {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");

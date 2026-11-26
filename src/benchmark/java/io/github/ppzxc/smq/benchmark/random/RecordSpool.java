@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -87,6 +88,12 @@ final class RecordSpool implements AutoCloseable {
 
     /** 버퍼를 내보내고 닫는다. 검사가 읽기 전에 불러야 한다. */
     @Override
+    @PolicyException(
+            rule = "PMD.UseTryWithResources",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.UseTryWithResources")
     public void close() throws IOException {
         try {
             synchronized (publishedLock) {

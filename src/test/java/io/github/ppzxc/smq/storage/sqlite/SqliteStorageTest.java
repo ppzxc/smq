@@ -63,7 +63,7 @@ class SqliteStorageTest {
                 s.execute("COMMIT");
             }
         }
-        // 새 DB 생성 규칙을 거치지 않은 기존 파일의 모드를 만든다.
+
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + existing);
                 Statement s = c.createStatement()) {
             s.execute("PRAGMA auto_vacuum = NONE");
@@ -215,7 +215,9 @@ class SqliteStorageTest {
             try (Statement st = c.createStatement();
                     ResultSet rs =
                             st.executeQuery("SELECT count(*) FROM sqlite_schema WHERE name = 'message_delayed_id'")) {
-                assertTrue(rs.next());
+                if (!rs.next()) {
+                    throw new AssertionError("Expected a query result row");
+                }
                 assertEquals(0, rs.getInt(1));
             }
         }
@@ -298,8 +300,8 @@ class SqliteStorageTest {
     void 발행_배치_중간에_실패하면_저장소가_하나도_반영하지_않는다() throws Exception {
         try (SqliteStorage s = SqliteStorage.open(dir.resolve("smq.db"), Durability.POWER_LOSS)) {
             s.declare("q", QueueOptions.defaults());
-            var ok = new io.github.ppzxc.smq.storage.NewMessage(new byte[] {1}, java.util.Map.of());
-            var bad = new io.github.ppzxc.smq.storage.NewMessage(null, java.util.Map.of());
+            var ok = new NewMessage(new byte[] {1}, Map.of());
+            var bad = new NewMessage(null, Map.of());
             assertThrows(
                     RuntimeException.class, () -> s.publish("q", List.of(ok, bad), InstantSource.fixed(Instant.EPOCH)));
             assertEquals(0, s.counts("q").ready());
@@ -503,10 +505,6 @@ class SqliteStorageTest {
         return new NewMessage(new byte[] {1}, Map.of());
     }
 
-    /**
-     * SQLite가 EXCLUSIVE를 거부하는 상황은 실제 연결로 만들 수 없어(메모리·파일 모두 "exclusive"로 답한다) 판정 함수만 직접
-     * 시험한다. 결과가 exclusive가 아니면 SQLException이고 대소문자는 가리지 않는다.
-     */
     @Test
     void locking_mode_결과가_exclusive가_아니면_SQLException이다() {
         assertDoesNotThrow(() -> SqliteStorage.requireExclusive("exclusive"));
@@ -520,7 +518,9 @@ class SqliteStorageTest {
         try (Connection c = SqliteStorage.connect(dir.resolve("x.db"), Durability.POWER_LOSS);
                 Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("PRAGMA locking_mode")) {
-            assertTrue(rs.next());
+            if (!rs.next()) {
+                throw new AssertionError("Expected a query result row");
+            }
             assertEquals("exclusive", rs.getString(1));
         }
     }

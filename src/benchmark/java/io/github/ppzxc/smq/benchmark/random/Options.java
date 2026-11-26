@@ -77,7 +77,8 @@ record Options(
             if (!a.startsWith("--") || i + 1 >= args.length) {
                 throw new IllegalArgumentException("잘못된 인자: " + a);
             }
-            String v = args[++i];
+            i++;
+            String v = args[i];
             switch (a) {
                 case "--seed" -> seed = OptionalLong.of(parseLong(a, v));
                 case "--budget" -> budget = parseDuration(v);
@@ -164,7 +165,7 @@ record Options(
         try {
             return Long.parseLong(v);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(option + "는 정수여야 한다: " + v);
+            throw new IllegalArgumentException(option + "는 정수여야 한다: " + v, e);
         }
     }
 
@@ -185,7 +186,7 @@ record Options(
                 default -> Duration.ofSeconds(n);
             };
         } catch (RuntimeException e) {
-            throw new IllegalArgumentException("기간을 읽을 수 없다: " + v);
+            throw new IllegalArgumentException("기간을 읽을 수 없다: " + v, e);
         }
     }
 }

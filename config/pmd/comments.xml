@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ruleset name="Comment policy" xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>STYLE-011 comment policy.</description>
+    <rule name="STYLE-011" language="java" message="Implementation comment is forbidden"
+          class="io.github.ppzxc.smq.pmd.CommentPolicyRule">
+        <description>Only documented public API and specified exceptions are allowed.</description>
+        <priority>1</priority>
+    </rule>
+</ruleset>

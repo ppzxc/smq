@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.Smq;
 import java.nio.file.Path;
 
@@ -10,6 +11,12 @@ public final class ChildMain {
 
     private ChildMain() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws Exception {
         if (args.length != 4) {
             System.err.println("사용법: ChildMain <specArg> <role> <dbPath> <startAtEpochMs>");

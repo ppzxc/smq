@@ -9,14 +9,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.jspecify.annotations.Nullable;
 
-/**
- * 큐마다 준비·리스 중·지연됨 개수를 메모리에 둔다(ADR-0018). {@code counts()}는 DB도 쓰기 락도 쓰지 않고 여기서 읽는다.
- *
- * <p>개수는 기록된 상태 전환을 따라 바뀐다. 쓰기 트랜잭션은 {@link Tx}에 변화량을 모아 두었다가 커밋 직후, 이미 쥔 쓰기 락 안에서
- * 한꺼번에 반영한다. 큐마다 {@link QueueCounts}(바꿀 수 없는 값) 하나를 {@code volatile} 참조째 바꾸므로 읽는 쪽은 갱신 도중의
- * 섞인 값을 볼 수 없다. 두 큐가 함께 바뀌는 연산(dead letter 이동)은 큐별로 따로 바꾸므로 두 큐 사이에 짧은 어긋남이 보일 수 있다.
- * 메모리는 큐 수에 비례한다.
- */
 final class QueueCounters {
 
     private static final class Slot {
@@ -28,10 +20,9 @@ final class QueueCounters {
     }
 
     private final ConcurrentHashMap<String, Slot> byName = new ConcurrentHashMap<>();
-    /** 쓰기 락 아래에서만 읽고 쓴다. */
+
     private final Map<Long, Slot> byId = new HashMap<>();
 
-    /** 쓰기 락 아래(또는 아직 공개 전)에서 큐를 등록한다. */
     void register(String name, long queueId, QueueCounts initial) {
         Slot slot = new Slot(initial);
         byName.put(name, slot);
@@ -43,7 +34,6 @@ final class QueueCounters {
         byId.remove(queueId);
     }
 
-    /** 큐가 없으면 null. 락 없이 부를 수 있다. */
     @Nullable
     QueueCounts get(String name) {
         Slot slot = byName.get(name);
@@ -54,7 +44,6 @@ final class QueueCounters {
         return new Tx();
     }
 
-    /** 한 트랜잭션의 변화량. 쓰기 락을 쥔 스레드 하나만 쓴다. */
     final class Tx {
         private final Map<Long, long[]> deltas = new LinkedHashMap<>();
         private final List<Runnable> registrations = new ArrayList<>();
@@ -71,12 +60,10 @@ final class QueueCounters {
             delta(queueId)[2] += n;
         }
 
-        /** 새로 만든 큐. 커밋되면 0으로 등록한다. */
         void declared(String name, long queueId) {
             registrations.add(() -> register(name, queueId, new QueueCounts(0, 0, 0)));
         }
 
-        /** 지운 큐. 커밋되면 뺀다. */
         void deleted(String name, long queueId) {
             registrations.add(() -> unregister(name, queueId));
         }
@@ -85,7 +72,6 @@ final class QueueCounters {
             return deltas.computeIfAbsent(queueId, k -> new long[3]);
         }
 
-        /** 커밋 직후 쓰기 락 아래에서 한 번 부른다. 던지지 않는다. */
         void apply() {
             for (Runnable r : registrations) {
                 r.run();

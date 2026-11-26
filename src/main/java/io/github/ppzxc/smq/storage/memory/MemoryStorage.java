@@ -61,7 +61,6 @@ public final class MemoryStorage implements Storage {
             this.availableAt = m.availableAt(publishedAt);
         }
 
-        /** dead letter 큐에 새 메시지로 들어갈 항목. id와 전달 횟수는 새로 시작한다. */
         Entry deadLettered(MessageId newId, String originalQueue, DeadLetters.Reason reason, Instant now) {
             DeadLetters.Origin origin = new DeadLetters.Origin(originalQueue, id, headers, deliveryCount);
             return new Entry(newId, new NewMessage(payload, DeadLetters.headers(origin, reason, now)), now);
@@ -171,7 +170,8 @@ public final class MemoryStorage implements Storage {
             List<Entry> entries = new ArrayList<>(batch.size());
             long next = nextMessageId;
             for (NewMessage m : batch) {
-                entries.add(new Entry(new MessageId(next++), m, now));
+                entries.add(new Entry(new MessageId(next), m, now));
+                next++;
             }
             nextMessageId = next;
             List<MessageId> ids = new ArrayList<>(entries.size());
@@ -231,8 +231,9 @@ public final class MemoryStorage implements Storage {
                 TreeMap<Long, Entry> dlq = require(options.deadLetterQueue().orElseThrow());
                 for (Entry e : exhausted) {
                     entries.remove(e.id.value());
-                    Entry moved = e.deadLettered(
-                            new MessageId(nextMessageId++), queue, DeadLetters.Reason.MAX_DELIVERIES, now);
+                    long id = nextMessageId;
+                    nextMessageId++;
+                    Entry moved = e.deadLettered(new MessageId(id), queue, DeadLetters.Reason.MAX_DELIVERIES, now);
                     dlq.put(moved.id.value(), moved);
                 }
             }
@@ -241,7 +242,8 @@ public final class MemoryStorage implements Storage {
                         ? PullResult.emptyDeadLettersRemain(!exhausted.isEmpty())
                         : PullResult.empty(!exhausted.isEmpty());
             }
-            long token = nextLeaseToken++;
+            long token = nextLeaseToken;
+            nextLeaseToken++;
             Instant deadline = now.plus(lease);
             List<Message> messages = new ArrayList<>(picked.size());
             for (Entry e : picked) {
@@ -295,7 +297,6 @@ public final class MemoryStorage implements Storage {
         }
     }
 
-    /** 아무것도 바꾸기 전에 확인해서, 실패하면 정산 전체가 반영되지 않게 한다. */
     private void requireDeadLetterQueues(LeaseToken token, List<Disposition> items) {
         for (Disposition d : items) {
             if (d.kind() != Disposition.Kind.REJECT) {
@@ -320,8 +321,10 @@ public final class MemoryStorage implements Storage {
             case REJECT -> {
                 found.messages.remove(d.id().value());
                 String dlq = deadLetterQueueOf(found.queue).orElseThrow();
-                Entry moved = found.entry.deadLettered(
-                        new MessageId(nextMessageId++), found.queue, DeadLetters.Reason.REJECTED, now);
+                long id = nextMessageId;
+                nextMessageId++;
+                Entry moved =
+                        found.entry.deadLettered(new MessageId(id), found.queue, DeadLetters.Reason.REJECTED, now);
                 require(dlq).put(moved.id.value(), moved);
             }
             case NACK -> {
@@ -335,7 +338,6 @@ public final class MemoryStorage implements Storage {
 
     private record Located(String queue, TreeMap<Long, Entry> messages, Entry entry) {}
 
-    /** id로 메시지가 있는 큐를 찾는다. 없으면 null이다. */
     private @Nullable Located locate(MessageId id) {
         for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
             Entry e = q.getValue().get(id.value());
@@ -350,7 +352,6 @@ public final class MemoryStorage implements Storage {
         return requireOptions(queue).deadLetterQueue();
     }
 
-    /** 판정 기준은 리스 토큰 일치 하나뿐이다. 기한이 지났는지는 보지 않는다. */
     private static boolean holds(Entry e, LeaseToken token) {
         return e.leaseToken != null && e.leaseToken == token.value();
     }
@@ -386,7 +387,6 @@ public final class MemoryStorage implements Storage {
         }
     }
 
-    /** 리스가 없거나 기한이 지났으면 준비 상태다. 기한이 지나도 다시 꺼내기 전까지는 리스 토큰이 남아 있다. */
     private static boolean isReady(Entry e, Instant now) {
         return !isDelayed(e, now) && (e.leaseToken == null || e.leaseDeadline == null || !e.leaseDeadline.isAfter(now));
     }

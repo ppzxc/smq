@@ -23,7 +23,7 @@ final class Runner {
         this.workDir = workDir;
     }
 
-    Map<String, Double> run(RunSpec spec) throws Exception {
+    Map<String, Double> run(RunSpec spec) throws IOException, InterruptedException {
         Path dir = workDir.resolve("run");
         deleteTree(dir);
         Files.createDirectories(dir);

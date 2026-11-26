@@ -1,10 +1,103 @@
-<?xml version="1.0"?>
-<ruleset name="smq PMD MUST rules"
-         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
-    <description>ERR-007 MUST: do not hide failures in empty catch blocks.</description>
-    <rule ref="category/java/errorprone.xml/EmptyCatchBlock">
+<?xml version='1.0' encoding='UTF-8'?>
+<ruleset xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="smq PMD MUST rules" xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>Strict Java 25 / PMD 7.29.0 built-in rules. Violations fail the build.</description>
+    <!-- Run with minimum priority 5. Custom policy rules and other analyzers are configured separately. -->
+    <!-- CLI output, process exit, framework callbacks and reflection may require approved scoped exceptions. -->
+    <!-- bestpractices -->
+    <rule ref="category/java/bestpractices.xml/AssertStatementInTest" />
+    <rule ref="category/java/bestpractices.xml/AvoidPrintStackTrace" />
+    <rule ref="category/java/bestpractices.xml/AvoidReassigningCatchVariables" />
+    <rule ref="category/java/bestpractices.xml/CheckResultSet" />
+    <rule ref="category/java/bestpractices.xml/DoubleBraceInitialization" />
+    <rule ref="category/java/bestpractices.xml/EnumComparison" />
+    <rule ref="category/java/bestpractices.xml/ExhaustiveSwitchHasDefault" />
+    <rule ref="category/java/bestpractices.xml/JUnitJupiterTestShouldBePackagePrivate" />
+    <rule ref="category/java/bestpractices.xml/MissingOverride" />
+    <rule ref="category/java/bestpractices.xml/NonExhaustiveSwitch" />
+    <rule ref="category/java/bestpractices.xml/PreserveStackTrace" />
+    <rule ref="category/java/bestpractices.xml/RelianceOnDefaultCharset" />
+    <rule ref="category/java/bestpractices.xml/SimplifiableTestAssertion" />
+    <rule ref="category/java/bestpractices.xml/SystemPrintln" />
+    <rule ref="category/java/bestpractices.xml/UnusedAssignment" />
+    <rule ref="category/java/bestpractices.xml/UnusedFormalParameter" />
+    <rule ref="category/java/bestpractices.xml/UnusedLabel" />
+    <rule ref="category/java/bestpractices.xml/UnusedLocalVariable" />
+    <rule ref="category/java/bestpractices.xml/UnusedPrivateField" />
+    <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod" />
+    <rule ref="category/java/bestpractices.xml/UseTryWithResources" />
+    <!-- codestyle -->
+    <rule ref="category/java/codestyle.xml/EmptyControlStatement" />
+    <rule ref="category/java/codestyle.xml/ExtendsObject" />
+    <rule ref="category/java/codestyle.xml/IdenticalCatchBranches" />
+    <rule ref="category/java/codestyle.xml/UnnecessaryConstructor" />
+    <rule ref="category/java/codestyle.xml/UnnecessaryFullyQualifiedName" />
+    <rule ref="category/java/codestyle.xml/UnnecessaryModifier" />
+    <rule ref="category/java/codestyle.xml/UnnecessaryReturn" />
+    <!-- design -->
+    <rule ref="category/java/design.xml/AvoidRethrowingException" />
+    <rule ref="category/java/design.xml/AvoidThrowingNullPointerException" />
+    <rule ref="category/java/design.xml/AvoidThrowingRawExceptionTypes" />
+    <rule ref="category/java/design.xml/DoNotExtendJavaLangError" />
+    <rule ref="category/java/design.xml/ExceptionAsFlowControl" />
+    <rule ref="category/java/design.xml/ImmutableField" />
+    <!-- errorprone -->
+    <rule ref="category/java/errorprone.xml/AssertEqualsArgumentOrder" />
+    <rule ref="category/java/errorprone.xml/AssignmentInOperand" />
+    <rule ref="category/java/errorprone.xml/AvoidAccessibilityAlteration" />
+    <rule ref="category/java/errorprone.xml/AvoidCallingFinalize" />
+    <rule ref="category/java/errorprone.xml/AvoidDecimalLiteralsInBigDecimalConstructor" />
+    <rule ref="category/java/errorprone.xml/BrokenNullCheck" />
+    <rule ref="category/java/errorprone.xml/ClassCastExceptionWithToArray" />
+    <rule ref="category/java/errorprone.xml/CollectionTypeMismatch" />
+    <rule ref="category/java/errorprone.xml/ComparisonWithNaN" />
+    <rule ref="category/java/errorprone.xml/ConfusingArgumentToVarargsMethod" />
+    <rule ref="category/java/errorprone.xml/ConstructorCallsOverridableMethod" />
+    <rule ref="category/java/errorprone.xml/DetachedTestCase" />
+    <rule ref="category/java/errorprone.xml/DoNotCallGarbageCollectionExplicitly" />
+    <rule ref="category/java/errorprone.xml/DoNotExtendJavaLangThrowable" />
+    <rule ref="category/java/errorprone.xml/DoNotTerminateVM" />
+    <rule ref="category/java/errorprone.xml/DoNotThrowExceptionInFinally" />
+    <rule ref="category/java/errorprone.xml/DontUseFloatTypeForLoopIndices" />
+    <rule ref="category/java/errorprone.xml/EmptyCatchBlock" />
+    <rule ref="category/java/errorprone.xml/EqualsNull" />
+    <rule ref="category/java/errorprone.xml/IdempotentOperations" />
+    <rule ref="category/java/errorprone.xml/IdenticalConditionalBranches" />
+    <rule ref="category/java/errorprone.xml/ImplicitSwitchFallThrough" />
+    <rule ref="category/java/errorprone.xml/InvalidLogMessageFormat" />
+    <rule ref="category/java/errorprone.xml/JUnitJupiterTestNoPrivateModifier" />
+    <rule ref="category/java/errorprone.xml/JumbledIncrementer" />
+    <rule ref="category/java/errorprone.xml/MisplacedNullCheck" />
+    <rule ref="category/java/errorprone.xml/OverrideBothEqualsAndHashcode" />
+    <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock" />
+    <rule ref="category/java/errorprone.xml/SuspiciousEqualsMethodName" />
+    <rule ref="category/java/errorprone.xml/SuspiciousHashcodeMethodName" />
+    <rule ref="category/java/errorprone.xml/TestClassWithoutTestCases" />
+    <rule ref="category/java/errorprone.xml/UnconditionalIfStatement" />
+    <rule ref="category/java/errorprone.xml/UnnecessaryBooleanAssertion" />
+    <rule ref="category/java/errorprone.xml/UnsupportedJdkApiUsage" />
+    <rule ref="category/java/errorprone.xml/UnusedNullCheckInEquals" />
+    <rule ref="category/java/errorprone.xml/UnusedReturnValue" />
+    <rule ref="category/java/errorprone.xml/UseCorrectExceptionLogging" />
+    <rule ref="category/java/errorprone.xml/UseEqualsToCompareStrings" />
+    <rule ref="category/java/errorprone.xml/UseLocaleWithCaseConversions" />
+    <rule ref="category/java/errorprone.xml/WrongTestAnnotation" />
+    <!-- multithreading -->
+    <rule ref="category/java/multithreading.xml/DontCallThreadRun" />
+    <rule ref="category/java/multithreading.xml/DoubleCheckedLocking" />
+    <rule ref="category/java/multithreading.xml/NonThreadSafeSingleton" />
+    <rule ref="category/java/multithreading.xml/UnsynchronizedStaticFormatter" />
+    <rule ref="category/java/multithreading.xml/UseNotifyAllInsteadOfNotify" />
+    <!-- performance -->
+    <rule ref="category/java/performance.xml/AvoidCalendarDateCreation" />
+    <rule ref="category/java/performance.xml/BigIntegerInstantiation" />
+    <rule ref="category/java/performance.xml/StringInstantiation" />
+    <rule ref="category/java/performance.xml/StringToString" />
+    <rule ref="category/java/performance.xml/UselessStringValueOf" />
+    <!-- security -->
+    <rule ref="category/java/security.xml/HardCodedCryptoKey" />
+    <rule ref="category/java/security.xml/InsecureCryptoIv" />
+    <rule name="PolicyException" language="java" message="Invalid policy exception" class="io.github.ppzxc.smq.pmd.PolicyExceptionRule">
+        <description>Validate PMD suppression approvals.</description>
         <priority>1</priority>
     </rule>
 </ruleset>

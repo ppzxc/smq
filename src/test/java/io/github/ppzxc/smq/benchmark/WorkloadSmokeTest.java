@@ -8,7 +8,6 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** 하네스 워크로드가 인메모리와 SQLite에서 끝까지 도는지 확인하는 스모크. 수치는 단언하지 않는다. */
 class WorkloadSmokeTest {
 
     @TempDir

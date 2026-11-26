@@ -43,12 +43,6 @@ class SqliteSmqTest extends SmqConformanceTest {
         return Smq.sqlite(dir.resolve("smq.db"));
     }
 
-    private Smq openDirect(Duration lease) {
-        Smq smq = builder().clock(clock).leaseDuration(lease).open();
-        direct.add(smq);
-        return smq;
-    }
-
     @Test
     void 이름이_memory인_경로도_파일에_저장한다() throws Exception {
         org.junit.jupiter.api.Assumptions.assumeFalse(
@@ -83,6 +77,12 @@ class SqliteSmqTest extends SmqConformanceTest {
     }
 
     @Test
+    @PolicyException(
+            rule = "PMD.AvoidThrowingRawExceptionTypes",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock을_기다리는_꺼내기를_interrupt하면_메시지는_준비_상태로_남는다() throws Exception {
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -194,7 +194,7 @@ class SqliteSmqTest extends SmqConformanceTest {
             assertEquals(new QueueCounts(0, 1, 0), q.counts());
             assertTrue(q.pull(1, Duration.ZERO).isEmpty());
             clock.advance(Duration.ofSeconds(10));
-            // 기한이 지나도 다시 꺼내기 전까지는 리스 중으로 센다. 저장된 상태를 따른다.
+
             assertEquals(new QueueCounts(0, 1, 0), q.counts());
             Chunk again = q.pull(1, Duration.ZERO);
             assertEquals(id, again.messages().getFirst().id());
@@ -239,7 +239,7 @@ class SqliteSmqTest extends SmqConformanceTest {
 
     @Test
     void 기본_내구성_수준은_PROCESS_CRASH다() {
-        // ADR-0014: 기본은 애플리케이션 크래시까지 견디고, 전원·OS 장애까지 견디려면 POWER_LOSS를 명시한다.
+
         assertEquals(
                 Durability.PROCESS_CRASH, Smq.sqlite(dir.resolve("default.db")).durability());
     }
@@ -251,23 +251,25 @@ class SqliteSmqTest extends SmqConformanceTest {
         try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + path);
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("PRAGMA auto_vacuum")) {
-            assertTrue(result.next());
+            if (!result.next()) {
+                throw new AssertionError("Expected a query result row");
+            }
             assertEquals(0, result.getInt(1));
         }
         Smq.sqlite(path).autoVacuum(true).open().close();
         try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + path);
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("PRAGMA auto_vacuum")) {
-            assertTrue(result.next());
+            if (!result.next()) {
+                throw new AssertionError("Expected a query result row");
+            }
             assertEquals(0, result.getInt(1));
         }
     }
 
     @Test
     void SQLite_빌더의_공개_옵션에_lock_대기_하한이_없다() {
-        // 0.1.0 호환 파괴(#155): 하한은 내부 상수(기본 100ms)이고, 테스트만 같은 패키지에서 조정한다.
-        // 저장소 구현(storage.sqlite)은 module-info가 내보내지 않으므로 빌더가 유일한 공개 경로다.
-        // 이름이 바뀐 재노출도 잡도록 공개 메서드 전체를 허용 목록과 견준다.
+
         Set<String> publicMethods = Arrays.stream(Smq.SqliteBuilder.class.getMethods())
                 .filter(method -> method.getDeclaringClass() == Smq.SqliteBuilder.class)
                 .map(Method::getName)
@@ -296,7 +298,6 @@ class SqliteSmqTest extends SmqConformanceTest {
                 .open();
         direct.add(smq);
 
-        // 빈 청크는 스레드 타이밍에 달려 한 판(300라운드)에 안 나올 수 있다. 계약 검사는 매 판 모두 하고, 빈 청크는 상한까지 판을 거듭해 본다.
         int attempts = 10;
         int roundsWithEmptyChunk = 0;
         for (int attempt = 0; attempt < attempts && roundsWithEmptyChunk == 0; attempt++) {

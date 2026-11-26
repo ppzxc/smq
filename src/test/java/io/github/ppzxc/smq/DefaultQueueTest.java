@@ -23,17 +23,12 @@ import java.util.Queue;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
-/**
- * 꺼내기의 재시도 판단을 저장소 호출 횟수로 못 박는다. 재시도 판단이 틀리면 대기 루프가 끝나지 않으므로,
- * 호출 횟수가 상한을 넘으면 시간 제한을 기다리지 않고 바로 실패한다.
- */
 @Order(1)
 class DefaultQueueTest {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
     private static final int MAX_PULL_CALLS = 20;
 
-    /** 꺼내기 결과를 차례로 돌려주고 호출 횟수를 센다. 준비한 결과가 떨어지면 빈 결과다. */
     private static final class ScriptedStorage implements Storage {
         final Queue<PullResult> script = new ArrayDeque<>();
         int pulls;
@@ -44,7 +39,8 @@ class DefaultQueueTest {
 
         @Override
         public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
-            if (++pulls > MAX_PULL_CALLS) {
+            pulls++;
+            if (pulls > MAX_PULL_CALLS) {
                 throw new AssertionError("꺼내기를 " + MAX_PULL_CALLS + "번 넘게 되풀이했다");
             }
             PullResult next = script.poll();
@@ -156,7 +152,6 @@ class DefaultQueueTest {
 
         Chunk chunk = queueOver(storage).pull(1, Duration.ofMillis(30));
 
-        // 폴링 간격이 1ms에서 늘어나므로 30ms 동안의 호출은 한 자릿수에서 십여 번이다. 쉬지 않고 돌면 상한을 넘는다.
         assertTrue(chunk.isEmpty());
         assertTrue(storage.pulls >= 2, "pulls=" + storage.pulls);
     }

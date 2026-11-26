@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
-/** SQLite 저장소는 한 JVM만 연다. 공개 열기 API로 그 강제를 검증한다(ADR-0012). */
 class SqliteSingleProcessLockTest {
 
     @TempDir
@@ -47,7 +46,6 @@ class SqliteSingleProcessLockTest {
         }
     }
 
-    /** ADR-0006 검증 조건, 건너뛰지 말 것. Windows 조건부 지원의 근거라서 assume 없이 Linux·Windows CI에서 모두 돈다. */
     @Test
     @Timeout(60)
     void 다른_JVM이_쥔_파일은_열_수_없고_그_JVM이_죽으면_다시_열_수_있다() throws Exception {
@@ -73,7 +71,7 @@ class SqliteSingleProcessLockTest {
         }
         try (Connection external = DriverManager.getConnection("jdbc:sqlite:" + db);
                 Statement s = external.createStatement()) {
-            // 외부 도구가 EXCLUSIVE로 쥔 상태를 만든다.
+
             s.execute("PRAGMA locking_mode = EXCLUSIVE");
             s.execute("BEGIN EXCLUSIVE");
             long start = System.nanoTime();
@@ -130,7 +128,7 @@ class SqliteSingleProcessLockTest {
             s.execute("CREATE TABLE t(x)");
         }
         for (Path db : new Path[] {newer, foreign}) {
-            // 두 번 열어 첫 거부가 락 파일을 쥔 채 남지 않았는지 본다.
+
             for (int i = 0; i < 2; i++) {
                 assertThrows(
                         IncompatibleStorageException.class, () -> Smq.sqlite(db).open(), db.toString());

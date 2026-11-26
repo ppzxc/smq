@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
-/** 크기가 고정된 지연 히스토그램. 백분위수는 표본을 모두 정렬한 nearest-rank와 같아야 한다. */
 class LatencyHistogramTest {
 
     @Test

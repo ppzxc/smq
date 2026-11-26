@@ -44,6 +44,8 @@ repositories {
 }
 
 dependencies {
+    pmd("net.sourceforge.pmd:pmd-ant:7.29.0")
+    pmd(project(":pmd-rules"))
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
     compileOnlyApi("org.jspecify:jspecify:1.0.1")
 
@@ -240,13 +242,54 @@ val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
 }
 tasks.check { dependsOn(verifyJarExcludesBenchmark, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
 
-tasks.register<Exec>("checkJavaImplementationComments") {
-    group = "verification"
-    description = "신규 프로덕션 Java 구현 주석이 기준선에 추가되지 않았는지 확인한다."
-    commandLine(if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3",
-        "scripts/test_check_java_comments.py")
+val commentRules = layout.projectDirectory.file("config/pmd/comments.xml")
+// PMD 7.29 cannot parse both requires modifiers. Keep the line length for comment locations.
+val moduleCommentSource = tasks.register("prepareModuleCommentSource") {
+    val module = layout.projectDirectory.file("src/main/java/module-info.java")
+    val output = layout.buildDirectory.file("pmd-module/module-info.java")
+    inputs.file(module)
+    outputs.file(output)
+    doLast {
+        val target = output.get().asFile
+        target.parentFile.mkdirs()
+        val trivia = "(?:\\s|/\\*[\\s\\S]*?\\*/|//[^\\r\\n]*(?:\\r?\\n|$))+"
+        val modifiers = Regex("\\brequires${trivia}(?:static${trivia}(transitive)|(transitive)${trivia}static)\\b")
+        target.writeText(module.asFile.readText().replace(modifiers) { match ->
+            val transitive = match.groups[1] ?: match.groups[2]!!
+            val start = transitive.range.first - match.range.first
+            match.value.replaceRange(start, start + transitive.value.length, " ".repeat(transitive.value.length))
+        })
+    }
 }
-tasks.check { dependsOn("checkJavaImplementationComments") }
+listOf("main", "test").forEach { sourceName ->
+    val sourceSet = sourceSets[sourceName]
+    val task = tasks.register<org.gradle.api.plugins.quality.Pmd>("pmd${sourceName.replaceFirstChar(Char::uppercase)}Comments") {
+        group = "verification"
+        if (sourceName == "main") {
+            source(sourceSet.allJava.matching { exclude("**/module-info.java") })
+            source(moduleCommentSource)
+        } else {
+            source(sourceSet.allJava)
+        }
+        exclude("**/generated/**", "**/generated-sources/**")
+        classpath = files(sourceSet.output, sourceSet.compileClasspath)
+        ruleSetFiles = files(commentRules)
+        ruleSets = emptyList()
+        ignoreFailures = false
+        reports.xml.required.set(true)
+        doLast {
+            val report = reports.xml.outputLocation.get().asFile
+            val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            factory.isNamespaceAware = true
+            val document = factory.newDocumentBuilder().parse(report)
+            check(document.getElementsByTagNameNS("*", "error").length == 0) {
+                "PMD could not parse a source file; see $report"
+            }
+        }
+    }
+    tasks.check { dependsOn(task) }
+}
+tasks.check { dependsOn(":pmd-rules:test") }
 
 tasks.test {
     useJUnitPlatform()

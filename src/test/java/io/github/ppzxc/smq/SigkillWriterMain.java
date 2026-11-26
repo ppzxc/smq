@@ -8,6 +8,12 @@ public final class SigkillWriterMain {
 
     private SigkillWriterMain() {}
 
+    @PolicyException(
+            rule = "PMD.SystemPrintln",
+            reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) {
         Smq smq = Smq.sqlite(Path.of(args[0]))
                 .durability(Durability.PROCESS_CRASH)
@@ -15,7 +21,7 @@ public final class SigkillWriterMain {
         Queue q = smq.declare("q", QueueOptions.defaults());
         System.out.println("READY");
         System.out.flush();
-        // 부모가 죽일 때까지 도는 것이 이 프로그램의 목적이다.
+
         for (long i = 0; ; i++) {
             MessageId id = q.publish(OutgoingMessage.of(("m" + i).getBytes(StandardCharsets.UTF_8)));
             System.out.println(id.value());

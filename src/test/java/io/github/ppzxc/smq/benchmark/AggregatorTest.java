@@ -39,7 +39,7 @@ class AggregatorTest {
         RunSpec spec = RunSpec.s3(Storage.SQLITE, Profile.P1, 1000, 0);
         long[] samples = new long[100];
         for (int i = 0; i < 100; i++) {
-            samples[i] = (i + 1) * 1000L; // 1..100 ms를 마이크로초로
+            samples[i] = (i + 1) * 1000L;
         }
         Map<String, Double> m = Aggregator.aggregate(spec, List.of(new ChildResult("BOTH", 100, SEC, samples)));
         assertEquals(50.0, m.get("sqlite/S3/P1/POWER_LOSS/empty:p50Ms"));

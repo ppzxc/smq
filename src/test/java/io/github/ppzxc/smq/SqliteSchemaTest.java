@@ -10,12 +10,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.time.Duration;
-import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** SQLite 파일의 스키마 판정과 트랜잭션마다 하는 버전 확인(ADR-0015). 공개 API로 열고, 파일 조작만 JDBC로 한다. */
 class SqliteSchemaTest {
 
     @TempDir
@@ -42,7 +39,6 @@ class SqliteSchemaTest {
         }
     }
 
-    /** 이 빌드가 지원하는 스키마 버전. 새 파일을 만들어 읽는다. */
     private int supportedVersion() throws Exception {
         Path probe = dir.resolve("probe.db");
         Smq.sqlite(probe).open().close();
@@ -169,30 +165,8 @@ class SqliteSchemaTest {
         assertThrows(SmqStorageException.class, () -> Smq.sqlite(copy).open());
         assertEquals(1, userVersion(copy));
 
-        // 앞서 만든 인덱스도 롤백되었으므로 같은 업그레이드를 다시 실행할 수 있다.
         jdbc(copy, "DROP TRIGGER fail_upgrade");
         Smq.sqlite(copy).open().close();
         assertEquals(2, userVersion(copy));
-    }
-
-    /**
-     * 꺼내기가 빈 결과를 한 번 받고 변경 힌트를 기다리는 자리에 멈출 때까지 기다린다. 고정 시간을 재지 않고
-     * 스레드가 힌트의 {@code await}에 있는지를 본다. 그 자리는 한 번 꺼내 본 뒤에만 닿으므로, 이후의 변경은 대기 중에 일어난 것이다.
-     */
-    private static void awaitParkedInChangeHint(Thread t) throws InterruptedException {
-        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-        while (System.nanoTime() < deadline) {
-            for (StackTraceElement frame : t.getStackTrace()) {
-                if (frame.getClassName().endsWith("ChangeHint")
-                        && frame.getMethodName().equals("await")) {
-                    return;
-                }
-            }
-            if (!t.isAlive()) {
-                fail("꺼내기가 대기에 들어가기 전에 끝났다");
-            }
-            Thread.sleep(1);
-        }
-        fail("꺼내기가 10초 안에 변경 힌트 대기에 들어가지 않았다: " + Arrays.toString(t.getStackTrace()));
     }
 }

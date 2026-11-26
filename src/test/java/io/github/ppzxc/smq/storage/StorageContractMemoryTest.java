@@ -16,8 +16,6 @@ class StorageContractMemoryTest extends StorageContractTest {
         return StorageFactory.MEMORY;
     }
 
-    // 변경 힌트는 ADR-0002가 허용한 선택 메서드라 계약이 아니다. 메모리 저장소 고유의 테스트로 둔다.
-
     @Test
     void 변경_힌트는_wake하면_기다리던_스레드를_즉시_깨운다() throws Exception {
         ChangeHint hint = storage.changeHint().orElseThrow();

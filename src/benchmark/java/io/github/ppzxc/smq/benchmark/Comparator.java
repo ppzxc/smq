@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.benchmark;
 import io.github.ppzxc.smq.Durability;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -120,15 +121,15 @@ final class Comparator {
         for (int i = 0; i < rounds; i++) {
             double ratio = values.get(i) / references.get(i);
             ratios.add(ratio);
-            parts.add(
-                    fmt(values.get(i)) + " / " + fmt(references.get(i)) + " = " + String.format("%.1f%%", 100 * ratio));
+            parts.add(fmt(values.get(i)) + " / " + fmt(references.get(i)) + " = "
+                    + String.format(Locale.ROOT, "%.1f%%", 100 * ratio));
         }
         String detail;
         if (rounds == 1) {
             detail = parts.get(0);
         } else {
-            StringBuilder sb =
-                    new StringBuilder("중앙값 " + String.format("%.1f%%", 100 * Aggregator.median(ratios)) + ", 바퀴별 ");
+            StringBuilder sb = new StringBuilder(
+                    "중앙값 " + String.format(Locale.ROOT, "%.1f%%", 100 * Aggregator.median(ratios)) + ", 바퀴별 ");
             for (int i = 0; i < rounds; i++)
                 sb.append(i > 0 ? "; " : "").append(i + 1).append("회 ").append(parts.get(i));
             detail = sb.toString();
@@ -162,7 +163,8 @@ final class Comparator {
             double v = e.getValue();
             boolean lowerIsBetter = id.endsWith(":p50Ms") || id.endsWith(":p99Ms");
             boolean bad = lowerIsBetter ? v > base * (1 + REGRESSION) + EPS : v < base * (1 - REGRESSION) - EPS;
-            String detail = fmt(v) + " vs 기준선 " + fmt(base) + String.format(" (%+.1f%%)", 100 * (v - base) / base);
+            String detail =
+                    fmt(v) + " vs 기준선 " + fmt(base) + String.format(Locale.ROOT, " (%+.1f%%)", 100 * (v - base) / base);
             out.add(bad ? fail(name, detail) : pass(name, detail));
         }
     }
@@ -180,7 +182,7 @@ final class Comparator {
     }
 
     private static String fmt(double v) {
-        return v >= 100 ? String.format("%.0f", v) : String.format("%.2f", v);
+        return v >= 100 ? String.format(Locale.ROOT, "%.0f", v) : String.format(Locale.ROOT, "%.2f", v);
     }
 
     /** 하나라도 FAIL이면 1, 아니면 0. */
@@ -191,12 +193,12 @@ final class Comparator {
     static String render(List<Check> checks) {
         StringBuilder sb = new StringBuilder();
         for (Check c : checks) {
-            sb.append(String.format("%-4s  %s  [%s]%n", c.status(), c.name(), c.detail()));
+            sb.append(String.format(Locale.ROOT, "%-4s  %s  [%s]%n", c.status(), c.name(), c.detail()));
         }
         long pass = checks.stream().filter(c -> c.status() == Status.PASS).count();
         long fail = checks.stream().filter(c -> c.status() == Status.FAIL).count();
         long skip = checks.size() - pass - fail;
-        sb.append(String.format("합계: 통과 %d, 실패 %d, 건너뜀 %d%n", pass, fail, skip));
+        sb.append(String.format(Locale.ROOT, "합계: 통과 %d, 실패 %d, 건너뜀 %d%n", pass, fail, skip));
         return sb.toString();
     }
 }

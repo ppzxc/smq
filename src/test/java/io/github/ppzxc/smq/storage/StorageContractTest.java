@@ -22,10 +22,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * 저장소 인터페이스의 계약 스위트. 코어가 가리거나 흡수해 공개 API로는 보이지 않는 약속과 경계 사례만 다룬다.
- * 하위 클래스는 {@link #factory()}만 정한다. 시계는 각 연산에 넘기며 저장소가 lock 안에서 읽는다.
- */
 abstract class StorageContractTest {
 
     static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
@@ -141,9 +137,7 @@ abstract class StorageContractTest {
         var expectedOld = model.pull(T0, LEASE);
         assertEquals(
                 expectedOld.messages(),
-                oldLease.messages().stream()
-                        .map(io.github.ppzxc.smq.Message::id)
-                        .toList());
+                oldLease.messages().stream().map(Message::id).toList());
         Instant oldDeadline = T0.plus(LEASE);
 
         assertEquals(model.counts(), storage.counts("q"));
@@ -152,9 +146,7 @@ abstract class StorageContractTest {
         var expectedRedelivery = model.pull(atDeadline, LEASE);
         assertEquals(
                 expectedRedelivery.messages(),
-                redelivery.messages().stream()
-                        .map(io.github.ppzxc.smq.Message::id)
-                        .toList());
+                redelivery.messages().stream().map(Message::id).toList());
         assertEquals(model.counts(), storage.counts("q"));
 
         var stale = storage.settle(
@@ -173,9 +165,7 @@ abstract class StorageContractTest {
         var finalPull = storage.pull("q", 1, LEASE, InstantSource.fixed(atDeadline));
         assertEquals(
                 model.pull(atDeadline, LEASE).messages(),
-                finalPull.messages().stream()
-                        .map(io.github.ppzxc.smq.Message::id)
-                        .toList());
+                finalPull.messages().stream().map(Message::id).toList());
     }
 
     private static final class LeaseReferenceModel {
@@ -199,7 +189,8 @@ abstract class StorageContractTest {
             ready.sort(MessageId::compareTo);
             if (ready.isEmpty()) return new ExpectedPull(List.of(), -1);
             MessageId id = ready.removeFirst();
-            long leaseGeneration = ++generation;
+            generation++;
+            long leaseGeneration = generation;
             leased.put(id, new Lease(leaseGeneration, now.plus(lease)));
             return new ExpectedPull(List.of(id), leaseGeneration);
         }
@@ -211,8 +202,8 @@ abstract class StorageContractTest {
             return Outcome.OK;
         }
 
-        io.github.ppzxc.smq.QueueCounts counts() {
-            return new io.github.ppzxc.smq.QueueCounts(ready.size(), leased.size(), 0);
+        QueueCounts counts() {
+            return new QueueCounts(ready.size(), leased.size(), 0);
         }
 
         private record Lease(long generation, Instant deadline) {}
@@ -241,20 +232,21 @@ abstract class StorageContractTest {
             start.countDown();
             var settled = settle.get(5, TimeUnit.SECONDS).getFirst();
             var repulled = pull.get(5, TimeUnit.SECONDS);
-            if (settled.outcome() == io.github.ppzxc.smq.Outcome.OK) {
+            if (settled.outcome() == Outcome.OK) {
                 assertTrue(repulled.messages().isEmpty(), "정산이 먼저 커밋되면 다시 꺼낼 메시지가 없다");
-                assertEquals(new io.github.ppzxc.smq.QueueCounts(0, 0, 0), storage.counts("q"));
+                assertEquals(new QueueCounts(0, 0, 0), storage.counts("q"));
             } else {
-                assertEquals(io.github.ppzxc.smq.Outcome.STALE, settled.outcome());
+                assertEquals(Outcome.STALE, settled.outcome());
                 assertEquals(
                         old.messages().getFirst().id(),
                         repulled.messages().getFirst().id());
-                assertEquals(new io.github.ppzxc.smq.QueueCounts(0, 1, 0), storage.counts("q"));
+                assertEquals(new QueueCounts(0, 1, 0), storage.counts("q"));
             }
         }
     }
 
     @Test
+    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock_대기_마감이_끝나면_꺼내기는_상태를_바꾸지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());
         storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
@@ -286,6 +278,7 @@ abstract class StorageContractTest {
     }
 
     @Test
+    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock을_기다리는_꺼내기를_interrupt하면_리스하지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());
         storage.publish("q", List.of(message(1)), InstantSource.fixed(T0));
@@ -348,6 +341,7 @@ abstract class StorageContractTest {
                         .id());
     }
 
+    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     private <T> T afterLockWait(java.util.function.Function<InstantSource, T> operation) throws Exception {
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -546,16 +540,13 @@ abstract class StorageContractTest {
         MessageId a = first.messages().get(0).id();
         MessageId b = first.messages().get(1).id();
 
-        // 리스가 끝난 뒤 둘째 청크가 a를 꺼낸다. b는 만료됐지만 아무도 꺼내지 않았다.
         PullResult second = storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plus(LEASE)));
         assertEquals(a, second.messages().getFirst().id());
 
-        // 첫 청크는 기한 안에 연장을 시작했지만, 저장소가 연장을 처리하는 시각은 둘째 꺼내기가 커밋된 뒤다.
         Extended late = storage.extend(first.token(), List.of(a, b), LEASE, InstantSource.fixed(T0.plusSeconds(12)));
 
         assertEquals(List.of(new Result(a, Outcome.STALE), new Result(b, Outcome.STALE)), late.results());
-        // b의 리스 토큰은 남아 있어 개수로는 리스 중이다. 되살아나지 않았음은 다시 꺼내지는 것으로 확인한다.
-        // 되살아났다면 b의 기한은 T0+22초라 T0+20초에 꺼낼 수 없다.
+
         assertEquals(new QueueCounts(0, 2, 0), storage.counts("q"));
         PullResult third =
                 storage.pull("q", 2, LEASE, InstantSource.fixed(T0.plus(LEASE).plus(LEASE)));
@@ -578,7 +569,7 @@ abstract class StorageContractTest {
         Extended late = storage.extend(first.token(), List.of(b), LEASE, InstantSource.fixed(T0.plusSeconds(12)));
 
         assertEquals(List.of(new Result(b, Outcome.STALE)), late.results());
-        // 되살아났다면 b의 기한은 T0+22초라 T0+15초에 꺼낼 수 없다.
+
         assertEquals(new QueueCounts(0, 1, 0), storage.counts("q"));
         PullResult third = storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plusSeconds(15)));
         assertEquals(List.of(b), third.messages().stream().map(Message::id).toList());
@@ -597,14 +588,13 @@ abstract class StorageContractTest {
         PullResult first = storage.pull("q", cap + 1, LEASE, InstantSource.fixed(T0));
         List<MessageId> ids = first.messages().stream().map(Message::id).toList();
 
-        // 둘째 꺼내기가 한 번에 옮기는 상한만큼만 옮긴다. 하나는 만료된 채 원래 큐에 남는다.
         assertTrue(
                 storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plus(LEASE))).deadLettersRemain());
 
         Extended late = storage.extend(first.token(), ids, LEASE, InstantSource.fixed(T0.plusSeconds(12)));
 
         assertTrue(late.results().stream().allMatch(r -> r.outcome() == Outcome.STALE));
-        // 되살아났다면 남은 메시지의 리스가 살아 있어 꺼내기가 막히고 옮겨지지 않는다.
+
         PullResult third = storage.pull("q", 1, LEASE, InstantSource.fixed(T0.plusSeconds(15)));
         assertFalse(third.deadLettersRemain());
         assertEquals(new QueueCounts(0, 0, 0), storage.counts("q"));
@@ -720,7 +710,6 @@ abstract class StorageContractTest {
                         .toList());
     }
 
-    /** 최대 전달 횟수 1인 큐에 count개를 발행해 한 번씩 꺼내고 리스가 만료된 시각에 다시 꺼낸 결과를 돌려준다. */
     private PullResult pullAfterExhausting(String queue, int count) {
         storage.declare("dead-" + queue, QueueOptions.defaults());
         storage.declare(queue, QueueOptions.defaults().maxDeliveries(1, "dead-" + queue));

@@ -35,7 +35,9 @@ class StorageContractSqliteTest extends StorageContractTest {
         assertEquals(T0.plusSeconds(70), result.leaseDeadline());
     }
 
+    @Override
     @Test
+    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void lock을_기다리는_꺼내기를_interrupt하면_리스하지_않는다() throws Exception {
         storage.declare("q", QueueOptions.defaults());
         storage.publish("q", List.of(new NewMessage(new byte[] {1}, Map.of())), InstantSource.fixed(T0));

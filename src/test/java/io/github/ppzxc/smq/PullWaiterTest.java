@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 @Order(1)
 class PullWaiterTest {
 
-    /** 호출을 기록하고 기다리지 않고 바로 돌아오는 힌트. {@code beforeVersion}은 버전을 읽기 직전에 실행한다. */
     private static final class RecordingHint implements ChangeHint {
         long version;
         long versionSeenAtWait;
@@ -219,7 +218,7 @@ class PullWaiterTest {
                 () -> "empty");
         assertEquals("got", result);
         assertEquals(5, attempts.get());
-        // 3번째 시도부터 표시가 없으므로 3번째와 4번째 뒤에만 기다린다.
+
         assertEquals(2, hint.awaits.size());
     }
 

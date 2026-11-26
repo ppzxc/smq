@@ -4,12 +4,17 @@ import com.diffplug.gradle.spotless.SpotlessExtension
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 import net.ltgt.gradle.nullaway.nullaway
+import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.plugins.quality.Pmd
 import org.gradle.api.plugins.quality.PmdExtension
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.compile.JavaCompile
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.stream.StreamResult
+import javax.xml.transform.stream.StreamSource
 
 class JavaQualityPlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -44,6 +49,10 @@ class JavaQualityPlugin : Plugin<Project> {
                     }
                 }
                 MUST_ERROR_PRONE_CHECKS.forEach { check(it, CheckSeverity.ERROR) }
+                if (isMainCompilation || name == "compileBenchmarkJava") {
+                    // Tests intentionally capture interrupts to assert the caller contract.
+                    check("InterruptedExceptionSwallowed", CheckSeverity.ERROR)
+                }
                 if (!isMainCompilation) {
                     // Test scenario names are Korean specifications, so report these without failing compilation.
                     warn("UnicodeInCode")
@@ -71,6 +80,7 @@ class JavaQualityPlugin : Plugin<Project> {
             toolVersion = PMD_VERSION
             ruleSetFiles = project.files(mustRules)
             ruleSets = emptyList()
+            rulesMinimumPriority.set(5)
             setIgnoreFailures(false)
         }
 
@@ -96,6 +106,45 @@ class JavaQualityPlugin : Plugin<Project> {
             }
             project.tasks.named("check").configure { dependsOn(shouldTask) }
         }
+
+        project.afterEvaluate {
+            for (sourceSet in PMD_SOURCE_SETS) {
+                for (suffix in listOf("", "Should")) {
+                    val taskName = "pmd${sourceSet.replaceFirstChar(Char::uppercase)}$suffix"
+                    val pmdTask = project.tasks.named(taskName, Pmd::class.java)
+                    val started = AtomicBoolean(false)
+                    val htmlTask = project.tasks.register("${taskName}HtmlReport") {
+                        group = "verification"
+                        description = "Renders $taskName XML with rule IDs and violation count."
+                        doLast {
+                            val task = pmdTask.get()
+                            val xml = task.reports.xml.outputLocation.get().asFile
+                            val html = task.reports.html.outputLocation.get().asFile
+                            if (!started.get() && !task.state.upToDate && task.state.executed) {
+                                xml.delete()
+                                html.delete()
+                            } else if (xml.exists()) {
+                                html.parentFile.mkdirs()
+                                val stylesheet = project.rootProject.file("config/pmd/report.xsl")
+                                TransformerFactory.newInstance().newTransformer(StreamSource(stylesheet))
+                                    .transform(StreamSource(xml), StreamResult(html))
+                            } else if (started.get() && task.state.failure == null) {
+                                throw GradleException("$taskName did not produce a PMD XML report")
+                            }
+                        }
+                    }
+                    pmdTask.configure {
+                        reports.html.required.set(false)
+                        doFirst {
+                            started.set(true)
+                            reports.xml.outputLocation.get().asFile.delete()
+                            reports.html.outputLocation.get().asFile.delete()
+                        }
+                        finalizedBy(htmlTask)
+                    }
+                }
+            }
+        }
     }
 
     private companion object {
@@ -105,12 +154,27 @@ class JavaQualityPlugin : Plugin<Project> {
         val MUST_ERROR_PRONE_CHECKS = listOf(
             "ArrayEquals",
             "ArrayToString",
+            "CatchAndPrintStackTrace",
+            "DefaultCharset",
+            "DefaultLocale",
+            "EnumOrdinal",
             "EqualsIncompatibleType",
             "EqualsHashCode",
+            "FloatingPointLiteralPrecision",
+            "FutureReturnValueIgnored",
+            "IntLongMath",
+            "JavaTimeDefaultTimeZone",
+            "LockNotBeforeTry",
+            "MissingFail",
             "ModifyCollectionInEnhancedForLoop",
             "ModifySourceCollectionInStream",
             "NarrowCalculation",
             "NarrowingCompoundAssignment",
+            "NonAtomicVolatileUpdate",
+            "SynchronizeOnNonFinalField",
+            "TimeUnitConversionChecker",
+            "UnusedException",
+            "WaitNotInLoop",
         )
     }
 }

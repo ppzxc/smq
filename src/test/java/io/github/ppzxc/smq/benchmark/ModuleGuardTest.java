@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** 벤치 JVM이 smq를 모듈 경로에서 읽는지 확인하는 가드의 동작. */
 class ModuleGuardTest {
 
     @Test

@@ -22,10 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * 공개 API만으로 작성한 적합성 스위트. 저장소 팩토리만 하위 클래스가 정한다.
- * 다시 꺼내기 루프가 잘못되어도 무한 반복 대신 실패하도록 시간 제한을 둔다.
- */
 @Timeout(60)
 abstract class SmqConformanceTest {
 
@@ -37,7 +33,6 @@ abstract class SmqConformanceTest {
     final MutableClock clock = new MutableClock(T0);
     private final List<Smq> opened = new ArrayList<>();
 
-    /** 하위 클래스가 정하는 유일한 것. 저장소는 factory가 열고, 시각 주입과 리스 기간은 여기서 적용한다. */
     abstract StorageFactory factory();
 
     private Smq openWith(BuilderSettings settings) {
@@ -151,16 +146,12 @@ abstract class SmqConformanceTest {
     @Test
     void 빈_큐의_매우_긴_대기는_발행하면_깨어난다() throws Exception {
         Queue q = open().declare("wait-empty", QueueOptions.defaults());
-        try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+        try (var executor = Executors.newSingleThreadExecutor()) {
             var future = executor.submit(() -> q.pull(1, Duration.ofSeconds(Long.MAX_VALUE)));
             Thread.sleep(100);
             assertFalse(future.isDone());
             q.publish(msg("wake"));
-            assertEquals(
-                    "wake",
-                    text(future.get(5, java.util.concurrent.TimeUnit.SECONDS)
-                            .messages()
-                            .getFirst()));
+            assertEquals("wake", text(future.get(5, TimeUnit.SECONDS).messages().getFirst()));
         }
     }
 
@@ -574,9 +565,9 @@ abstract class SmqConformanceTest {
         q.pull(2, Duration.ZERO);
         assertEquals(new QueueCounts(1, 2, 0), q.counts());
         clock.advance(Duration.ofSeconds(10));
-        // 시각은 보지 않는다. 기한이 지났어도 저장된 상태(리스 토큰)가 남아 있어 리스 중이다.
+
         assertEquals(new QueueCounts(1, 2, 0), q.counts());
-        // 만료된 리스를 다시 꺼내면 리스 중에서 리스 중으로 가므로 그대로이고, 준비였던 메시지는 리스 중이 된다.
+
         q.pull(1, Duration.ZERO);
         assertEquals(new QueueCounts(1, 2, 0), q.counts());
         q.pull(2, Duration.ZERO);
@@ -651,7 +642,7 @@ abstract class SmqConformanceTest {
         Extension late = q.extend(first, Duration.ofSeconds(100));
 
         assertEquals(ids, late.outcomes().stale());
-        // b의 리스 토큰은 남아 있어 개수로는 리스 중이다. 되살아나지 않았음은 다시 꺼내지는 것으로 확인한다.
+
         assertEquals(new QueueCounts(0, 2, 0), q.counts());
         assertTrue(q.settle(second.ackAll()).allOk());
         Chunk third = q.pull(1, Duration.ZERO);
@@ -673,7 +664,7 @@ abstract class SmqConformanceTest {
 
         Extension ext = q.extend(slow, Duration.ofSeconds(100));
         assertEquals(List.of(ids.getFirst(), ids.get(1)), ext.outcomes().stale());
-        // 연장은 효력이 없으므로 fast의 리스는 그대로이고 기한이 되면 만료된다.
+
         assertEquals(new QueueCounts(0, 1, 0), q.counts());
         assertTrue(q.settle(fast.ackAll()).allOk());
     }
@@ -700,13 +691,12 @@ abstract class SmqConformanceTest {
 
         assertThrows(IllegalArgumentException.class, () -> b.settle(fromA.ackAll()));
         assertThrows(IllegalArgumentException.class, () -> b.extend(fromA, Duration.ofSeconds(100)));
-        // 빈 값도 큐 확인이 먼저다.
+
         assertThrows(IllegalArgumentException.class, () -> a.settle(emptySettlement));
         assertThrows(IllegalArgumentException.class, () -> a.extend(emptyFromB, Duration.ofSeconds(1)));
 
-        // 거부된 호출은 아무것도 바꾸지 않아 A의 리스는 그대로이고, 올바른 큐로는 정산된다.
         assertEquals(new QueueCounts(0, 1, 0), a.counts());
-        // 시각이 지나도 개수는 그대로다(저장된 상태 기준).
+
         clock.advance(Duration.ofSeconds(10));
         assertEquals(new QueueCounts(0, 1, 0), a.counts());
         assertTrue(a.settle(fromA.ackAll()).allOk());
@@ -809,7 +799,7 @@ abstract class SmqConformanceTest {
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
         Chunk c = q.pull(2, Duration.ZERO);
         assertTrue(q.settle(c.settle().nack(ids.get(1)).ackRest()).allOk());
-        // 아직 꺼내지 않은 c보다 NACK한 b가 먼저다.
+
         Chunk next = q.pull(10, Duration.ZERO);
         assertEquals(
                 List.of(ids.get(1), ids.get(2)),
@@ -832,7 +822,7 @@ abstract class SmqConformanceTest {
         for (int round = 0; round < 50; round++) {
             List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
             Chunk c = q.pull(3, Duration.ZERO);
-            // 3개 모두 리스 중이다. 정산 뒤에는 NACK한 b 하나만 준비로 남는다.
+
             assertEquals(new QueueCounts(0, 3, 0), q.counts());
             AtomicBoolean done = new AtomicBoolean();
             List<QueueCounts> seen = Collections.synchronizedList(new ArrayList<>());
@@ -846,7 +836,7 @@ abstract class SmqConformanceTest {
             done.set(true);
             observer.join();
             assertTrue(r.allOk());
-            // 한 큐의 세 값은 한 참조째 바뀐다. 정산 전이나 후의 값만 보이고 섞인 값은 보이지 않는다.
+
             assertTrue(
                     seen.stream()
                             .allMatch(n -> n.equals(new QueueCounts(0, 3, 0)) || n.equals(new QueueCounts(1, 0, 0))),
@@ -866,7 +856,7 @@ abstract class SmqConformanceTest {
         assertTrue(q.settle(s).allOk());
         Outcomes again = q.settle(s);
         assertEquals(ids, again.stale());
-        // NACK한 메시지는 준비 상태로 남아 있고 두 번째 반영이 건드리지 않는다.
+
         assertEquals(1, q.counts().ready());
     }
 
@@ -891,7 +881,7 @@ abstract class SmqConformanceTest {
         Chunk c = q.pull(1, Duration.ZERO);
         assertTrue(q.settle(c.settle().nack(id).build()).allOk());
         assertEquals(List.of(id), q.extend(c, Duration.ofSeconds(10)).outcomes().stale());
-        // 연장이 효력이 없으니 메시지는 계속 준비 상태다.
+
         assertEquals(1, q.counts().ready());
     }
 
@@ -1008,7 +998,7 @@ abstract class SmqConformanceTest {
                 .allOk());
         assertEquals(new QueueCounts(1, 0, 2), q.counts());
         clock.advance(Duration.ofSeconds(10));
-        // 시각은 보지 않는다. 지연이 끝났어도 다음에 꺼낼 때 반영된다.
+
         assertEquals(new QueueCounts(1, 0, 2), q.counts());
         assertEquals(3, q.pull(10, Duration.ZERO).messages().size());
         assertEquals(new QueueCounts(0, 3, 0), q.counts());
@@ -1033,7 +1023,7 @@ abstract class SmqConformanceTest {
         }
         assertThrows(IllegalArgumentException.class, () -> msg("a").withDelay(Duration.ZERO));
         assertThrows(IllegalArgumentException.class, () -> new OutgoingMessage(new byte[0], Map.of(), null));
-        // 잘못된 인자는 아무것도 바꾸지 않는다.
+
         assertEquals(new QueueCounts(0, 1, 0), q.counts());
     }
 
@@ -1062,13 +1052,10 @@ abstract class SmqConformanceTest {
                 q.pull(1, Duration.ZERO).messages().stream().map(Message::id).toList());
     }
 
-    // ---- 꺼내기 대기와 종료 (#29) ----
-
     private static long millisSince(long startNanos) {
         return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
     }
 
-    /** 대기 스레드가 꺼내기에 들어가 기다리기 시작할 시간을 준다. */
     private static void letWaiterBlock() throws InterruptedException {
         Thread.sleep(150);
     }
@@ -1108,7 +1095,7 @@ abstract class SmqConformanceTest {
         letWaiterBlock();
         long start = System.nanoTime();
         q.publish(msg("a"));
-        Chunk c = result.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        Chunk c = result.get(10, TimeUnit.SECONDS);
         assertEquals("a", text(c.messages().getFirst()));
         assertTrue(millisSince(start) < 1000);
     }
@@ -1128,7 +1115,7 @@ abstract class SmqConformanceTest {
         letWaiterBlock();
         assertFalse(result.isDone());
         clock.advance(Duration.ofMinutes(10));
-        Chunk c = result.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        Chunk c = result.get(10, TimeUnit.SECONDS);
         assertEquals("later", text(c.messages().getFirst()));
     }
 
@@ -1136,7 +1123,7 @@ abstract class SmqConformanceTest {
     void 기다리던_스레드를_interrupt하면_InterruptedException() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         var thrown = new java.util.concurrent.atomic.AtomicReference<Throwable>();
-        var interruptedFlag = new java.util.concurrent.atomic.AtomicBoolean();
+        var interruptedFlag = new AtomicBoolean();
         Thread t = Thread.ofPlatform().start(() -> {
             try {
                 q.pull(1, Duration.ofSeconds(30));
@@ -1175,7 +1162,7 @@ abstract class SmqConformanceTest {
         long start = System.nanoTime();
         smq.close();
         for (var f : results) {
-            assertTrue(f.get(10, java.util.concurrent.TimeUnit.SECONDS).isEmpty());
+            assertTrue(f.get(10, TimeUnit.SECONDS).isEmpty());
         }
         assertTrue(millisSince(start) < 2000);
     }
@@ -1242,7 +1229,7 @@ abstract class SmqConformanceTest {
         clock.advance(Duration.ofSeconds(10));
         try (var executor = Executors.newSingleThreadExecutor()) {
             var waiting = executor.submit(() -> dead.pull(1, Duration.ofSeconds(5)));
-            Thread.sleep(1050); // 폴링 간격이 상한에 도달한 뒤 이동한다.
+            Thread.sleep(1050);
             q.pull(1, Duration.ZERO);
             Chunk received = waiting.get(150, TimeUnit.MILLISECONDS);
             assertEquals("poison", text(received.messages().getFirst()));
@@ -1348,7 +1335,6 @@ abstract class SmqConformanceTest {
 
         assertEquals(List.of(id), q.settle(slow.settle().reject(id).build()).stale());
 
-        // 효력이 없었으므로 fast의 리스는 그대로다.
         assertEquals(new QueueCounts(0, 1, 0), q.counts());
         assertTrue(q.settle(fast.ackAll()).allOk());
     }
@@ -1607,7 +1593,7 @@ abstract class SmqConformanceTest {
         clock.advance(Duration.ofSeconds(5));
         assertEquals(
                 List.of("delayed", "after"),
-                result.get(1, java.util.concurrent.TimeUnit.SECONDS).messages().stream()
+                result.get(1, TimeUnit.SECONDS).messages().stream()
                         .map(SmqConformanceTest::text)
                         .toList());
         waiter.join();
@@ -1688,7 +1674,7 @@ abstract class SmqConformanceTest {
         assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
         clock.advance(Duration.ofSeconds(9));
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
-        // 기한과 정확히 같은 시각에는 리스가 이미 끝난 것이다(기한 직전까지만 막는다).
+
         clock.advance(Duration.ofSeconds(1));
         assertEquals("a", text(q.pull(1, Duration.ZERO).messages().getFirst()));
     }
@@ -1696,7 +1682,7 @@ abstract class SmqConformanceTest {
     @Test
     void 단일_활성_컨슈머_큐에서_여러_스레드가_동시에_꺼내도_리스_중인_청크는_하나다() throws Exception {
         Smq smq = open(Duration.ofMinutes(10));
-        // 검사와 리스 부여가 한 단위가 아니면 아주 짧은 틈에서만 깨지므로, 새 큐로 여러 번 겨룬다.
+
         for (int round = 0; round < ROUNDS; round++) {
             Queue q = smq.declare("q" + round, QueueOptions.defaults().singleActiveConsumer(true));
             q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d"), msg("e"), msg("f")));
@@ -1716,25 +1702,20 @@ abstract class SmqConformanceTest {
     private static final int ROUNDS = 300;
 
     @Test
+    @SuppressWarnings("PMD.SystemPrintln")
     void 여러_스레드가_동시에_꺼내도_같은_메시지가_두_리스에_묶이지_않는다() throws Exception {
         Smq smq = open(Duration.ofMinutes(10));
         int roundsWithEmptyChunk = assertConcurrentPullContract(smq);
         System.out.println("동시 꺼내기 " + ROUNDS + "라운드 중 메시지가 남았는데 빈 청크가 나온 라운드: " + roundsWithEmptyChunk);
     }
 
-    /**
-     * ADR-0016 계약: lock 하한을 넘는 경합에서 wait=0 꺼내기는 빈 청크를 돌려줄 수 있다. 그래서 "모두 전달"은 검사하지 않고
-     * 안전성(이중 리스 없음), 보존(유실 없음), 최소 진행(처음 lock을 잡은 풀러는 2건)을 검사한다.
-     * 메시지가 남았는데 빈 청크가 나온 라운드 수를 돌려준다(실패 기준이 아니다).
-     */
     static int assertConcurrentPullContract(Smq smq) throws Exception {
         return assertConcurrentPullContract(smq, "race");
     }
 
-    /** 같은 {@code smq}에서 여러 번 부를 수 있도록 큐 이름 접두어를 받는다. */
     static int assertConcurrentPullContract(Smq smq, String queuePrefix) throws Exception {
         int roundsWithEmptyChunk = 0;
-        // 경합은 아주 짧은 틈에서만 깨지므로, 라운드마다 새 큐로 여러 번 겨룬다.
+
         for (int round = 0; round < ROUNDS; round++) {
             Queue q = smq.declare(queuePrefix + round, QueueOptions.defaults());
             q.publish(List.of(msg("a"), msg("b"), msg("c"), msg("d"), msg("e"), msg("f")));
@@ -1756,12 +1737,10 @@ abstract class SmqConformanceTest {
             assertEquals(0, counts.delayed(), "지연됨이 0이 아니다 " + detail);
             assertTrue(ids.size() >= 2, "lock을 처음 잡은 풀러가 2건을 꺼내지 못했다 " + detail);
 
-            // 풀러 8개가 6건을 2건씩 나누면 3개만 받는 것이 정상이다. 6건보다 적게 나갔다면 메시지가 있는데 빈 청크가 나온 것이다.
             if (ids.size() < 6) {
                 roundsWithEmptyChunk++;
             }
 
-            // 경합이 끝난 뒤 대기를 주고 꺼내면 남은 준비 메시지가 전부 나와야 한다.
             int remaining = (int) counts.ready();
             if (remaining > 0) {
                 Chunk rest = q.pull(remaining, Duration.ofSeconds(5));
@@ -1887,16 +1866,13 @@ abstract class SmqConformanceTest {
         Chunk holding = q.pull(2, Duration.ZERO);
         assertTrue(q.settle(holding.settle().nack(x, Duration.ofSeconds(5)).build())
                 .allOk());
-        // x는 지연 중이고 y는 같은 청크의 리스를 유지한다(10초).
 
-        // 지연이 끝나 x는 도달한 준비 메시지지만, y의 리스가 살아 있으므로 빈 청크이고 옮기지 않는다.
         clock.advance(Duration.ofSeconds(6));
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
-        // x는 지연이 끝났어도 저장된 상태가 지연됨이다.
+
         assertEquals(new QueueCounts(0, 1, 1), q.counts());
         assertEquals(new QueueCounts(0, 0, 0), dead.counts());
 
-        // 리스가 끝나면 다음 꺼내기가 x와 y를 옮긴다.
         clock.advance(Duration.ofSeconds(4));
         assertTrue(q.pull(1, Duration.ZERO).isEmpty());
         assertEquals(new QueueCounts(0, 0, 0), q.counts());
@@ -1925,7 +1901,6 @@ abstract class SmqConformanceTest {
                     () -> extension.set(q.extend(old, Duration.ofSeconds(100))),
                     () -> again.set(q.pull(1, Duration.ZERO))));
 
-            // 연장이 먼저면 아직 리스 중이라 꺼낼 수 없고, 꺼내기가 먼저면 이전 리스는 STALE이다.
             boolean extended = extension.get().outcomes().allOk();
             boolean pulled = !again.get().isEmpty();
             assertTrue(extended ^ pulled, "round " + round + " extended=" + extended + " pulled=" + pulled);
@@ -1937,7 +1912,6 @@ abstract class SmqConformanceTest {
         void run() throws Exception;
     }
 
-    /** 모든 작업을 래치 뒤에서 동시에 시작해 끝날 때까지 기다리고, 작업이 던진 예외는 테스트 실패로 올린다. */
     static void runConcurrently(List<ThrowingRunnable> tasks) throws InterruptedException {
         var start = new java.util.concurrent.CountDownLatch(1);
         var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();

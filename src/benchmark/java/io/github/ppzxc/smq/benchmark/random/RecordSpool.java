@@ -87,6 +87,7 @@ final class RecordSpool implements AutoCloseable {
 
     /** 버퍼를 내보내고 닫는다. 검사가 읽기 전에 불러야 한다. */
     @Override
+    @SuppressWarnings("PMD.UseTryWithResources")
     public void close() throws IOException {
         try {
             synchronized (publishedLock) {

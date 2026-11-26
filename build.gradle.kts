@@ -44,6 +44,8 @@ repositories {
 }
 
 dependencies {
+    pmd("net.sourceforge.pmd:pmd-ant:7.29.0")
+    pmd(project(":pmd-rules"))
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
     compileOnlyApi("org.jspecify:jspecify:1.0.1")
 
@@ -240,13 +242,21 @@ val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
 }
 tasks.check { dependsOn(verifyJarExcludesBenchmark, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
 
-tasks.register<Exec>("checkJavaImplementationComments") {
-    group = "verification"
-    description = "신규 프로덕션 Java 구현 주석이 기준선에 추가되지 않았는지 확인한다."
-    commandLine(if (System.getProperty("os.name").startsWith("Windows")) "python" else "python3",
-        "scripts/test_check_java_comments.py")
+val commentRules = layout.projectDirectory.file("config/pmd/comments.xml")
+listOf("main", "test").forEach { sourceName ->
+    val sourceSet = sourceSets[sourceName]
+    val task = tasks.register<org.gradle.api.plugins.quality.Pmd>("pmd${sourceName.replaceFirstChar(Char::uppercase)}Comments") {
+        group = "verification"
+        source(sourceSet.allJava)
+        exclude("**/generated/**", "**/generated-sources/**")
+        classpath = files(sourceSet.output, sourceSet.compileClasspath)
+        ruleSetFiles = files(commentRules)
+        ruleSets = emptyList()
+        ignoreFailures = false
+    }
+    tasks.check { dependsOn(task) }
 }
-tasks.check { dependsOn("checkJavaImplementationComments") }
+tasks.check { dependsOn(":pmd-rules:test") }
 
 tasks.test {
     useJUnitPlatform()

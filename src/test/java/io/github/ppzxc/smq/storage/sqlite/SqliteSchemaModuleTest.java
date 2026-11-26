@@ -14,7 +14,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** 스키마 모듈을 인터페이스로만 본다. 호출한 쪽의 쓰기 트랜잭션은 이 테스트가 연다. */
 class SqliteSchemaModuleTest {
 
     @TempDir
@@ -37,7 +36,6 @@ class SqliteSchemaModuleTest {
         }
     }
 
-    /** 쓰기 트랜잭션 안에서 판정하고, 성공하면 커밋, 예외면 롤백한다. */
     private static int establishInTransaction(SqliteSchema schema, Connection c) throws SQLException {
         exec(c, "BEGIN IMMEDIATE");
         try {
@@ -116,7 +114,6 @@ class SqliteSchemaModuleTest {
                             1, conn -> exec(conn, "CREATE TABLE step_a (n INTEGER)"),
                             2,
                                     conn -> {
-                                        // v2 단계의 결과가 보이는 상태에서 v3 단계가 실행된다.
                                         exec(conn, "CREATE TABLE step_b AS SELECT count(*) AS n FROM step_a");
                                         assertEquals("2", query(conn, "PRAGMA user_version"));
                                     }));

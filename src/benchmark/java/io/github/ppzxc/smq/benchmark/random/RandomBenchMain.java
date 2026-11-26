@@ -6,9 +6,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.SplittableRandom;
 import jdk.jfr.Configuration;
@@ -19,6 +21,7 @@ public final class RandomBenchMain {
 
     private RandomBenchMain() {}
 
+    @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws IOException {
         ModuleGuard.requireSmqModule("부모 JVM");
         Options o;
@@ -46,6 +49,7 @@ public final class RandomBenchMain {
         return limits;
     }
 
+    @SuppressWarnings({"PMD.SystemPrintln", "PMD.UseTryWithResources"})
     static int run(Options o) throws IOException {
         Files.createDirectories(o.outDir());
         Path workRoot = o.outDir().resolve("work");
@@ -56,7 +60,9 @@ public final class RandomBenchMain {
             limits = limits.withDurability(o.durability().get());
         }
         Path jsonLines = o.outDir()
-                .resolve("runs-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                .resolve("runs-"
+                        + LocalDateTime.now(ZoneId.systemDefault())
+                                .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT))
                         + ".jsonl");
 
         Iterator<Long> seeds;
@@ -70,10 +76,12 @@ public final class RandomBenchMain {
         } else {
             SplittableRandom master = new SplittableRandom(o.masterSeed());
             seeds = new Iterator<>() {
+                @Override
                 public boolean hasNext() {
                     return true;
                 }
 
+                @Override
                 public Long next() {
                     return master.nextLong();
                 }

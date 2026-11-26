@@ -10,12 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import org.jspecify.annotations.Nullable;
 
-/**
- * DB 옆의 전용 락 파일에 거는 OS 배타 락. 한 JVM만 저장소를 열게 한다(ADR-0012).
- *
- * <p>락은 DB 파일이 아니라 별도 파일에 건다. POSIX 락은 같은 프로세스가 그 파일의 다른 핸들을 닫으면 풀리기
- * 때문이다. 락 파일은 닫은 뒤에도 남기며, 존재가 아니라 OS 락으로 판단한다. 프로세스가 죽으면 OS가 락을 푼다.
- */
 final class StorageLock implements AutoCloseable {
 
     private static final System.Logger LOG = System.getLogger(StorageLock.class.getName());
@@ -32,12 +26,6 @@ final class StorageLock implements AutoCloseable {
         return db.resolveSibling(db.getFileName() + ".lock");
     }
 
-    /**
-     * 락을 잡는다.
-     *
-     * @throws StorageLockedException 다른 프로세스나 같은 JVM이 이미 쥐고 있을 때
-     * @throws SmqStorageException 락 파일을 만들거나 잠그지 못했을 때(권한, 경로 없음 등)
-     */
     static StorageLock acquire(Path db) {
         Path lockPath = lockPathOf(db);
         FileChannel channel;

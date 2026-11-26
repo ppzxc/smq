@@ -10,6 +10,7 @@ public final class ChildMain {
 
     private ChildMain() {}
 
+    @SuppressWarnings("PMD.SystemPrintln")
     public static void main(String[] args) throws Exception {
         if (args.length != 4) {
             System.err.println("사용법: ChildMain <specArg> <role> <dbPath> <startAtEpochMs>");

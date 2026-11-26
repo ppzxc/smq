@@ -9,17 +9,6 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-/**
- * 꺼내기 대기 루프. 저장소 {@code pull}은 기다리지 않으므로 코어가 여기서 기다린다.
- * 결과가 비면 두 갈래로 기다린다.
- * <ul>
- *   <li>저장소가 변경 힌트를 내면 힌트를 기다린다. 힌트는 거짓 깨움과 누락을 허용하고 지연됨에서 준비로 바뀌는
- *       시점은 알리지 못하므로, 기다림에는 폴링 간격 상한({@link #MAX_POLL_INTERVAL_NANOS})을 둔다.</li>
- *   <li>힌트가 없으면 1ms에서 250ms까지 늘어나는 폴링 간격으로 폴링한다. 같은 프로세스 안의 변경은
- *       코어가 만든 지역 신호로 간격을 기다리는 중에도 바로 깨운다.</li>
- * </ul>
- * {@code wait}와 폴링 간격은 주입한 시계가 아니라 단조 시계로 잰다.
- */
 final class PullWaiter {
 
     private static final long MIN_POLL_INTERVAL_NANOS = Duration.ofMillis(1).toNanos();
@@ -62,7 +51,6 @@ final class PullWaiter {
         this.newQueueHint = newQueueHint;
     }
 
-    /** 같은 프로세스 안의 변경을 알려 기다리던 꺼내기를 깨운다. 저장소와 상관없이 코어가 부른다. */
     void wake() {
         hint.wake();
         synchronized (queues) {
@@ -89,13 +77,11 @@ final class PullWaiter {
         }
     }
 
-    /** 닫히면 대기자는 빈 결과로 깨어난다. */
     void close() {
         closed.set(true);
         wake();
     }
 
-    /** 한 번 꺼내 본 결과. 결과가 있거나, 비어서 기다리거나, 비었지만 바로 다시 꺼낸다. */
     sealed interface Attempt<T> {
 
         record Found<T>(T value) implements Attempt<T> {}
@@ -108,7 +94,6 @@ final class PullWaiter {
             return new Found<>(value);
         }
 
-        /** 비었다. 힌트나 폴링 간격만큼 기다린 뒤 다시 꺼낸다. */
         static <T> Attempt<T> empty() {
             return empty(Duration.ZERO);
         }
@@ -117,7 +102,6 @@ final class PullWaiter {
             return new Empty<>(untilReady);
         }
 
-        /** 비었지만 기다리지 않고 바로 다시 꺼낸다. 그 사이에도 닫힘과 interrupt는 확인한다. */
         static <T> Attempt<T> retryNow() {
             return new RetryNow<>();
         }
@@ -128,10 +112,6 @@ final class PullWaiter {
         Attempt<T> get() throws InterruptedException;
     }
 
-    /**
-     * @param attempt 한 번 꺼내 본다
-     * @param empty 시간이 다했거나 닫혔을 때의 빈 결과
-     */
     <T> T await(Duration wait, InterruptibleAttempt<T> attempt, Supplier<T> empty) throws InterruptedException {
         return await(hint, System.nanoTime() + Validation.saturatedWaitNanos(wait), attempt, empty);
     }
@@ -150,7 +130,8 @@ final class PullWaiter {
             return await(signal.hint, deadline, attempt, empty);
         } finally {
             synchronized (queues) {
-                if (--signal.users == 0) {
+                signal.users--;
+                if (signal.users == 0) {
                     queues.remove(queue);
                 }
             }

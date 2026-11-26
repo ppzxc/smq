@@ -16,10 +16,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * 커밋된 {@code schema-v1.db} 견본(재생성 방법은 같은 폴더의 README)을 복사해 연다. 공개 API로만 보존을 확인하고,
- * JDBC는 별도 파일 상태를 꾸미는 데만 쓴다.
- */
 class SchemaV1SampleTest {
 
     static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
@@ -58,7 +54,7 @@ class SchemaV1SampleTest {
     @Test
     void 견본을_열면_메시지_id_전달_횟수_헤더가_보존되고_리스_기한에_재전달된다() throws Exception {
         Path copy = StorageFactory.copyV1Sample(dir.resolve("smq.db"));
-        // 버전 1은 지연이 끝난 메시지를 리스하면서도 꺼낼 시각을 남겼다.
+
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + copy);
                 PreparedStatement ps = c.prepareStatement("""
                         UPDATE message SET published_at = published_at - 2, available_at = published_at - 1
@@ -72,7 +68,6 @@ class SchemaV1SampleTest {
         try (Smq smq = Smq.sqlite(copy).clock(clock).open()) {
             Queue orders = smq.queue("v1-orders");
 
-            // 준비 상태 메시지
             Chunk ready = orders.pull(10, Duration.ZERO, Duration.ofMinutes(1));
             assertEquals(List.of("m3", "m4"), texts(ready));
             assertEquals(
@@ -84,7 +79,6 @@ class SchemaV1SampleTest {
                     ready.messages().stream().map(Message::id).toList());
             assertTrue(orders.settle(ready.ackAll()).allOk());
 
-            // 리스 기한 직전까지는 리스 중이고, 기한이 되면 다시 꺼낼 수 있다
             clock.advance(Duration.ofHours(1).minusSeconds(1));
             assertTrue(orders.pull(10, Duration.ZERO).isEmpty());
             clock.advance(Duration.ofSeconds(1));
@@ -100,10 +94,9 @@ class SchemaV1SampleTest {
                     new MessageId(IDS_M1), redelivered.messages().getFirst().id());
             assertEquals(T0.minusNanos(2), redelivered.messages().getFirst().publishedAt());
 
-            // 지연됨 메시지는 지연 시간이 지나야 나온다
             assertEquals(new QueueCounts(0, 2, 1), orders.counts());
             clock.advance(Duration.ofHours(1));
-            // 지연이 끝나도 꺼내기 전까지는 지연됨으로 센다.
+
             assertEquals(new QueueCounts(0, 2, 1), orders.counts());
             Message delayed = orders.pull(10, Duration.ZERO).messages().getFirst();
             assertEquals("m5", text(delayed));
@@ -142,6 +135,5 @@ class SchemaV1SampleTest {
         assertThrows(IncompatibleStorageException.class, () -> Smq.sqlite(copy).open());
     }
 
-    // 견본을 만들 때 큐가 붙인 id(poison이 2)
     static final long IDS_M1 = 3, IDS_M3 = 5, IDS_M4 = 6;
 }

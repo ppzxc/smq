@@ -13,10 +13,6 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * 디스크 기록의 조각 검사. 기록을 몇 조각으로 나누든 한 번에 검사한 결과와 같아야 한다. 그렇지 않으면 조각 경계에서 위반을 놓치거나
- * 지어낸다.
- */
 class SpoolCheckTest {
 
     private static final InvariantChecker.Config CONFIG = new InvariantChecker.Config(false, 0);
@@ -39,22 +35,18 @@ class SpoolCheckTest {
         return new Content(seq * 1_000_003L, Map.of("n", Long.toString(seq)));
     }
 
-    /** 발행하고 한 번에 꺼내 ACK한 메시지. */
     private void good(long seq, long publishedAt, long pulledAt) {
         Tag t = tag(seq);
         pub.add(new Published(t, content(seq), publishedAt, 0));
-        del.add(delivery(t, seq, 1, chunk++, 0, pulledAt, Settle.ack(pulledAt + 5)));
+        del.add(delivery(t, seq, 1, chunk, 0, pulledAt, Settle.ack(pulledAt + 5)));
+        chunk++;
     }
 
     private Delivery delivery(Tag t, long seq, int count, long chunkId, int position, long at, Settle settle) {
+        long id = nextId;
+        nextId++;
         return new Delivery(
-                QueueKind.TARGET,
-                t,
-                nextId++,
-                count,
-                content(seq),
-                new Pull(chunkId, position, at, at + 30_000),
-                settle);
+                QueueKind.TARGET, t, id, count, content(seq), new Pull(chunkId, position, at, at + 30_000), settle);
     }
 
     private static List<CountsSample> drained() {
@@ -100,16 +92,16 @@ class SpoolCheckTest {
         for (long s = 0; s < 120; s++) {
             good(s, 1_100, 1_200);
         }
-        // 유실: 발행했지만 한 번도 꺼내지 않았다.
+
         pub.add(new Published(tag(900), content(900), 1_100, 0));
-        // 유령: 발행하지 않은 태그가 전달됐다.
+
         del.add(delivery(tag(901), 901, 1, 500, 0, 1_300, Settle.ack(1_305)));
-        // 중복: ACK가 반영된 뒤 다시 전달됐다.
+
         Tag dup = tag(902);
         pub.add(new Published(dup, content(902), 1_100, 0));
         del.add(delivery(dup, 902, 1, 501, 0, 1_200, Settle.ack(1_205)));
         del.add(delivery(dup, 902, 2, 502, 0, 1_400, Settle.ack(1_405)));
-        // 청크 순서: 한 청크 안에서 메시지 id가 줄어든다. 두 태그가 서로 다른 조각에 가도록 여러 태그를 쓴다.
+
         for (int i = 0; i < 6; i++) {
             Tag t = tag(950 + i);
             pub.add(new Published(t, content(950 + i), 1_100, 0));
@@ -133,10 +125,10 @@ class SpoolCheckTest {
 
     @Test
     void 부하_구간에_발행한_수와_첫_전달_지연을_센다() throws Exception {
-        good(1, 500, 1_100); // 부하 전에 발행: 세지 않는다.
-        good(2, 1_100, 1_150); // 지연 50ms
-        good(3, 1_500, 1_900); // 지연 400ms
-        good(4, 1_950, 2_100); // 꺼낸 시각이 구간 밖: 지연에 넣지 않는다.
+        good(1, 500, 1_100);
+        good(2, 1_100, 1_150);
+        good(3, 1_500, 1_900);
+        good(4, 1_950, 2_100);
         spool();
         SpoolCheck.Result r = SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, 3);
         assertEquals(3, r.publishedInLoad());
@@ -149,29 +141,31 @@ class SpoolCheckTest {
         for (long s = 0; s < 60; s++) {
             good(s, 1_100, 1_200);
         }
-        // 두 태그가 같은 큐의 같은 메시지 id로 전달됐다. 태그가 다르므로 태그 조각은 서로 다를 수 있다.
+
         for (int i = 0; i < 20; i++) {
             Tag a = tag(700 + 2 * i);
             Tag b = tag(701 + 2 * i);
             pub.add(new Published(a, content(700 + 2 * i), 1_100, 0));
             pub.add(new Published(b, content(701 + 2 * i), 1_100, 0));
-            long id = 5_000 + i;
+            long id = 5_000L + i;
             del.add(new Delivery(
                     QueueKind.TARGET,
                     a,
                     id,
                     1,
                     content(700 + 2 * i),
-                    new Pull(chunk++, 0, 1_300, 31_300),
+                    new Pull(chunk, 0, 1_300, 31_300),
                     Settle.ack(1_305)));
+            chunk++;
             del.add(new Delivery(
                     QueueKind.TARGET,
                     b,
                     id,
                     1,
                     content(701 + 2 * i),
-                    new Pull(chunk++, 0, 1_300, 31_300),
+                    new Pull(chunk, 0, 1_300, 31_300),
                     Settle.ack(1_305)));
+            chunk++;
         }
         spool();
         assertTrue(InvariantChecker.check(CONFIG, pub, del, drained()).stream()
@@ -211,7 +205,7 @@ class SpoolCheckTest {
     @Test
     void 위반이_상한을_넘으면_상한까지만_모은다() throws Exception {
         for (long s = 0; s < SpoolCheck.MAX_VIOLATIONS + 200L; s++) {
-            pub.add(new Published(tag(s), content(s), 1_100, 0)); // 모두 유실
+            pub.add(new Published(tag(s), content(s), 1_100, 0));
         }
         spool();
         SpoolCheck.Result r = SpoolCheck.run(dir, CONFIG, drained(), LOAD_START, LOAD_END, 2);

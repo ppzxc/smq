@@ -148,7 +148,7 @@ record RunParams(
 
     /** 메시지 크기 범위에서 어림한 평균 크기(바이트). 하한이 없으면 로그 균등으로 보고 상한의 4분의 1로 어림한다. 미리 채우기와 쌓임 상한을 바이트로 환산할 때 쓴다. */
     static long avgMessageBytes(int minMessageBytes, int maxMessageBytes) {
-        return (minMessageBytes > 0 ? (minMessageBytes + maxMessageBytes) / 2 : maxMessageBytes / 4) + 64;
+        return (minMessageBytes > 0 ? ((long) minMessageBytes + maxMessageBytes) / 2 : maxMessageBytes / 4) + 64;
     }
 
     /** 고정 속도 모드인가. */

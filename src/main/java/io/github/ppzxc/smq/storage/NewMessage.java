@@ -7,7 +7,7 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /** 발행할 메시지 한 건. {@code delay}가 {@link Duration#ZERO}이면 지연이 없다. */
-@SuppressWarnings("ArrayRecordComponent")
+@SuppressWarnings("ArrayRecordComponent") // Internal storage input retains its caller-owned payload.
 public record NewMessage(byte[] payload, Map<String, String> headers, Duration delay) {
 
     public NewMessage {

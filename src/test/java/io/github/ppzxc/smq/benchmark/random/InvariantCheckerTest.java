@@ -34,7 +34,6 @@ class InvariantCheckerTest {
         return new Published(tag(n), content(n), T0, delay);
     }
 
-    /** 대상 큐 전달. 청크 번호는 메시지마다 달라 서로 겹치지 않게 둔다. */
     private static Delivery target(long n, long id, int count, long at, Settle settle) {
         return new Delivery(
                 QueueKind.TARGET, tag(n), id, count, content(n), new Pull(n * 100 + count, 0, at, at + LEASE), settle);
@@ -96,32 +95,28 @@ class InvariantCheckerTest {
         assertEquals(ids, v.getFirst().messageIds());
     }
 
-    // ---- 정상 기록
-
     @Test
     void cleanRunWithRedeliveryDeadLetterAndDelaysPasses() {
         List<Published> p = List.of(pub(1), pub(2), pub(3), pub(4), pubDelayed(5, 1_000));
         List<Delivery> d = new ArrayList<>();
         d.add(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)));
-        // 2: NACK(지연 500ms) 뒤 재전달, 그 뒤 ACK
+
         d.add(target(2, 12, 1, T0 + 10, Settle.nack(T0 + 20, 500)));
         d.add(target(2, 12, 2, T0 + 520, Settle.ack(T0 + 530)));
-        // 3: 정산 안 함, 리스 만료 뒤 재전달 뒤 reject -> dead letter
+
         d.add(target(3, 13, 1, T0 + 10, Settle.NONE));
         d.add(target(3, 13, 2, T0 + 10 + LEASE, Settle.reject(T0 + LEASE + 20)));
         d.add(deadLetter(3, 1, dlHeaders(3, "rejected", 13, 2), T0 + LEASE + 30, Settle.ack(T0 + LEASE + 40)));
-        // 4: 최대 전달 3회 소진 -> dead letter
+
         d.add(target(4, 14, 1, T0 + 10, Settle.nack(T0 + 20, 0)));
         d.add(target(4, 14, 2, T0 + 30, Settle.nack(T0 + 40, 0)));
         d.add(target(4, 14, 3, T0 + 50, Settle.nack(T0 + 60, 0)));
         d.add(deadLetter(4, 2, dlHeaders(4, "max-deliveries", 14, 3), T0 + 70, Settle.ack(T0 + 80)));
-        // 5: 발행 지연 1s 뒤 전달
+
         d.add(target(5, 15, 1, T0 + 1_010, Settle.ack(T0 + 1_020)));
 
         assertEquals(List.of(), check(MAX3, p, d));
     }
-
-    // ---- 1. 유실 없음
 
     @Test
     void publishedTagNeverDeliveredIsLoss() {
@@ -153,7 +148,7 @@ class InvariantCheckerTest {
 
     @Test
     void ackedTwiceIsReportedAsDuplicate() {
-        // 같은 태그가 서로 다른 메시지 id로 두 번 들어와 둘 다 ACK됐다
+
         List<Delivery> d =
                 List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(1, 12, 1, T0 + 10, Settle.ack(T0 + 20)));
         List<Violation> v = check(PLAIN, List.of(pub(1)), d);
@@ -161,8 +156,6 @@ class InvariantCheckerTest {
         assertFalse(v.isEmpty());
         assertEquals(List.of(tag(1)), v.getFirst().tags());
     }
-
-    // ---- 2. 유령 없음
 
     @Test
     void unpublishedTagIsGhost() {
@@ -196,8 +189,6 @@ class InvariantCheckerTest {
                 Settle.ack(T0 + 20));
         assertSingle(check(PLAIN, List.of(pub(1)), List.of(d)), Invariant.GHOST, List.of(tag(1)), List.of(11L));
     }
-
-    // ---- 3. at-least-once 범위의 중복
 
     @Test
     void redeliveryAfterOkAckIsDuplicate() {
@@ -257,8 +248,6 @@ class InvariantCheckerTest {
                 target(1, 11, 4, T0 + 70, Settle.ack(T0 + 80)));
         assertSingle(check(MAX3, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
-
-    // ---- 4. dead letter 이동 정확성
 
     @Test
     void rejectWithoutMoveIsDeadLetterViolation() {
@@ -342,8 +331,6 @@ class InvariantCheckerTest {
         assertEquals(List.of(tag(1)), v.getFirst().tags());
     }
 
-    // ---- 5. 지연 준수
-
     @Test
     void publishDelayShortOfToleranceIsViolation() {
         List<Delivery> d = List.of(target(1, 11, 1, T0 + 1_000 - 51, Settle.ack(T0 + 1_000)));
@@ -372,11 +359,9 @@ class InvariantCheckerTest {
         assertEquals(List.of(), check(PLAIN, List.of(pub(1)), d));
     }
 
-    // ---- 6. 단일 활성 컨슈머
-
     @Test
     void overlappingChunksOnSingleActiveQueueIsViolation() {
-        // 청크 1은 리스가 T0+5010까지 살아 있는데 청크 2가 T0+1000에 꺼내졌다
+
         List<Delivery> d = List.of(
                 targetIn(1, 11, 1, 1, 0, T0 + 10, T0 + 5_010, Settle.NONE),
                 targetIn(2, 12, 1, 2, 0, T0 + 1_000, T0 + 6_000, Settle.ack(T0 + 1_100)),
@@ -435,8 +420,6 @@ class InvariantCheckerTest {
                 List.of(11L, 12L));
     }
 
-    // ---- 7. counts 일관성
-
     @Test
     void nonZeroCountsAfterDrainIsViolation() {
         List<CountsSample> s = List.of(
@@ -470,8 +453,6 @@ class InvariantCheckerTest {
         assertEquals(1, v.size());
         assertTrue(v.getFirst().detail().contains("DEAD_LETTER"), v.getFirst().detail());
     }
-
-    // ---- 8. 청크 안 메시지 id 순서
 
     @Test
     void descendingIdsInsideChunkIsViolation() {

@@ -21,7 +21,6 @@ class ComparatorTest {
                 .orElseThrow(() -> new AssertionError("검사 없음: " + name + " in " + checks));
     }
 
-    /** 표본이 하나인 입력. 기존 단일 값 테스트가 쓴다. */
     private static List<Check> compare(Map<String, Double> r, Map<String, Double> baseline) {
         Map<String, List<Double>> samples = new LinkedHashMap<>();
         r.forEach((k, v) -> samples.put(k, List.of(v)));
@@ -54,7 +53,7 @@ class ComparatorTest {
 
     @Test
     void ratioIsJudgedByTheMedianOfPerRoundRatios() {
-        // 바퀴별 비율 60%, 74%, 80%: 중앙값 74%. 한 바퀴가 하한 아래여도 PASS.
+
         Check c = ratioCheck(List.of(6000.0, 7400.0, 8000.0), List.of(10000.0, 10000.0, 10000.0));
         assertEquals(Status.PASS, c.status());
         assertTrue(c.detail().contains("74.0%"), c.detail());
@@ -69,7 +68,7 @@ class ComparatorTest {
 
     @Test
     void ratioMedianOfEvenNumberOfRoundsAveragesTheMiddleTwo() {
-        // 비율 60%, 80% -> 중앙값 70% (정확히 하한)
+
         Check c = ratioCheck(List.of(6000.0, 8000.0), List.of(10000.0, 10000.0));
         assertEquals(Status.PASS, c.status());
         assertTrue(c.detail().contains("70.0%"), c.detail());
@@ -85,9 +84,7 @@ class ComparatorTest {
 
     @Test
     void ratioPairsNumeratorAndDenominatorOfTheSameRound() {
-        // 바퀴별 비율: 100/100=100%, 50/100=50%, 90/100=90% -> 중앙값 90%.
-        // 값끼리 따로 중앙값을 내면 분자 90 / 분모 100도 90%지만, 분모가 흔들리는 경우를 구분한다:
-        // 분자 [10, 50, 90], 분모 [100, 50, 100]: 비율 10%, 100%, 90% -> 중앙값 90%. 따로 중앙값이면 50/100=50% FAIL.
+
         Check c = ratioCheck(List.of(10.0, 50.0, 90.0), List.of(100.0, 50.0, 100.0));
         assertEquals(Status.PASS, c.status());
         assertTrue(c.detail().contains("90.0%"), c.detail());
@@ -134,13 +131,13 @@ class ComparatorTest {
     @Test
     void floorAndRegressionUseTheMedianOfSamples() {
         String p1 = S1P1;
-        Map<String, List<Double>> r = Map.of(p1, List.of(9000.0, 16000.0, 10500.0, 20000.0)); // 중앙값 13250
+        Map<String, List<Double>> r = Map.of(p1, List.of(9000.0, 16000.0, 10500.0, 20000.0));
         List<Check> c = Comparator.compare(r, Map.of(p1, 16000.0));
         assertEquals(
                 Status.PASS, find(c, "floor S1 P1 POWER_LOSS >= 10000 msg/s").status());
         assertTrue(find(c, "floor S1 P1 POWER_LOSS >= 10000 msg/s").detail().contains("13250"));
         assertTrue(find(c, "regression " + p1).detail().contains("13250"));
-        assertEquals(Status.PASS, find(c, "regression " + p1).status()); // -17.2%
+        assertEquals(Status.PASS, find(c, "regression " + p1).status());
     }
 
     @Test
@@ -194,9 +191,9 @@ class ComparatorTest {
         String lat = "sqlite/S3/P1/POWER_LOSS/empty:p50Ms";
         Map<String, Double> base = Map.of(S1P1, 20_000.0, lat, 2.0, "sqlite/S2/P1/POWER_LOSS/empty:msgPerSec", 100.0);
         Map<String, Double> r = new HashMap<>();
-        r.put(S1P1, 16_000.0); // 정확히 -20%: 통과
-        r.put(lat, 2.41); // +20% 초과: 실패
-        r.put("sqlite/S2/P1/POWER_LOSS/empty:msgPerSec", 79.0); // -21%: 실패
+        r.put(S1P1, 16_000.0);
+        r.put(lat, 2.41);
+        r.put("sqlite/S2/P1/POWER_LOSS/empty:msgPerSec", 79.0);
         List<Check> c = compare(r, base);
         assertEquals(Status.PASS, find(c, "regression " + S1P1).status());
         assertEquals(Status.FAIL, find(c, "regression " + lat).status());

@@ -9,10 +9,6 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * 공개 builder 경로를 따로 지키는 smoke 테스트. 적합성 스위트는 저장소 factory로 열어서 builder를 거치지 않는다.
- * 열기, 선언, 발행, 꺼내기, ACK 한 바퀴와 시각 주입, 리스 기간 반영을 본다.
- */
 class BuilderSmokeTest {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
@@ -64,7 +60,6 @@ class BuilderSmokeTest {
         assertTrue(q.settle(chunk.ackAll()).allOk());
         assertEquals(new QueueCounts(0, 0, 0), q.counts());
 
-        // 리스 기간이 실제로 쓰인다: 기한 직전엔 안 나오고, 기한에 맞춰 다시 나온다.
         q.publish(OutgoingMessage.of("b".getBytes(StandardCharsets.UTF_8)));
         q.pull(1, Duration.ZERO);
         clock.advance(LEASE.minusNanos(1));

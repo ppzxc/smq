@@ -3,6 +3,7 @@ package io.github.ppzxc.smq.benchmark;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -76,7 +77,7 @@ public final class Json {
                 case '\r' -> sb.append("\\r");
                 case '\t' -> sb.append("\\t");
                 default -> {
-                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    if (c < 0x20) sb.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
                     else sb.append(c);
                 }
             }
@@ -102,7 +103,11 @@ public final class Json {
         }
 
         IllegalArgumentException error(String what) {
-            return new IllegalArgumentException("JSON 오류(" + what + ") 위치 " + pos);
+            return error(what, null);
+        }
+
+        IllegalArgumentException error(String what, Throwable cause) {
+            return new IllegalArgumentException("JSON 오류(" + what + ") 위치 " + pos, cause);
         }
 
         void skip() {
@@ -228,7 +233,7 @@ public final class Json {
             try {
                 return Double.parseDouble(s.substring(start, pos));
             } catch (NumberFormatException ex) {
-                throw error("잘못된 수");
+                throw error("잘못된 수", ex);
             }
         }
     }

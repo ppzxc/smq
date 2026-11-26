@@ -9,13 +9,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** 메트릭 파일에 CPU가 남고, 파일 하나에서 요약을 다시 만들 수 있는지. */
 class JvmMetricsSamplerTest {
 
     @TempDir
     Path dir;
 
     @Test
+    @SuppressWarnings("PMD.UnusedLocalVariable")
     void 표본_줄에_프로세스_CPU가_들어_있다() throws Exception {
         org.junit.jupiter.api.Assumptions.assumeTrue(
                 java.lang.management.ManagementFactory.getOperatingSystemMXBean()
@@ -96,11 +96,12 @@ class JvmMetricsSamplerTest {
     }
 
     @Test
+    @SuppressWarnings("PMD.UnusedLocalVariable")
     void 이_플랫폼이_리눅스면_표본에_실제_RSS가_있다() throws Exception {
         org.junit.jupiter.api.Assumptions.assumeTrue(Files.exists(Path.of("/proc/self/status")));
         Path file = dir.resolve("jvm-metrics.jsonl");
         try (JvmMetricsSampler s = JvmMetricsSampler.start(dir, 30)) {
-            // 표본이 쓰일 때까지 기다린다. 느린 환경에서 고정 시간만 자면 표본이 0개일 수 있다.
+
             for (int i = 0;
                     i < 200 && (!Files.exists(file) || Files.readAllLines(file).isEmpty());
                     i++) {

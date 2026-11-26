@@ -8,8 +8,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -162,7 +164,7 @@ final class SpoolCheck {
             outs = new DataOutputStream[partitions];
             try {
                 for (int k = 0; k < partitions; k++) {
-                    outs[k] = writer(work.resolve(String.format(pattern, k)));
+                    outs[k] = writer(work.resolve(String.format(Locale.ROOT, pattern, k)));
                 }
             } catch (IOException | RuntimeException e) {
                 try {
@@ -185,14 +187,14 @@ final class SpoolCheck {
      * 태그로 나눈 조각에서는 그 전달들이 흩어진다.
      */
     private static void writeId(DataOutputStream out, Delivery d) throws IOException {
-        out.writeByte(d.queue().ordinal());
+        out.writeByte(d.queue().spoolCode());
         out.writeLong(d.messageId());
         out.writeLong(d.tag().seed());
         out.writeLong(d.tag().seq());
     }
 
     private static long idHash(QueueKind queue, long messageId) {
-        return mix(messageId * 3 + queue.ordinal());
+        return mix(messageId * 3 + queue.spoolCode());
     }
 
     private static void closeAll(DataOutputStream[] outs) throws IOException {
@@ -302,24 +304,20 @@ final class SpoolCheck {
     /** 같은 큐의 같은 메시지 id가 서로 다른 태그로 전달된 것. {@link InvariantChecker}의 같은 이름의 유령 검사와 같은 뜻이다. */
     private static List<Violation> sameIdDifferentTag(Path file) throws IOException {
         List<Violation> out = new ArrayList<>();
-        @SuppressWarnings("unchecked")
-        Map<Long, Tag>[] seen = new Map[QueueKind.values().length];
-        for (int q = 0; q < seen.length; q++) {
-            seen[q] = new HashMap<>();
-        }
+        Map<QueueKind, Map<Long, Tag>> seen = new EnumMap<>(QueueKind.class);
         try (DataInputStream in = reader(file)) {
             while (true) {
                 QueueKind queue;
                 long id;
                 Tag tag;
                 try {
-                    queue = QueueKind.values()[in.readUnsignedByte()];
+                    queue = QueueKind.fromSpoolCode(in.readUnsignedByte());
                     id = in.readLong();
                     tag = new Tag(in.readLong(), in.readLong());
                 } catch (java.io.EOFException e) {
                     return out;
                 }
-                Tag first = seen[queue.ordinal()].putIfAbsent(id, tag);
+                Tag first = seen.computeIfAbsent(queue, _ -> new HashMap<>()).putIfAbsent(id, tag);
                 if (first != null && !first.equals(tag)) {
                     out.add(new Violation(
                             Invariant.GHOST, List.of(first, tag), List.of(id), queue + " 메시지 id 하나가 서로 다른 태그로 전달됐다"));

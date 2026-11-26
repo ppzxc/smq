@@ -65,7 +65,7 @@ final class Workload {
         }
     }
 
-    static ChildResult run(Smq smq, RunSpec spec, Role role, long startAtEpochMs) throws Exception {
+    static ChildResult run(Smq smq, RunSpec spec, Role role, long startAtEpochMs) throws InterruptedException {
         Queue q = smq.queue(QUEUE);
         return switch (spec.scenario()) {
             case S1 -> throughput(q, spec, role, startAtEpochMs, true);
@@ -102,7 +102,8 @@ final class Workload {
         return chunk.messages().size();
     }
 
-    private static ChildResult latency(Queue q, RunSpec spec, Role role, long startAtEpochMs) throws Exception {
+    private static ChildResult latency(Queue q, RunSpec spec, Role role, long startAtEpochMs)
+            throws InterruptedException {
         long measureStart = startAtEpochMs * 1_000_000L;
         long measureEnd = measureStart + spec.durationMs() * 1_000_000L;
         long consumeEnd = measureEnd + S3_DRAIN_MS * 1_000_000L;

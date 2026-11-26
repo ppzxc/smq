@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /** 결과 파일에 남기는 환경 기록. 고정 프로파일 벤치와 무작위 하네스가 같은 항목을 쓴다. */
@@ -24,7 +25,8 @@ public final class Environment {
         env.put("java", System.getProperty("java.version"));
         env.put("workDirFs", Files.getFileStore(workDir).type());
         Path version = Path.of("/proc/version");
-        if (Files.exists(version) && Files.readString(version).toLowerCase().contains("microsoft")) {
+        if (Files.exists(version)
+                && Files.readString(version).toLowerCase(Locale.ROOT).contains("microsoft")) {
             env.put("caveat", "WSL2에서 잰 값이다. fsync 비용을 과소평가할 수 있다.");
         }
         return env;

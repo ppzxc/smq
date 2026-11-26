@@ -14,7 +14,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** 세션의 흐름(JSON 줄, 파일 보존과 삭제, 첫 위반에서 멈춤, 예산, 출력)을 가짜 실행기로 확인한다. SQLite는 쓰지 않는다. */
 class SessionTest {
 
     private static final Limits LIMITS = Limits.smoke(2_000);
@@ -61,7 +60,7 @@ class SessionTest {
                 null);
     }
 
-    /** 실행기가 SQLite 파일을 흉내 내 디렉터리에 남긴다. */
+    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     private Session.Executor fake(java.util.function.Function<RunParams, RunResult> make) {
         return (params, runDir) -> {
             executed.add(params.seed());
@@ -97,6 +96,7 @@ class SessionTest {
     }
 
     @Test
+    @SuppressWarnings("PMD.DoNotCallGarbageCollectionExplicitly")
     void passedRunsDoNotKeepTheirRecordsAliveForTheRestOfTheSession() {
         List<java.lang.ref.WeakReference<List<Published>>> firstRecords = new ArrayList<>();
         boolean[] collectedWhileSecondRuns = {false};
@@ -223,8 +223,6 @@ class SessionTest {
         assertTrue(byP99.indexOf("\n  2 ") < byP99.indexOf("\n  1 "), "p99가 가장 큰 시드가 위");
     }
 
-    // ---- ERROR 진단 필드
-
     private static final ErrorDetail CHILD_OOM = new ErrorDetail(
             "child-2",
             "java.lang.OutOfMemoryError",
@@ -247,7 +245,7 @@ class SessionTest {
         assertTrue(((String) detail.get("stackTrace")).contains("at a.B.c"));
         assertEquals(852_000_000.0, line.get("walMaxBytes"));
 
-        String txt = Files.readString(s.failureDir(8).resolve("violations.txt")).replace("\r\n", "\n"); // Windows 줄바꿈
+        String txt = Files.readString(s.failureDir(8).resolve("violations.txt")).replace("\r\n", "\n");
         assertTrue(txt.startsWith("seed=8\nverdict=ERROR\nerror=boom\n"), "앞쪽 줄은 그대로");
         assertTrue(txt.contains("errorLocation=child-2"));
         assertTrue(txt.contains("\tat a.B.c(B.java:1)"), "스택 트레이스 전체");
@@ -333,6 +331,7 @@ class SessionTest {
     }
 
     @Test
+    @SuppressWarnings("PMD.AvoidThrowingRawExceptionTypes")
     void 고정_속도_실행은_통과해도_JFR과_메트릭_파일을_남기고_DB와_큰_기록만_지운다() throws IOException {
         Session.Executor exec = (params, runDir) -> {
             try {
@@ -381,7 +380,7 @@ class SessionTest {
 
     @Test
     void 고정_속도에서는_예외도_기록하고_계속_돌되_연속_3번이면_멈춘다() {
-        // 1번 통과, 2번 ERROR, 3번 통과, 4~6번 ERROR(연속 3번)에서 멈춘다.
+
         Session s = soakSession(fake(p -> p.seed() == 2 || p.seed() >= 4
                 ? soakResult(p, Verdict.ERROR, null)
                 : soakResult(p, Verdict.PASS, report(false))));

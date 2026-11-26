@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
-/** {@code Smq.snapshot(Path)}를 공개 API로만 검증한다. 스냅샷은 일반 SQLite 연결(외부 도구)로 읽는다. */
 @Timeout(60)
 class SqliteSnapshotTest {
 
@@ -47,7 +46,9 @@ class SqliteSnapshotTest {
     private static String scalar(Connection c, String sql) throws SQLException {
         try (Statement s = c.createStatement();
                 ResultSet r = s.executeQuery(sql)) {
-            assertTrue(r.next());
+            if (!r.next()) {
+                throw new AssertionError("Expected a query result row");
+            }
             return r.getString(1);
         }
     }
@@ -80,7 +81,6 @@ class SqliteSnapshotTest {
         }
     }
 
-    /** 심볼릭 링크를 못 만드는 환경(권한 없는 Windows 등)에서는 테스트를 건너뛴다. */
     private static Path symlink(Path link, Path target) {
         try {
             return Files.createSymbolicLink(link, target);
@@ -145,7 +145,7 @@ class SqliteSnapshotTest {
 
     @Test
     void 임시_파일을_만든_뒤_연결에_실패하면_임시_파일을_남기지_않는다() throws Exception {
-        // 끊어진 심볼릭 링크는 Files.exists가 false라 사전 검사를 통과하지만 link(2)는 EEXIST로 실패한다.
+
         Path dangling = symlink(dir.resolve("snap.db"), dir.resolve("nowhere"));
         try (Smq smq = open()) {
             smq.declare("orders", QueueOptions.defaults()).publish(msg("a"));
@@ -174,7 +174,6 @@ class SqliteSnapshotTest {
             }
             q.publish(bulk);
 
-            // 발행자는 멈추라고 할 때까지 돈다. 스냅샷은 항상 발행이 진행 중일 때 시작한다.
             Thread publisher = new Thread(() -> {
                 try {
                     while (!stop.get()) {
@@ -202,8 +201,7 @@ class SqliteSnapshotTest {
                     try (Connection c = external(target)) {
                         assertEquals("ok", scalar(c, "PRAGMA integrity_check"));
                         int inSnapshot = Integer.parseInt(scalar(c, "SELECT count(*) FROM message"));
-                        // 발행자는 하나뿐이라 스냅샷이 반영한 발행 수는, 시작 전에 끝난 수 이상이고 끝난 뒤 센 수에 진행 중이던
-                        // 하나를 더한 수 이하다.
+
                         assertTrue(inSnapshot >= initial + before, "snapshot=" + inSnapshot + " before=" + before);
                         assertTrue(inSnapshot <= initial + after + 1, "snapshot=" + inSnapshot + " after=" + after);
                     }
@@ -249,12 +247,8 @@ class SqliteSnapshotTest {
         }
     }
 
-    /**
-     * 스냅샷이 오래 걸리도록 DB를 크게(약 64MB) 만들고, 임시 파일에 쓰기가 시작된 것을 관측하면 close를 부른다. 관측은 최대 5초만
-     * 기다리고, 못 해도 거짓 실패하지 않는다. 그때는 불변식만 확인한다. 스냅샷이 성공했다면 완전한 파일이고, 실패했다면
-     * 대상도 임시 파일도 남지 않는다. 관측했을 때(경합을 실제로 만들었을 때)는 스냅샷이 반드시 성공해야 한다.
-     */
     @Test
+    @SuppressWarnings("PMD.UseTryWithResources")
     void 스냅샷_도중_다른_스레드가_close를_불러도_스냅샷은_완전한_파일로_끝난다() throws Exception {
         int rows = 4_000;
         byte[] big = new byte[16 * 1024];
@@ -277,7 +271,7 @@ class SqliteSnapshotTest {
                 }
             });
             snapshotter.start();
-            // 임시 파일에 쓰기가 시작됐으면 스냅샷이 저장소의 lock을 쥔 채 도는 중이다.
+
             long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
             observed = false;
             while (failure.get() == null && snapshotter.isAlive() && System.nanoTime() < deadline) {
@@ -289,7 +283,7 @@ class SqliteSnapshotTest {
             }
 
             smq.close();
-            // 반환 시점이 아니라 결과로 확인하므로 스레드 스케줄링에 기대지 않는다.
+
             snapshotter.join(Duration.ofSeconds(30));
             assertFalse(snapshotter.isAlive(), "스냅샷이 끝나지 않았다");
         } finally {
@@ -306,7 +300,7 @@ class SqliteSnapshotTest {
             }
             assertEquals(Set.of("smq.db", "smq.db.lock", "snap.db"), withoutWal(names(dir)));
         } else {
-            // 스냅샷이 시작되기 전에 close가 이겼다. 거짓 실패가 아니며 흔적이 없어야 한다.
+
             assertFalse(Files.exists(target));
             assertEquals(Set.of("smq.db", "smq.db.lock"), withoutWal(names(dir)));
         }

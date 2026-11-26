@@ -15,11 +15,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
-/** ADR-0002: 저장소 SPI는 비공개 내부 계약이다. module-info가 공개 패키지만 export하는지 고정한다. */
 class ModuleDescriptorTest {
 
     private static ModuleDescriptor descriptor() throws IOException, URISyntaxException {
-        // 루트의 /module-info.class는 JDK 모듈 것이 먼저 잡히므로 Smq의 코드 위치에서 읽는다.
+
         Path root = Path.of(
                 Smq.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         if (Files.isDirectory(root)) {

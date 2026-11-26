@@ -204,6 +204,13 @@ abstract class SmqConformanceTest {
     }
 
     @Test
+    void 짝이_없는_surrogate를_헤더에_허용하지_않는다() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new OutgoingMessage(new byte[0], Map.of("?", "one", "\uD800", "two"), Duration.ZERO));
+    }
+
+    @Test
     void pull은_id_순서로_최대_max개를_돌려주고_메타데이터를_담는다() throws Exception {
         Queue q = open().declare("q", QueueOptions.defaults());
         List<MessageId> ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));

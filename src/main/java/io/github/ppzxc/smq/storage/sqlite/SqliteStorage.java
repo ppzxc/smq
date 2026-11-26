@@ -213,7 +213,8 @@ public final class SqliteStorage implements Storage {
     static Connection connect(Path path, Durability durability) throws SQLException {
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(0);
-        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path, config.toProperties());
+        Connection connection =
+                DriverManager.getConnection("jdbc:sqlite:" + path.toAbsolutePath(), config.toProperties());
         boolean ok = false;
         try (Statement s = connection.createStatement()) {
 
@@ -577,8 +578,9 @@ public final class SqliteStorage implements Storage {
                           SELECT
                             q.single_active_consumer AS serial,
                             CASE WHEN q.single_active_consumer AND q.max_deliveries IS NOT NULL THEN
-                              (SELECT MIN(available_at) FROM message
-                               WHERE queue_id = q.id AND available_at > ?1 AND delivery_count >= q.max_deliveries)
+                              (SELECT MIN(available_at) FROM message INDEXED BY message_delayed_exhausted
+                               WHERE queue_id = q.id AND available_at > ?1 AND delivery_count > 0
+                                 AND delivery_count >= q.max_deliveries)
                             END AS exhausted_delay,
                             (SELECT MIN(lease_deadline) FROM message
                              WHERE queue_id = q.id AND lease_deadline > ?1) AS first_lease,

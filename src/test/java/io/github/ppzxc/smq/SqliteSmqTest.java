@@ -51,6 +51,8 @@ class SqliteSmqTest extends SmqConformanceTest {
 
     @Test
     void 이름이_memory인_경로도_파일에_저장한다() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeFalse(
+                System.getProperty("os.name").startsWith("Windows"));
         var path = dir.resolve(":memory:");
         try (Smq smq = Smq.sqlite(path).durability(durability).open()) {
             smq.declare("q", QueueOptions.defaults()).publish(msg("saved"));

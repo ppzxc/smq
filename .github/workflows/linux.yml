@@ -28,7 +28,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: ./gradlew check
-        run: ./gradlew check --no-daemon --stacktrace
+        run: ./gradlew check --continue --no-daemon --stacktrace
+
+      - name: PMD 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-pmd-report
+          path: build/reports/pmd/*.html
+          if-no-files-found: ignore
 
       - name: SpotBugs 리포트 업로드
         if: always()

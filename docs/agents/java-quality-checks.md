@@ -25,7 +25,7 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 | CON-002 | Error Prone `InterruptedExceptionSwallowed` | main, benchmark | error |
 | | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test, benchmark | error |
 | Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test, benchmark | any violation fails the build |
-| Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | main and test fail the build; benchmark reports only |
+| Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | any violation fails the build |
 | TOOL-003 | SpotBugs 4.10.5 default checks | main | findings fail the build |
 | NUL-001 | NullAway / JSpecify | main | error; only `@NullMarked` code, explicit nullness required |
 | STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, benchmark, deploy-test Java | `spotlessCheck` is part of `check` |
@@ -74,7 +74,7 @@ PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java
 | performance | 5 |
 | security | 2 |
 
-PMD's `errorprone` category is a group of PMD rules; it is separate from Google Error Prone and its built-in checker counts above. MUST violations at priorities 1 through 5 fail their respective tasks. SHOULD violations fail the main and test tasks; the benchmark task remains advisory. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect all reports under `build/reports/pmd/`; the XML and HTML reports identify each rule, file, and line. The HTML report also shows the total number of violations.
+PMD's `errorprone` category is a group of PMD rules; it is separate from Google Error Prone and its built-in checker counts above. MUST violations at priorities 1 through 5 fail their respective tasks. SHOULD violations fail their respective tasks in all three source sets. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect all reports under `build/reports/pmd/`; the XML and HTML reports identify each rule, file, and line. The HTML report also shows the total number of violations. Linux and Windows CI upload the HTML reports as `linux-pmd-report` and `windows-pmd-report`, respectively.
 
 `SqliteStorage` retains narrowly scoped PMD suppressions for these contracts:
 

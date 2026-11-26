@@ -88,6 +88,7 @@ class JavaQualityPlugin : Plugin<Project> {
 
         val main = project.extensions.getByType(SourceSetContainer::class.java).named("main")
         val spotbugsMain = project.tasks.register("spotbugsMain", SpotBugsTask::class.java) {
+            excludeFilter.set(project.rootProject.layout.projectDirectory.file("config/spotbugs/exclude.xml"))
             sourceDirs.from(main.map { it.allJava.sourceDirectories })
             classDirs.from(main.map { it.output.classesDirs })
             auxClassPaths.from(main.map { it.compileClasspath })

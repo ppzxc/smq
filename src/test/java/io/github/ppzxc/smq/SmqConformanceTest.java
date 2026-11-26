@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -192,6 +193,22 @@ abstract class SmqConformanceTest {
         Message m = q.pull(1, Duration.ZERO).messages().getFirst();
         assertArrayEquals(payload, m.payload());
         assertEquals(headers, m.headers());
+    }
+
+    @Test
+    void 발행_뒤_외부_payload와_헤더를_바꿔도_메시지는_그대로다() throws Exception {
+        Queue q = open().declare("q", QueueOptions.defaults());
+        byte[] payload = {1, 2};
+        Map<String, String> headers = new HashMap<>(Map.of("key", "original"));
+        OutgoingMessage outgoing = new OutgoingMessage(payload, headers);
+        q.publish(outgoing);
+        payload[0] = 9;
+        headers.put("key", "changed");
+        outgoing.payload()[1] = 9;
+
+        Message message = q.pull(1, Duration.ZERO).messages().getFirst();
+        assertArrayEquals(new byte[] {1, 2}, message.payload());
+        assertEquals(Map.of("key", "original"), message.headers());
     }
 
     @Test

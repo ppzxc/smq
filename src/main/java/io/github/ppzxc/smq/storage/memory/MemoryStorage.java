@@ -234,7 +234,7 @@ public final class MemoryStorage implements Storage {
             boolean moves = options.maxDeliveries().isPresent();
             clearReadyDelays(entries, now);
             for (Entry e : entries.values()) {
-                if (picked.size() == max && !moves) {
+                if (selectionComplete(picked, max, moves)) {
                     break;
                 }
                 if (options.singleActiveConsumer() && isDelayed(e, now)) {
@@ -250,6 +250,10 @@ public final class MemoryStorage implements Storage {
                 }
             }
             return deadLettersRemain;
+        }
+
+        private static boolean selectionComplete(List<Entry> picked, int max, boolean moves) {
+            return picked.size() == max && !moves;
         }
 
         private static boolean isExhausted(Entry entry, QueueOptions options, boolean moves) {

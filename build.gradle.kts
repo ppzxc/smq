@@ -11,6 +11,7 @@ plugins {
     jacoco
     id("com.vanniktech.maven.publish") version "0.37.0"
     id("smq.java-quality")
+    id("org.cyclonedx.bom") version "3.5.1"
 }
 
 group = "io.github.ppzxc"

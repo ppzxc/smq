@@ -1,0 +1,43 @@
+name: Dependency scan
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate SBOM from the resolved dependency graph
+        run: ./gradlew cyclonedxBom --no-daemon
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+        with:
+          version: v0.76.1
+
+      - name: Scan direct and transitive dependencies
+        run: >-
+          trivy sbom
+          --scanners vuln
+          --severity HIGH,CRITICAL
+          --ignore-unfixed
+          --quiet
+          --exit-code 1
+          --ignorefile .trivyignore.yaml
+          build/reports/cyclonedx/bom.json

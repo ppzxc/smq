@@ -47,6 +47,17 @@ record Options(
     static final Duration SMOKE_LOAD = Duration.ofSeconds(2);
     static final List<Long> SMOKE_SEEDS = List.of(1L, 2L, 3L, 4L, 5L, 6L);
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The CLI parser keeps each option and its cross-option validation together for review.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Each supported CLI flag and invalid combination requires an explicit parsing branch.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     static Options parse(String[] args, long nowMillis) {
         OptionalLong seed = OptionalLong.empty();
         Duration budget = DEFAULT_BUDGET;

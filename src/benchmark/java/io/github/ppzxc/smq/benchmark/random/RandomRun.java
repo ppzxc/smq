@@ -388,6 +388,12 @@ final class RandomRun {
     }
 
     /** 처리 시간만큼 기다린다. 길면 리스 기한의 절반마다 연장한다. 부하 구간이 끝나 멈추면 false(정산하지 않는다). */
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The processing loop coordinates interruption, lease extension, and per-message deadlines.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CognitiveComplexity")
     private boolean process(Queue target, Chunk chunk, Script.Processing p, long[] deadline)
             throws InterruptedException {
         long remaining = p.millis();
@@ -411,6 +417,17 @@ final class RandomRun {
         return true;
     }
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "Each scripted disposition is applied and its result recorded against the same message.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Each scripted disposition is applied and its result recorded against the same message.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private void settleDecisions(Queue target, Chunk chunk, List<Tag> tags, Settle[] settles) {
         List<Message> messages = chunk.messages();
         Settlement.Builder b = chunk.settle();

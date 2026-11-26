@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Action;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,6 +41,12 @@ final class SampleChecks {
     private record Lease(Delivery first, long start, long end) {}
 
     /** 청크의 리스는 꺼낸 시각부터 기한까지다. 청크 전체를 정산했다면 가장 늦은 정산 시각에 풀린다. */
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Lease overlap checks preserve the widest preceding lease and account for settlement time.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     static void checkSingleActive(List<Delivery> deliveries, List<Violation> out) {
         Map<Long, List<Delivery>> chunks = new LinkedHashMap<>();
         for (Delivery d : deliveries) {
@@ -85,6 +92,12 @@ final class SampleChecks {
 
     // ---- counts
 
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Each sample checks negative values and drained counts, then checks both queues were sampled.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     static void checkCounts(List<CountsSample> samples, List<Violation> out) {
         Set<QueueKind> drained = EnumSet.noneOf(QueueKind.class);
         for (CountsSample s : samples) {

@@ -1,5 +1,6 @@
 package io.github.ppzxc.smq.benchmark.random;
 
+import io.github.ppzxc.smq.PolicyException;
 import io.github.ppzxc.smq.benchmark.random.Delivery.Action;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -65,6 +66,12 @@ final class InvariantChecker {
      * 태그 단위 검사(유령, 중복, 지연, 유실, dead letter 이동). 한 태그의 발행과 전달이 모두 들어 있어야 맞게 판정하므로,
      * 기록을 태그로 나눠 조각마다 부르는 호출자는 한 태그를 쪼개지 않아야 한다.
      */
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Each tag is checked against publication, content, deliveries, and final outcome.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     static List<Violation> checkTags(Config config, List<Published> published, List<Delivery> deliveries) {
         List<Violation> out = new ArrayList<>();
         Map<Tag, Published> byTag = new LinkedHashMap<>();
@@ -149,6 +156,17 @@ final class InvariantChecker {
         return out;
     }
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "A delivery history must distinguish duplicate deliveries, delays, settlement, and lease expiry.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "A delivery history must distinguish duplicate deliveries, delays, settlement, and lease expiry.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private static void checkMessage(Config config, Published pub, Message m, List<Violation> out) {
         List<Delivery> ds = m.deliveries();
         List<Tag> tags = List.of(m.tag());
@@ -230,6 +248,17 @@ final class InvariantChecker {
 
     // ---- 태그 단위: 유실, dead letter 이동
 
+    @PolicyException(
+            rule = "PMD.CognitiveComplexity",
+            reason = "The outcome checks distinguish ACK, loss, duplicate, and dead-letter cases for one tag.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "The outcome checks distinguish ACK, loss, duplicate, and dead-letter cases for one tag.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private static void checkOutcome(
             Config config, Tag tag, List<Message> targets, List<Message> deadLetters, List<Violation> out) {
         List<Tag> tags = List.of(tag);
@@ -281,6 +310,12 @@ final class InvariantChecker {
     }
 
     /** 이동이 기록과 맞지 않으면 이유를, 맞으면 null을 돌려준다. */
+    @PolicyException(
+            rule = "PMD.CyclomaticComplexity",
+            reason = "Dead-letter reason and each recorded header are checked independently.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings("PMD.CyclomaticComplexity")
     private static String moveProblem(Config config, Delivery last, Map<String, String> headers) {
         if (last == null) {
             return "대상 큐에서 한 번도 전달되지 않은 메시지가 dead letter 큐로 옮겨졌다";

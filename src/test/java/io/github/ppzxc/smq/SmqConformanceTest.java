@@ -4150,10 +4150,12 @@ abstract class SmqConformanceTest {
     }
 
     @Test
-    @DisplayName("섞인 정산은 원자적이라 중간 상태가 다른 꺼내기에 보이지 않는다 — check 1")
+    @DisplayName("섞인 정산은 중간 상태를 노출하지 않고 모두 정산된다")
     void mixedSettlementsAreAtomicSoTheIntermediateStateIsNotVisibleToOtherRetrievals() throws Exception {
         final Queue q;
+        final List<String> roundFailures;
         q = this.open(Duration.ofSeconds(10L)).declare("q", QueueOptions.defaults());
+        roundFailures = new ArrayList<>();
         for (int round = 0; round < 50; round++) {
             final List<MessageId> ids;
             final Chunk c;
@@ -4162,12 +4164,19 @@ abstract class SmqConformanceTest {
             final Thread observer;
             final Outcomes r;
             final Chunk drain;
+            final QueueCounts initialCounts;
+            final QueueCounts finalCounts;
+            final boolean initialCountsWereCorrect;
+            final boolean settlementSucceeded;
+            final boolean observedStatesWereAtomic;
+            final boolean finalCountsWereCorrect;
+            final boolean drainSucceeded;
+            final boolean roundSucceeded;
+            final String roundFailure;
             ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
             c = q.pull(3, Duration.ZERO);
-            final var assertionValue5Argument1 = new QueueCounts(0L, 3L, 0L);
-            final var assertionValue5Argument2 = q.counts();
-            Assertions.assertEquals(
-                    assertionValue5Argument1, assertionValue5Argument2, "Counts should match the expected value.");
+            initialCounts = q.counts();
+            initialCountsWereCorrect = initialCounts.equals(new QueueCounts(0L, 3L, 0L));
             done = new AtomicBoolean();
             seen = Collections.synchronizedList(new ArrayList<>());
             observer = new Thread(() -> {
@@ -4179,208 +4188,30 @@ abstract class SmqConformanceTest {
             r = q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).ackRest());
             done.set(true);
             observer.join();
-            final var assertionValue4Argument1 = r.allOk();
-            evaluatePmdArgument(assertionValue4Argument1);
-            final var assertionValue3Argument1 = seen.stream()
+            settlementSucceeded = r.allOk();
+            observedStatesWereAtomic = seen.stream()
                     .allMatch(n -> n.equals(new QueueCounts(0L, 3L, 0L)) || n.equals(new QueueCounts(1L, 0L, 0L)));
-            evaluatePmdArgument(assertionValue3Argument1);
-            final var assertionValue3Argument2 = "torn state: " + seen;
-            evaluatePmdArgument(assertionValue3Argument2);
-            final var assertionValue2Argument1 = new QueueCounts(1L, 0L, 0L);
-            evaluatePmdArgument(assertionValue2Argument1);
-            final var assertionValue2Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue2Argument2);
+            finalCounts = q.counts();
+            finalCountsWereCorrect = finalCounts.equals(new QueueCounts(1L, 0L, 0L));
             drain = q.pull(10, Duration.ZERO);
-            final var assertionValue1Argument1 = q.settle(drain.ackAll()).allOk();
-            evaluatePmdArgument(assertionValue1Argument1);
+            drainSucceeded = q.settle(drain.ackAll()).allOk();
+            roundSucceeded = initialCountsWereCorrect
+                    && settlementSucceeded
+                    && observedStatesWereAtomic
+                    && finalCountsWereCorrect
+                    && drainSucceeded;
+            roundFailure = roundSucceeded
+                    ? ""
+                    : "Round " + round + " failed: initialCounts=" + initialCounts
+                            + ", settlementSucceeded=" + settlementSucceeded
+                            + ", torn state samples=" + seen
+                            + ", finalCounts=" + finalCounts
+                            + ", drainSucceeded=" + drainSucceeded;
+            if (!roundFailure.isEmpty()) {
+                roundFailures.add(roundFailure);
+            }
         }
-    }
-
-    @Test
-    @DisplayName("섞인 정산은 원자적이라 중간 상태가 다른 꺼내기에 보이지 않는다 — check 2")
-    void mixedSettlementsAreAtomicSoTheIntermediateStateIsNotVisibleToOtherRetrievalsCheck2() throws Exception {
-        final Queue q;
-        q = this.open(Duration.ofSeconds(10L)).declare("q", QueueOptions.defaults());
-        for (int round = 0; round < 50; round++) {
-            final List<MessageId> ids;
-            final Chunk c;
-            final AtomicBoolean done;
-            final List<QueueCounts> seen;
-            final Thread observer;
-            final Outcomes r;
-            final Chunk drain;
-            ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
-            c = q.pull(3, Duration.ZERO);
-            final var assertionValue5Argument1 = new QueueCounts(0L, 3L, 0L);
-            evaluatePmdArgument(assertionValue5Argument1);
-            final var assertionValue5Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue5Argument2);
-            done = new AtomicBoolean();
-            seen = Collections.synchronizedList(new ArrayList<>());
-            observer = new Thread(() -> {
-                while (!done.get()) {
-                    seen.add(q.counts());
-                }
-            });
-            observer.start();
-            r = q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).ackRest());
-            done.set(true);
-            observer.join();
-            final var assertionValue4Argument1 = r.allOk();
-            Assertions.assertTrue(assertionValue4Argument1, "Outcomes should succeed.");
-            final var assertionValue3Argument1 = seen.stream()
-                    .allMatch(n -> n.equals(new QueueCounts(0L, 3L, 0L)) || n.equals(new QueueCounts(1L, 0L, 0L)));
-            evaluatePmdArgument(assertionValue3Argument1);
-            final var assertionValue3Argument2 = "torn state: " + seen;
-            evaluatePmdArgument(assertionValue3Argument2);
-            final var assertionValue2Argument1 = new QueueCounts(1L, 0L, 0L);
-            evaluatePmdArgument(assertionValue2Argument1);
-            final var assertionValue2Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue2Argument2);
-            drain = q.pull(10, Duration.ZERO);
-            final var assertionValue1Argument1 = q.settle(drain.ackAll()).allOk();
-            evaluatePmdArgument(assertionValue1Argument1);
-        }
-    }
-
-    @Test
-    @DisplayName("섞인 정산은 원자적이라 중간 상태가 다른 꺼내기에 보이지 않는다 — check 3")
-    void mixedSettlementsAreAtomicSoTheIntermediateStateIsNotVisibleToOtherRetrievalsCheck3() throws Exception {
-        final Queue q;
-        q = this.open(Duration.ofSeconds(10L)).declare("q", QueueOptions.defaults());
-        for (int round = 0; round < 50; round++) {
-            final List<MessageId> ids;
-            final Chunk c;
-            final AtomicBoolean done;
-            final List<QueueCounts> seen;
-            final Thread observer;
-            final Outcomes r;
-            final Chunk drain;
-            ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
-            c = q.pull(3, Duration.ZERO);
-            final var assertionValue5Argument1 = new QueueCounts(0L, 3L, 0L);
-            evaluatePmdArgument(assertionValue5Argument1);
-            final var assertionValue5Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue5Argument2);
-            done = new AtomicBoolean();
-            seen = Collections.synchronizedList(new ArrayList<>());
-            observer = new Thread(() -> {
-                while (!done.get()) {
-                    seen.add(q.counts());
-                }
-            });
-            observer.start();
-            r = q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).ackRest());
-            done.set(true);
-            observer.join();
-            final var assertionValue4Argument1 = r.allOk();
-            evaluatePmdArgument(assertionValue4Argument1);
-            final var assertionValue3Argument1 = seen.stream()
-                    .allMatch(n -> n.equals(new QueueCounts(0L, 3L, 0L)) || n.equals(new QueueCounts(1L, 0L, 0L)));
-            final var assertionValue3Argument2 = "torn state: " + seen;
-            Assertions.assertTrue(assertionValue3Argument1, assertionValue3Argument2);
-            final var assertionValue2Argument1 = new QueueCounts(1L, 0L, 0L);
-            evaluatePmdArgument(assertionValue2Argument1);
-            final var assertionValue2Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue2Argument2);
-            drain = q.pull(10, Duration.ZERO);
-            final var assertionValue1Argument1 = q.settle(drain.ackAll()).allOk();
-            evaluatePmdArgument(assertionValue1Argument1);
-        }
-    }
-
-    @Test
-    @DisplayName("섞인 정산은 원자적이라 중간 상태가 다른 꺼내기에 보이지 않는다 — check 4")
-    void mixedSettlementsAreAtomicSoTheIntermediateStateIsNotVisibleToOtherRetrievalsCheck4() throws Exception {
-        final Queue q;
-        q = this.open(Duration.ofSeconds(10L)).declare("q", QueueOptions.defaults());
-        for (int round = 0; round < 50; round++) {
-            final List<MessageId> ids;
-            final Chunk c;
-            final AtomicBoolean done;
-            final List<QueueCounts> seen;
-            final Thread observer;
-            final Outcomes r;
-            final Chunk drain;
-            ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
-            c = q.pull(3, Duration.ZERO);
-            final var assertionValue5Argument1 = new QueueCounts(0L, 3L, 0L);
-            evaluatePmdArgument(assertionValue5Argument1);
-            final var assertionValue5Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue5Argument2);
-            done = new AtomicBoolean();
-            seen = Collections.synchronizedList(new ArrayList<>());
-            observer = new Thread(() -> {
-                while (!done.get()) {
-                    seen.add(q.counts());
-                }
-            });
-            observer.start();
-            r = q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).ackRest());
-            done.set(true);
-            observer.join();
-            final var assertionValue4Argument1 = r.allOk();
-            evaluatePmdArgument(assertionValue4Argument1);
-            final var assertionValue3Argument1 = seen.stream()
-                    .allMatch(n -> n.equals(new QueueCounts(0L, 3L, 0L)) || n.equals(new QueueCounts(1L, 0L, 0L)));
-            evaluatePmdArgument(assertionValue3Argument1);
-            final var assertionValue3Argument2 = "torn state: " + seen;
-            evaluatePmdArgument(assertionValue3Argument2);
-            final var assertionValue2Argument1 = new QueueCounts(1L, 0L, 0L);
-            final var assertionValue2Argument2 = q.counts();
-            Assertions.assertEquals(
-                    assertionValue2Argument1, assertionValue2Argument2, "Counts should match the expected value.");
-            drain = q.pull(10, Duration.ZERO);
-            final var assertionValue1Argument1 = q.settle(drain.ackAll()).allOk();
-            evaluatePmdArgument(assertionValue1Argument1);
-        }
-    }
-
-    @Test
-    @DisplayName("섞인 정산은 원자적이라 중간 상태가 다른 꺼내기에 보이지 않는다 — check 5")
-    void mixedSettlementsAreAtomicSoTheIntermediateStateIsNotVisibleToOtherRetrievalsCheck5() throws Exception {
-        final Queue q;
-        q = this.open(Duration.ofSeconds(10L)).declare("q", QueueOptions.defaults());
-        for (int round = 0; round < 50; round++) {
-            final List<MessageId> ids;
-            final Chunk c;
-            final AtomicBoolean done;
-            final List<QueueCounts> seen;
-            final Thread observer;
-            final Outcomes r;
-            final Chunk drain;
-            ids = q.publish(List.of(msg("a"), msg("b"), msg("c")));
-            c = q.pull(3, Duration.ZERO);
-            final var assertionValue5Argument1 = new QueueCounts(0L, 3L, 0L);
-            evaluatePmdArgument(assertionValue5Argument1);
-            final var assertionValue5Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue5Argument2);
-            done = new AtomicBoolean();
-            seen = Collections.synchronizedList(new ArrayList<>());
-            observer = new Thread(() -> {
-                while (!done.get()) {
-                    seen.add(q.counts());
-                }
-            });
-            observer.start();
-            r = q.settle(c.settle().ack(ids.get(0)).nack(ids.get(1)).ackRest());
-            done.set(true);
-            observer.join();
-            final var assertionValue4Argument1 = r.allOk();
-            evaluatePmdArgument(assertionValue4Argument1);
-            final var assertionValue3Argument1 = seen.stream()
-                    .allMatch(n -> n.equals(new QueueCounts(0L, 3L, 0L)) || n.equals(new QueueCounts(1L, 0L, 0L)));
-            evaluatePmdArgument(assertionValue3Argument1);
-            final var assertionValue3Argument2 = "torn state: " + seen;
-            evaluatePmdArgument(assertionValue3Argument2);
-            final var assertionValue2Argument1 = new QueueCounts(1L, 0L, 0L);
-            evaluatePmdArgument(assertionValue2Argument1);
-            final var assertionValue2Argument2 = q.counts();
-            evaluatePmdArgument(assertionValue2Argument2);
-            drain = q.pull(10, Duration.ZERO);
-            final var assertionValue1Argument1 = q.settle(drain.ackAll()).allOk();
-            Assertions.assertTrue(assertionValue1Argument1, "Outcomes should succeed.");
-        }
+        Assertions.assertTrue(roundFailures.isEmpty(), "Mixed settlement rounds failed: " + roundFailures);
     }
 
     @Test

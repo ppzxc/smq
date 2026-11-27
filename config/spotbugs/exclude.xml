@@ -6,6 +6,13 @@
         <Field name="~(payload|headers)"/>
         <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
     </Match>
+    <!-- QueueOptions is not serializable and the public API does not promise exception serialization;
+         retain both option values for the exception accessors. -->
+    <Match>
+        <Class name="io.github.ppzxc.smq.QueueDeclarationConflictException"/>
+        <Field name="~(existing|requested)"/>
+        <Bug pattern="SE_BAD_FIELD"/>
+    </Match>
     <!-- acquire transfers the lock to read/runLocked, which unlock in finally; failed acquisition owns no lock. -->
     <Match>
         <Class name="io.github.ppzxc.smq.storage.sqlite.TransactionExecutor"/>

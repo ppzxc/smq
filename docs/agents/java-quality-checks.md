@@ -4,8 +4,8 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 
 | SPEC ID | Check | Applied source sets | Enforcement |
 | --- | --- | --- | --- |
-| TOOL-001, STYLE-008 | javac `-Xlint:unchecked` | main, test, benchmark | warnings fail compilation |
-| TOOL-001, STYLE-008 | javac `-Xlint:rawtypes` | main, test, benchmark | warnings fail compilation |
+| TOOL-001, STYLE-008 | javac `-Xlint:unchecked` | main, test, benchmark | warnings fail main compilation; errors fail test and benchmark |
+| TOOL-001, STYLE-008 | javac `-Xlint:rawtypes` | main, test, benchmark | warnings fail main compilation; errors fail test and benchmark |
 | OBJ-001 | Error Prone `ArrayEquals` | main, test, benchmark | error |
 | OBJ-002 | Error Prone `ArrayToString` | main, test, benchmark | error |
 | OBJ-003 | Error Prone `EqualsIncompatibleType` | main, test, benchmark | error |
@@ -22,15 +22,17 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 | ERR-007 | Error Prone `CatchAndPrintStackTrace` | main, test, benchmark | error |
 | CON-002 | Error Prone `FutureReturnValueIgnored`, `WaitNotInLoop` | main, test, benchmark | error |
 | CON-002 | Error Prone `LockNotBeforeTry`, `NonAtomicVolatileUpdate`, `SynchronizeOnNonFinalField` | main, test, benchmark | error |
-| CON-002 | Error Prone `InterruptedExceptionSwallowed` | main, test, benchmark | warnings fail compilation |
+| CON-002 | Error Prone `InterruptedExceptionSwallowed` | main, benchmark | error |
 | | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test, benchmark | error |
 | Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test, benchmark | any violation fails the build |
 | Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | any violation fails the build |
-| TOOL-003 | SpotBugs 4.10.5 with maximum effort and low confidence threshold | main | findings fail the build |
+| TOOL-003 | SpotBugs 4.10.5 with default effort and confidence threshold | main | findings fail the build |
 | NUL-001 | NullAway / JSpecify | main | error; only `@NullMarked` code, explicit nullness required |
 | STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, benchmark, deploy-test Java | `spotlessCheck` is part of `check` |
 
-Error Prone 2.51.0 runs its default checks and enables checks disabled by default. Suggestions are promoted to warnings, and javac `-Werror` makes warnings fail all three compilations. The checks marked as errors above have explicit severity overrides, except `InterruptedExceptionSwallowed`, which is enabled by the global setting.
+Error Prone 2.51.0 runs its default checks and the explicitly adopted checks. Main compilation treats warnings as errors; test and benchmark compilations retain their existing error levels and Korean test scenario names. `InterruptedExceptionSwallowed` is an error in main and benchmark.
+
+For additional disabled-by-default checks and suggestions, run `./gradlew --rerun-tasks compileJava -PextendedErrorProne`. Diagnostics appear in the console and Gradle problems report (`build/reports/problems/problems-report.html`); this optional compilation can fail on diagnostics. Omit the property for the normal gate.
 
 NullAway 0.14.3 and explicit JSpecify nullness marking are errors for `main` only. Public nullable contracts, runtime null checks, and the non-blocking CodeQL operating policy remain as specified in [ADR 0011](../adr/0011-static-analysis-is-strict-in-main-and-advisory-in-code-scanning.md).
 
@@ -61,7 +63,9 @@ PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java
 | performance | 5 |
 | security | 2 |
 
-Both PMD rulesets cover priorities 1 through 5. The SHOULD ruleset loads all eight Java rule categories and retains the project’s complexity thresholds. `LoosePackageCoupling` requires a project-specific list of restricted packages or types. The ruleset excludes it and the package-access marker comment rule, and limits required Javadoc to the visibility allowed by STYLE-011. Violations fail their respective tasks in all three source sets. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect all reports under `build/reports/pmd/`; the XML and HTML reports identify each rule, file, and line. The HTML report also shows the total number of violations. Linux and Windows CI upload the HTML reports as `linux-pmd-report` and `windows-pmd-report`, respectively.
+Both adopted PMD rulesets cover priorities 1 through 5. Violations fail their respective tasks in all three source sets. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect the gate reports.
+
+Run `./gradlew pmdMainAll pmdTestAll pmdBenchmarkAll` for the separate, non-blocking report of all eight Java categories at priorities 1–5. Its ruleset excludes `LoosePackageCoupling`, which requires a project-specific list. The XML and HTML reports are under `build/reports/pmd/`, with task names distinguishing the gate and extended reports. Linux and Windows CI upload gate HTML reports as `linux-pmd-report` and `windows-pmd-report`.
 
 `SqliteStorage` retains narrowly scoped PMD suppressions for these contracts:
 

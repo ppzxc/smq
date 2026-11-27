@@ -1,8 +1,6 @@
 package io.github.ppzxc.gradle
 
 import com.diffplug.gradle.spotless.SpotlessExtension
-import com.github.spotbugs.snom.Confidence
-import com.github.spotbugs.snom.Effort
 import com.github.spotbugs.snom.SpotBugsExtension
 import com.github.spotbugs.snom.SpotBugsTask
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -45,11 +43,14 @@ class JavaQualityPlugin : Plugin<Project> {
             val isMainCompilation = name == "compileJava"
             options.encoding = "UTF-8"
             options.release.set(25)
-            options.compilerArgs.addAll(listOf("-Xlint:unchecked", "-Xlint:rawtypes", "-Werror"))
+            options.compilerArgs.addAll(listOf("-Xlint:unchecked", "-Xlint:rawtypes"))
+            if (isMainCompilation) options.compilerArgs.add("-Werror")
 
             options.errorprone {
-                allDisabledChecksAsWarnings.set(true)
-                errorproneArgs.add("-XepAllSuggestionsAsWarnings")
+                if (project.providers.gradleProperty("extendedErrorProne").isPresent) {
+                    allDisabledChecksAsWarnings.set(true)
+                    errorproneArgs.add("-XepAllSuggestionsAsWarnings")
+                }
                 nullaway {
                     onlyNullMarked.set(true)
                     if (isMainCompilation) {
@@ -60,6 +61,10 @@ class JavaQualityPlugin : Plugin<Project> {
                     }
                 }
                 MUST_ERROR_PRONE_CHECKS.forEach { check(it, CheckSeverity.ERROR) }
+                if (isMainCompilation || name == "compileBenchmarkJava") {
+                    check("InterruptedExceptionSwallowed", CheckSeverity.ERROR)
+                }
+                if (!isMainCompilation) warn("UnicodeInCode")
             }
         }
 
@@ -75,8 +80,6 @@ class JavaQualityPlugin : Plugin<Project> {
         project.pluginManager.apply("com.github.spotbugs-base")
         project.extensions.configure(SpotBugsExtension::class.java) {
             toolVersion.set("4.10.5")
-            effort.set(Effort.MAX)
-            reportLevel.set(Confidence.LOW)
             excludeFilter.set(project.rootProject.file("config/spotbugs/exclude.xml"))
         }
 
@@ -131,11 +134,23 @@ class JavaQualityPlugin : Plugin<Project> {
                 }
             }
             project.tasks.named("check").configure { dependsOn(shouldTask) }
+            project.tasks.register("pmd${name.replaceFirstChar(Char::uppercase)}All", Pmd::class.java) {
+                group = "verification"
+                description = "Reports all PMD Java categories in the ${sourceSet.name} sources."
+                source(sourceSet.allJava)
+                classpath = project.files(sourceSet.output, sourceSet.compileClasspath)
+                ruleSetFiles = project.files(project.rootProject.file("config/pmd/all.xml"))
+                ruleSets = emptyList()
+                rulesMinimumPriority.set(5)
+                setIgnoreFailures(true)
+                reports.xml.required.set(true)
+                reports.html.required.set(true)
+            }
         }
 
         project.afterEvaluate {
             for (sourceSet in PMD_SOURCE_SETS) {
-                for (suffix in listOf("", "Should")) {
+                for (suffix in listOf("", "Should", "All")) {
                     val taskName = "pmd${sourceSet.replaceFirstChar(Char::uppercase)}$suffix"
                     val pmdTask = project.tasks.named(taskName, Pmd::class.java)
                     val started = AtomicBoolean(false)

@@ -230,7 +230,12 @@ public final class SqliteStorage implements Storage {
             reason = "Required output, fixture behavior, or resource ownership contract is preserved.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.UseTryWithResources")
+    @PolicyException(
+            rule = "PMD.UnusedAssignment",
+            reason = "The initial value closes the connection if statement creation or setup fails.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.UseTryWithResources", "PMD.UnusedAssignment"})
     static Connection connect(Path path, Durability durability) throws SQLException {
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(0);

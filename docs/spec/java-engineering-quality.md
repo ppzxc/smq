@@ -351,7 +351,7 @@ AGENTS.md는 **자동화할 수 없는 맥락과 도구 사용법을 전달**하
 | TOOL-007 | MUST | PMD·Error Prone·NullAway·ArchUnit·Instancio 버전을 version catalog 등으로 고정하고, 버전 변경 시 커스텀 규칙 테스트(9.3)를 재실행한다. 커스텀 PMD 규칙은 고정 버전의 API 문서를 기준으로 작성한다 |
 | TOOL-008 | MUST | 위 구성은 단일 Gradle convention plugin(`build-logic`) 또는 Maven parent POM에서 관리한다. 모듈별 빌드 파일에서 검사 비활성화·심각도 하향·대상 제외를 금지한다(STYLE-005) |
 
-smq는 TOOL-003의 프로젝트별 적용 사례로 SpotBugs 기본 검사를 `main` 바이트코드에 실행한다. `check`에 연결하고 탐지 결과가 있으면 빌드를 실패시킨다. Linux·Windows CI는 HTML 보고서를 아티팩트로 제공한다.
+smq는 TOOL-003의 프로젝트별 적용 사례로 SpotBugs 기본 검사를 `main` 바이트코드에 실행한다. `check`에 연결하고 최대 분석 강도와 낮은 신뢰도까지 적용하며 근거 있는 제외를 제외한 탐지 결과가 있으면 빌드를 실패시킨다. Linux·Windows CI는 HTML 보고서를 아티팩트로 제공한다.
 
 ## 9. 커스텀 Lint 작성 및 운영 SPEC
 

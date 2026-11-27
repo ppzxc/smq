@@ -18,36 +18,43 @@ import java.util.Map;
 record Report(Map<String, String> environment, Map<String, Double> entries, Map<String, List<Double>> samples) {
 
     /** 표본 필드가 없는 보고서(기존 결과 파일과 기준선). */
-    Report(Map<String, String> environment, Map<String, Double> entries) {
+    Report(final Map<String, String> environment, final Map<String, Double> entries) {
         this(environment, entries, Map.of());
     }
 
     /** 항목 키 → 표본. 표본 필드가 없는 항목은 대표값 하나가 단일 표본이다. */
     Map<String, List<Double>> sampleMap() {
-        Map<String, List<Double>> out = new LinkedHashMap<>();
+        final Map<String, List<Double>> out;
+        out = new LinkedHashMap<>();
         entries.forEach((k, v) -> out.put(k, samples.getOrDefault(k, List.of(v))));
         return out;
     }
 
     String toJson() {
-        Map<String, Object> m = new LinkedHashMap<>();
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("environment", environment);
         m.put("entries", entries);
         if (!samples.isEmpty()) m.put("samples", samples);
         return Json.write(m);
     }
 
-    static Report fromJson(String json) {
-        Map<?, ?> m = (Map<?, ?>) Json.parse(json);
-        Map<String, String> env = new LinkedHashMap<>();
+    static Report fromJson(final String json) {
+        final Map<?, ?> m;
+        final Map<String, String> env;
+        final Map<String, Double> entries;
+        final Map<String, List<Double>> samples;
+        m = (Map<?, ?>) Json.parse(json);
+        env = new LinkedHashMap<>();
         ((Map<?, ?>) m.get("environment")).forEach((k, v) -> env.put((String) k, String.valueOf(v)));
-        Map<String, Double> entries = new LinkedHashMap<>();
+        entries = new LinkedHashMap<>();
         ((Map<?, ?>) m.get("entries")).forEach((k, v) -> entries.put((String) k, (Double) v));
-        Map<String, List<Double>> samples = new LinkedHashMap<>();
+        samples = new LinkedHashMap<>();
         if (m.get("samples") instanceof Map<?, ?> sm) {
             sm.forEach((k, v) -> {
-                List<Double> l = new ArrayList<>();
-                for (Object o : (List<?>) v) l.add((Double) o);
+                final List<Double> l;
+                l = new ArrayList<>();
+                for (final Object o : (List<?>) v) l.add((Double) o);
                 samples.put((String) k, l);
             });
         }
@@ -56,7 +63,8 @@ record Report(Map<String, String> environment, Map<String, Double> entries, Map<
 
     /** 사람이 읽기 좋게 항목을 줄마다 나눈 JSON. 기준선을 커밋할 때 diff가 읽히게 한다. */
     String toPrettyJson() {
-        StringBuilder sb = new StringBuilder("{\n  \"environment\": {\n");
+        final StringBuilder sb;
+        sb = new StringBuilder("{\n  \"environment\": {\n");
         appendMap(
                 sb,
                 environment.entrySet().stream()
@@ -82,7 +90,7 @@ record Report(Map<String, String> environment, Map<String, Double> entries, Map<
         return sb.toString();
     }
 
-    private static void appendMap(StringBuilder sb, List<Map.Entry<String, Object>> items) {
+    private static void appendMap(final StringBuilder sb, final List<Map.Entry<String, Object>> items) {
         for (int i = 0; i < items.size(); i++) {
             sb.append("    ")
                     .append(Json.write(items.get(i).getKey()))

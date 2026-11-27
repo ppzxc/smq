@@ -20,7 +20,7 @@ final class Plan {
      * 전체 측정. SQLite는 스펙 표 전체이고, 인메모리는 한 JVM에서 도는 조건만이다. smq는 한 JVM만 열 수 있으므로(ADR-0012) 다중
      * 프로세스 조건은 없다.
      */
-    static List<RunSpec> full(Storage storage) {
+    static List<RunSpec> full(final Storage storage) {
         return build(storage, FULL_DURATION_MS, FULL_WARMUP_MS, RunSpec.DEEP);
     }
 
@@ -31,17 +31,19 @@ final class Plan {
      * 교차 순서 계획. 첫 바퀴는 전체 계획이고, 나머지 바퀴는 비율 조건(depth의 분자와 분모가 되는 SQLite S1)만 돈다.
      * 같은 조건을 연속으로 재면 그 몇 분의 장비 부하가 모든 표본에 같이 실리기 때문이다. 비율 조건이 없으면 한 바퀴뿐이다.
      */
-    static List<List<RunSpec>> rounds(List<RunSpec> plan, int repeats) {
+    static List<List<RunSpec>> rounds(final List<RunSpec> plan, final int repeats) {
+        final List<List<RunSpec>> rounds;
+        final List<RunSpec> ratio;
         if (repeats < 1) throw new IllegalArgumentException("반복 횟수는 1 이상: " + repeats);
-        List<List<RunSpec>> rounds = new ArrayList<>();
+        rounds = new ArrayList<>();
         rounds.add(plan);
-        List<RunSpec> ratio = plan.stream().filter(Plan::isRatioCondition).toList();
+        ratio = plan.stream().filter(Plan::isRatioCondition).toList();
         if (!ratio.isEmpty()) for (int i = 1; i < repeats; i++) rounds.add(ratio);
         return rounds;
     }
 
     /** depth(P1 100만 건 깊이와 빈 큐)의 분자 또는 분모인 SQLite S1 조건. */
-    static boolean isRatioCondition(RunSpec s) {
+    static boolean isRatioCondition(final RunSpec s) {
         return s.storage() == Storage.SQLITE
                 && s.scenario() == Scenario.S1
                 && s.profile() == Profile.P1
@@ -49,14 +51,17 @@ final class Plan {
     }
 
     /** 짧은 스모크. 임계값 없이 모든 경로(미리 채운 깊이 포함)를 한 번씩 지나가게 한다. */
-    static List<RunSpec> smoke(Storage storage) {
-        List<RunSpec> plan = new ArrayList<>();
-        long d = SMOKE_DURATION_MS;
-        long w = SMOKE_WARMUP_MS;
+    static List<RunSpec> smoke(final Storage storage) {
+        final List<RunSpec> plan;
+        final long d;
+        final long w;
+        plan = new ArrayList<>();
+        d = SMOKE_DURATION_MS;
+        w = SMOKE_WARMUP_MS;
         if (storage == Storage.SQLITE) {
             plan.add(RunSpec.s1(storage, Profile.P1, Durability.POWER_LOSS, 0, d, w));
             plan.add(RunSpec.s1(storage, Profile.P1, Durability.PROCESS_CRASH, SMOKE_DEPTH, d, w));
-            for (RunSpec.QueueKind kind : List.of(
+            for (final RunSpec.QueueKind kind : List.of(
                     RunSpec.QueueKind.MAX_DELIVERIES,
                     RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
                     RunSpec.QueueKind.LEASED_HEAD)) plan.add(RunSpec.s1(kind, SMOKE_DEPTH, d, w));
@@ -71,14 +76,17 @@ final class Plan {
         return plan;
     }
 
-    private static List<RunSpec> build(Storage storage, long d, long w, int deep) {
-        boolean sqlite = storage == Storage.SQLITE;
-        List<Durability> durabilities =
+    private static List<RunSpec> build(final Storage storage, final long d, final long w, final int deep) {
+        final boolean sqlite;
+        final List<Durability> durabilities;
+        final List<RunSpec> plan;
+        sqlite = storage == Storage.SQLITE;
+        durabilities =
                 sqlite ? List.of(Durability.POWER_LOSS, Durability.PROCESS_CRASH) : Collections.singletonList(null);
-        List<RunSpec> plan = new ArrayList<>();
+        plan = new ArrayList<>();
         addS1(plan, storage, durabilities, sqlite, d, w, deep);
         // S2: 묶음 프로파일과 단건 프로파일(P0, P2, P4, P6), 빈 큐.
-        for (Profile p :
+        for (final Profile p :
                 List.of(Profile.P1, Profile.P3, Profile.P5, Profile.P7, Profile.P0, Profile.P2, Profile.P4, Profile.P6))
             plan.add(RunSpec.s2(storage, p, d, w));
         // S3: P1만.
@@ -87,30 +95,30 @@ final class Plan {
     }
 
     private static void addS1(
-            List<RunSpec> plan,
-            Storage storage,
-            List<Durability> durabilities,
-            boolean sqlite,
-            long d,
-            long w,
-            int deep) {
+            final List<RunSpec> plan,
+            final Storage storage,
+            final List<Durability> durabilities,
+            final boolean sqlite,
+            final long d,
+            final long w,
+            final int deep) {
         // S1: 묶음 프로파일(P1, P3, P5, P7)은 내구성 수준별.
-        for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P0, dur, 0, d, w));
-        for (Profile p : List.of(Profile.P1, Profile.P3, Profile.P5, Profile.P7))
-            for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
+        for (final Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P0, dur, 0, d, w));
+        for (final Profile p : List.of(Profile.P1, Profile.P3, Profile.P5, Profile.P7))
+            for (final Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
         // 단건(청크 1): 데이터 크기마다 S1 빈 큐(두 내구성)와 S2. P0은 위에서 S1을 이미 더했다.
-        for (Profile p : List.of(Profile.P2, Profile.P4, Profile.P6))
-            for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
+        for (final Profile p : List.of(Profile.P2, Profile.P4, Profile.P6))
+            for (final Durability dur : durabilities) plan.add(RunSpec.s1(storage, p, dur, 0, d, w));
         // 100만 건 깊이는 P1에서만.
-        for (Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, dur, deep, d, w));
+        for (final Durability dur : durabilities) plan.add(RunSpec.s1(storage, Profile.P1, dur, deep, d, w));
         if (sqlite) addSqliteQueueKinds(plan, d, w, deep);
     }
 
-    private static void addSqliteQueueKinds(List<RunSpec> plan, long d, long w, int deep) {
-        for (RunSpec.QueueKind kind : List.of(
+    private static void addSqliteQueueKinds(final List<RunSpec> plan, final long d, final long w, final int deep) {
+        for (final RunSpec.QueueKind kind : List.of(
                 RunSpec.QueueKind.MAX_DELIVERIES,
                 RunSpec.QueueKind.SINGLE_ACTIVE_CONSUMER,
                 RunSpec.QueueKind.LEASED_HEAD))
-            for (int depth : new int[] {0, deep}) plan.add(RunSpec.s1(kind, depth, d, w));
+            for (final int depth : new int[] {0, deep}) plan.add(RunSpec.s1(kind, depth, d, w));
     }
 }

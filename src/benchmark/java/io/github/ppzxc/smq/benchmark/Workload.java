@@ -32,7 +32,7 @@ final class Workload {
 
     private Workload() {}
 
-    static Smq open(RunSpec spec, Path db) {
+    static Smq open(final RunSpec spec, final Path db) {
         return switch (spec.storage()) {
             case SQLITE -> Smq.sqlite(db).durability(spec.durability()).open();
             case MEMORY -> Smq.inMemory().open();
@@ -40,19 +40,23 @@ final class Workload {
     }
 
     /** 큐를 선언하고 깊이만큼 미리 채운다. SQLite는 부모가, 인메모리는 자식이 부른다. */
-    static void prepare(Smq smq, RunSpec spec) {
-        Queue q = smq.declare(QUEUE, options(smq, spec));
+    static void prepare(final Smq smq, final RunSpec spec) {
+        final Queue q;
+        final List<OutgoingMessage> batch;
+        q = smq.declare(QUEUE, options(smq, spec));
         if (spec.depth() == 0) return;
-        List<OutgoingMessage> batch = batch(spec.profile(), PREFILL_BATCH);
+        batch = batch(spec.profile(), PREFILL_BATCH);
         for (int done = 0; done < spec.depth(); done += PREFILL_BATCH) {
-            int n = Math.min(PREFILL_BATCH, spec.depth() - done);
+            final int n;
+            n = Math.min(PREFILL_BATCH, spec.depth() - done);
             q.publish(n == PREFILL_BATCH ? batch : batch.subList(0, n));
         }
         if (spec.queueKind() == RunSpec.QueueKind.LEASED_HEAD) leaseHead(q, spec.depth());
     }
 
-    private static QueueOptions options(Smq smq, RunSpec spec) {
-        QueueOptions options = QueueOptions.defaults();
+    private static QueueOptions options(final Smq smq, final RunSpec spec) {
+        final QueueOptions options;
+        options = QueueOptions.defaults();
         if (spec.queueKind() == RunSpec.QueueKind.MAX_DELIVERIES) {
             smq.declare("bench-dlq", QueueOptions.defaults());
             return options.maxDeliveries(5, "bench-dlq");
@@ -62,7 +66,7 @@ final class Workload {
                 : options;
     }
 
-    private static void leaseHead(Queue q, int depth) {
+    private static void leaseHead(final Queue q, final int depth) {
         try {
             for (int done = 0; done < depth; done += 10_000)
                 q.pull(Math.min(10_000, depth - done), Duration.ZERO, Duration.ofHours(1));
@@ -72,8 +76,10 @@ final class Workload {
         }
     }
 
-    static ChildResult run(Smq smq, RunSpec spec, Role role, long startAtEpochMs) throws InterruptedException {
-        Queue q = smq.queue(QUEUE);
+    static ChildResult run(final Smq smq, final RunSpec spec, final Role role, final long startAtEpochMs)
+            throws InterruptedException {
+        final Queue q;
+        q = smq.queue(QUEUE);
         return switch (spec.scenario()) {
             case S1 -> throughput(q, spec, role, startAtEpochMs, true);
             case S2 -> throughput(q, spec, role, startAtEpochMs, false);
@@ -81,45 +87,63 @@ final class Workload {
         };
     }
 
-    private static List<OutgoingMessage> batch(Profile profile, int size) {
-        byte[] payload = new byte[profile.payloadBytes()];
-        List<OutgoingMessage> batch = new ArrayList<>(size);
+    private static List<OutgoingMessage> batch(final Profile profile, final int size) {
+        final byte[] payload;
+        final List<OutgoingMessage> batch;
+        payload = new byte[profile.payloadBytes()];
+        batch = new ArrayList<>(size);
         for (int i = 0; i < size; i++) batch.add(OutgoingMessage.of(payload));
         return List.copyOf(batch);
     }
 
-    private static ChildResult throughput(Queue q, RunSpec spec, Role role, long startAtEpochMs, boolean cycle)
+    private static ChildResult throughput(
+            final Queue q, final RunSpec spec, final Role role, final long startAtEpochMs, final boolean cycle)
             throws InterruptedException {
-        List<OutgoingMessage> batch = batch(spec.profile(), spec.profile().chunk());
+        final List<OutgoingMessage> batch;
+        final long t0;
+        final long end;
+        long messages;
+        batch = batch(spec.profile(), spec.profile().chunk());
         while (System.currentTimeMillis() < startAtEpochMs) cycle(q, batch, cycle);
-        long t0 = System.nanoTime();
-        long end = t0 + spec.durationMs() * 1_000_000L;
-        long messages = 0;
+        t0 = System.nanoTime();
+        end = t0 + spec.durationMs() * 1_000_000L;
+        messages = 0;
         while (System.nanoTime() < end) messages += cycle(q, batch, cycle);
         return new ChildResult(role.name(), messages, System.nanoTime() - t0, new long[0]);
     }
 
     /** 한 주기. S1은 발행, 꺼내기, 전체 ACK이고 S2는 발행만이다. 끝낸 메시지 수를 돌려준다. */
-    private static int cycle(Queue q, List<OutgoingMessage> batch, boolean full) throws InterruptedException {
+    private static int cycle(final Queue q, final List<OutgoingMessage> batch, final boolean full)
+            throws InterruptedException {
+        final Chunk chunk;
         q.publish(batch);
         if (!full) return batch.size();
-        Chunk chunk = q.pull(batch.size(), Duration.ZERO);
+        chunk = q.pull(batch.size(), Duration.ZERO);
         if (chunk.isEmpty()) return 0;
         q.settle(chunk.ackAll());
         return chunk.messages().size();
     }
 
-    private static ChildResult latency(Queue q, RunSpec spec, Role role, long startAtEpochMs)
+    private static ChildResult latency(final Queue q, final RunSpec spec, final Role role, final long startAtEpochMs)
             throws InterruptedException {
-        long measureStart = startAtEpochMs * 1_000_000L;
-        long measureEnd = measureStart + spec.durationMs() * 1_000_000L;
-        long consumeEnd = measureEnd + S3_DRAIN_MS * 1_000_000L;
-        AtomicReference<ChildResult> produced = new AtomicReference<>();
-        AtomicReference<ChildResult> consumed = new AtomicReference<>();
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread producer =
-                new Thread(() -> guard(failure, () -> produced.set(produce(q, spec, measureEnd))), "s3-producer");
-        Thread consumer = new Thread(
+        final long measureStart;
+        final long measureEnd;
+        final long consumeEnd;
+        final AtomicReference<ChildResult> produced;
+        final AtomicReference<ChildResult> consumed;
+        final AtomicReference<Throwable> failure;
+        final Thread producer;
+        final Thread consumer;
+        final ChildResult c;
+        final ChildResult p;
+        measureStart = startAtEpochMs * 1_000_000L;
+        measureEnd = measureStart + spec.durationMs() * 1_000_000L;
+        consumeEnd = measureEnd + S3_DRAIN_MS * 1_000_000L;
+        produced = new AtomicReference<>();
+        consumed = new AtomicReference<>();
+        failure = new AtomicReference<>();
+        producer = new Thread(() -> guard(failure, () -> produced.set(produce(q, spec, measureEnd))), "s3-producer");
+        consumer = new Thread(
                 () -> guard(failure, () -> consumed.set(consume(q, spec, role, measureStart, consumeEnd))),
                 "s3-consumer");
         consumer.start();
@@ -127,8 +151,8 @@ final class Workload {
         producer.join();
         consumer.join();
         if (failure.get() != null) throw new IllegalStateException("S3 스레드 실패", failure.get());
-        ChildResult c = consumed.get();
-        ChildResult p = produced.get();
+        c = consumed.get();
+        p = produced.get();
         return new ChildResult(
                 role.name(), p.messages(), Math.max(p.elapsedNanos(), c.elapsedNanos()), c.latenciesMicros());
     }
@@ -143,7 +167,7 @@ final class Workload {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
-    private static void guard(AtomicReference<Throwable> failure, Body body) {
+    private static void guard(final AtomicReference<Throwable> failure, final Body body) {
         try {
             body.run();
         } catch (Throwable t) {
@@ -152,51 +176,69 @@ final class Workload {
     }
 
     /** 간격마다 발행 배치를 내면서 각 메시지 payload 앞 8바이트에 발행 직전 시각(epoch ns)을 적는다. */
-    private static ChildResult produce(Queue q, RunSpec spec, long endEpochNanos) throws InterruptedException {
-        int size = spec.profile().chunk();
-        long t0 = System.nanoTime();
-        long sent = 0;
-        long next = System.nanoTime();
+    private static ChildResult produce(final Queue q, final RunSpec spec, final long endEpochNanos)
+            throws InterruptedException {
+        final int size;
+        final long t0;
+        long sent;
+        long next;
+        size = spec.profile().chunk();
+        t0 = System.nanoTime();
+        sent = 0;
+        next = System.nanoTime();
         while (epochNanos() < endEpochNanos) {
-            long stamp = epochNanos();
-            List<OutgoingMessage> batch = new ArrayList<>(size);
+            final long stamp;
+            final List<OutgoingMessage> batch;
+            final long sleep;
+            stamp = epochNanos();
+            batch = new ArrayList<>(size);
             for (int i = 0; i < size; i++) {
-                ByteBuffer b = ByteBuffer.allocate(Math.max(8, spec.profile().payloadBytes()));
+                final ByteBuffer b;
+                b = ByteBuffer.allocate(Math.max(8, spec.profile().payloadBytes()));
                 b.putLong(stamp);
                 batch.add(OutgoingMessage.of(b.array()));
             }
             q.publish(batch);
             sent += size;
             next += S3_INTERVAL_MS * 1_000_000L;
-            long sleep = next - System.nanoTime();
+            sleep = next - System.nanoTime();
             if (sleep > 0) Thread.sleep(sleep / 1_000_000L, (int) (sleep % 1_000_000L));
         }
         return new ChildResult("PRODUCER", sent, System.nanoTime() - t0, new long[0]);
     }
 
     /** 꺼낸 직후 시각과 payload의 발행 시각 차이를 잰다. 측정 구간 앞에서 발행한 메시지는 버린다. */
-    private static ChildResult consume(Queue q, RunSpec spec, Role role, long measureStart, long endEpochNanos)
+    private static ChildResult consume(
+            final Queue q, final RunSpec spec, final Role role, final long measureStart, final long endEpochNanos)
             throws InterruptedException {
-        long t0 = System.nanoTime();
-        List<Long> samples = new ArrayList<>();
-        long received = 0;
+        final long t0;
+        final List<Long> samples;
+        long received;
+        final long[] lat;
+        t0 = System.nanoTime();
+        samples = new ArrayList<>();
+        received = 0;
         while (epochNanos() < endEpochNanos) {
-            Chunk chunk = q.pull(spec.profile().chunk(), Duration.ofMillis(200));
-            long now = epochNanos();
+            final Chunk chunk;
+            final long now;
+            chunk = q.pull(spec.profile().chunk(), Duration.ofMillis(200));
+            now = epochNanos();
             if (chunk.isEmpty()) continue;
             chunk.messages().forEach(m -> {
-                long stamp = ByteBuffer.wrap(m.payload()).getLong();
+                final long stamp;
+                stamp = ByteBuffer.wrap(m.payload()).getLong();
                 if (stamp >= measureStart) samples.add(Math.max(0, (now - stamp) / 1000));
             });
             received += chunk.messages().size();
             q.settle(chunk.ackAll());
         }
-        long[] lat = samples.stream().mapToLong(Long::longValue).toArray();
+        lat = samples.stream().mapToLong(Long::longValue).toArray();
         return new ChildResult(role.name(), received, System.nanoTime() - t0, lat);
     }
 
     static long epochNanos() {
-        Instant n = Instant.now();
+        final Instant n;
+        n = Instant.now();
         return n.getEpochSecond() * 1_000_000_000L + n.getNano();
     }
 }

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
@@ -17,10 +18,13 @@ class StorageContractMemoryTest extends StorageContractTest {
     }
 
     @Test
-    void 변경_힌트는_wake하면_기다리던_스레드를_즉시_깨운다() throws Exception {
-        ChangeHint hint = storage.changeHint().orElseThrow();
-        long seen = hint.version();
-        var woke = new CountDownLatch(1);
+    @DisplayName("변경 힌트는 wake하면 기다리던 스레드를 즉시 깨운다")
+    void whenAChangeHintIsWokenItImmediatelyWakesTheWaitingThread() throws Exception {
+        final ChangeHint hint;
+        final long seen;
+        hint = storage.changeHint().orElseThrow();
+        seen = hint.version();
+        final var woke = new CountDownLatch(1);
         Thread.ofPlatform().start(() -> {
             try {
                 hint.await(seen, Duration.ofSeconds(30));
@@ -30,16 +34,21 @@ class StorageContractMemoryTest extends StorageContractTest {
         });
         Thread.sleep(100);
         hint.wake();
-        assertTrue(woke.await(2, TimeUnit.SECONDS));
+        assertTrue(woke.await(2, TimeUnit.SECONDS), "The operation should complete before the timeout.");
     }
 
     @Test
-    void 힌트는_이미_바뀐_버전을_보고_기다리면_바로_돌아온다() throws Exception {
-        ChangeHint hint = storage.changeHint().orElseThrow();
-        long seen = hint.version();
+    @DisplayName("힌트는 이미 바뀐 버전을 보고 기다리면 바로 돌아온다")
+    void theHintIsThatIfYouSeeTheAlreadyChangedVersionAndWaitItWillReturnImmediately() throws Exception {
+        final ChangeHint hint;
+        final long seen;
+        final long start;
+        hint = storage.changeHint().orElseThrow();
+        seen = hint.version();
         hint.wake();
-        long start = System.nanoTime();
+        start = System.nanoTime();
         hint.await(seen, Duration.ofSeconds(30));
-        assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 1000);
+        assertTrue(
+                Duration.ofNanos(System.nanoTime() - start).toMillis() < 1000, "To millis should be less than 1000.");
     }
 }

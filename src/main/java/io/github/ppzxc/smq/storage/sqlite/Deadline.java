@@ -15,7 +15,7 @@ final class Deadline {
     static final class Interrupted extends RuntimeException {
         private final InterruptedException cause;
 
-        Interrupted(InterruptedException cause) {
+        Interrupted(final InterruptedException cause) {
             super(cause);
             this.cause = cause;
         }
@@ -32,18 +32,19 @@ final class Deadline {
     private final long floorNanos;
     private final boolean bounded;
 
-    private Deadline(long nanos, long floorNanos, boolean bounded) {
+    private Deadline(final long nanos, final long floorNanos, final boolean bounded) {
         this.nanos = nanos;
         this.floorNanos = floorNanos;
         this.bounded = bounded;
     }
 
-    static Deadline after(Duration wait, Duration lockWaitFloor) {
-        long now = System.nanoTime();
+    static Deadline after(final Duration wait, final Duration lockWaitFloor) {
+        final long now;
+        now = System.nanoTime();
         return new Deadline(now + saturated(wait), saturated(lockWaitFloor), true);
     }
 
-    private static long saturated(Duration d) {
+    private static long saturated(final Duration d) {
         return d.compareTo(Duration.ofNanos(Long.MAX_VALUE / 2)) > 0 ? Long.MAX_VALUE / 2 : d.toNanos();
     }
 

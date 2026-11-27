@@ -9,7 +9,7 @@ final class ExactCounts {
 
     private ExactCounts() {}
 
-    static QueueCounts stored(SqliteStorage storage, String queue) {
+    static QueueCounts stored(final SqliteStorage storage, final String queue) {
         return storage.inTransaction(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
                     SELECT COALESCE(SUM(lease_token IS NULL AND available_at IS NULL), 0),
@@ -24,8 +24,9 @@ final class ExactCounts {
         });
     }
 
-    static QueueCounts at(SqliteStorage storage, String queue, Instant now) {
-        long nanos = Math.addExact(Math.multiplyExact(now.getEpochSecond(), 1_000_000_000L), now.getNano());
+    static QueueCounts at(final SqliteStorage storage, final String queue, final Instant now) {
+        final long nanos;
+        nanos = Math.addExact(Math.multiplyExact(now.getEpochSecond(), 1_000_000_000L), now.getNano());
         return storage.inTransaction(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
                     SELECT COALESCE(SUM(NOT delayed AND (lease_token IS NULL OR lease_deadline <= ?1)), 0),

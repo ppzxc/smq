@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 
-/** 발행할 메시지. {@code delay}가 {@link Duration#ZERO}이면 지연 없이 바로 꺼낼 수 있다. 지연의 상한은 36,500일(100년)이며 상한을 포함한다. */
 @SuppressWarnings("ArrayRecordComponent") // Payload is copied at construction and access.
 public record OutgoingMessage(byte[] payload, Map<String, String> headers, Duration delay) {
 
@@ -22,20 +21,19 @@ public record OutgoingMessage(byte[] payload, Map<String, String> headers, Durat
         }
     }
 
-    public OutgoingMessage(byte[] payload, Map<String, String> headers) {
+    public OutgoingMessage(final byte[] payload, final Map<String, String> headers) {
         this(payload, headers, Duration.ZERO);
     }
 
-    public static OutgoingMessage of(byte[] payload) {
+    public static OutgoingMessage of(final byte[] payload) {
         return new OutgoingMessage(payload, Map.of());
     }
 
-    public OutgoingMessage withHeaders(Map<String, String> headers) {
+    public OutgoingMessage withHeaders(final Map<String, String> headers) {
         return new OutgoingMessage(payload, headers, delay);
     }
 
-    /** 발행 시각부터 {@code delay}가 지나야 꺼낼 수 있게 한다. */
-    public OutgoingMessage withDelay(Duration delay) {
+    public OutgoingMessage withDelay(final Duration delay) {
         return new OutgoingMessage(payload, headers, Validation.positive(delay, "delay"));
     }
 

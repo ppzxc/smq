@@ -23,7 +23,7 @@ final class PullWaiter {
     private static final class QueueSignal {
         private final ChangeHint hint;
 
-        private QueueSignal(ChangeHint hint) {
+        private QueueSignal(final ChangeHint hint) {
             this.hint = hint;
         }
 
@@ -32,19 +32,23 @@ final class PullWaiter {
 
     private final AtomicBoolean closed = new AtomicBoolean();
 
-    PullWaiter(Optional<ChangeHint> storageHint) {
+    PullWaiter(final Optional<ChangeHint> storageHint) {
         this(storageHint, false);
     }
 
-    PullWaiter(Optional<ChangeHint> hint, boolean scoped) {
+    PullWaiter(final Optional<ChangeHint> hint, final boolean scoped) {
         this(hint.orElseGet(ConditionChangeHint::new), hint.isPresent(), scoped, ConditionChangeHint::new);
     }
 
-    PullWaiter(ChangeHint hint, boolean storageHint) {
+    PullWaiter(final ChangeHint hint, final boolean storageHint) {
         this(hint, storageHint, false, ConditionChangeHint::new);
     }
 
-    PullWaiter(ChangeHint hint, boolean storageHint, boolean scoped, Supplier<ChangeHint> newQueueHint) {
+    PullWaiter(
+            final ChangeHint hint,
+            final boolean storageHint,
+            final boolean scoped,
+            final Supplier<ChangeHint> newQueueHint) {
         this.hint = hint;
         this.storageHint = storageHint;
         this.scoped = scoped && !storageHint;
@@ -58,13 +62,14 @@ final class PullWaiter {
         }
     }
 
-    void wake(String queue) {
+    void wake(final String queue) {
         if (!scoped) {
             wake();
             return;
         }
         synchronized (queues) {
-            QueueSignal signal = queues.get(queue);
+            final QueueSignal signal;
+            signal = queues.get(queue);
             if (signal != null) {
                 signal.hint.wake();
             }
@@ -90,7 +95,7 @@ final class PullWaiter {
 
         record RetryNow<T>() implements Attempt<T> {}
 
-        static <T> Attempt<T> found(T value) {
+        static <T> Attempt<T> found(final T value) {
             return new Found<>(value);
         }
 
@@ -98,7 +103,7 @@ final class PullWaiter {
             return empty(Duration.ZERO);
         }
 
-        static <T> Attempt<T> empty(Duration untilReady) {
+        static <T> Attempt<T> empty(final Duration untilReady) {
             return new Empty<>(untilReady);
         }
 
@@ -112,16 +117,18 @@ final class PullWaiter {
         Attempt<T> get() throws InterruptedException;
     }
 
-    <T> T await(Duration wait, InterruptibleAttempt<T> attempt, Supplier<T> empty) throws InterruptedException {
+    <T> T await(final Duration wait, final InterruptibleAttempt<T> attempt, final Supplier<T> empty)
+            throws InterruptedException {
         return await(hint, System.nanoTime() + Validation.saturatedWaitNanos(wait), attempt, empty);
     }
 
-    <T> T await(String queue, long deadline, InterruptibleAttempt<T> attempt, Supplier<T> empty)
+    <T> T await(final String queue, final long deadline, final InterruptibleAttempt<T> attempt, final Supplier<T> empty)
             throws InterruptedException {
+        final QueueSignal signal;
         if (!scoped) {
             return await(hint, deadline, attempt, empty);
         }
-        QueueSignal signal;
+
         synchronized (queues) {
             signal = queues.computeIfAbsent(queue, _ -> new QueueSignal(newQueueHint.get()));
             signal.users++;
@@ -138,20 +145,27 @@ final class PullWaiter {
         }
     }
 
-    private <T> T await(ChangeHint hint, long deadline, InterruptibleAttempt<T> attempt, Supplier<T> empty)
+    private <T> T await(
+            final ChangeHint hint, final long deadline, final InterruptibleAttempt<T> attempt, final Supplier<T> empty)
             throws InterruptedException {
-        long pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
+        long pollInterval;
+        pollInterval = storageHint ? MAX_POLL_INTERVAL_NANOS : MIN_POLL_INTERVAL_NANOS;
         while (true) {
 
-            long seen = hint.version();
+            final long seen;
+            final Optional<Attempt<T>> attempted;
+            final Attempt<T> result;
+            final long remaining;
+            final Duration pause;
+            seen = hint.version();
             if (closed.get()) {
                 return empty.get();
             }
-            Optional<Attempt<T>> attempted = attemptUnlessClosed(attempt);
+            attempted = attemptUnlessClosed(attempt);
             if (attempted.isEmpty()) {
                 return empty.get();
             }
-            Attempt<T> result = attempted.orElseThrow();
+            result = attempted.orElseThrow();
             if (result instanceof Attempt.Found<T> found) {
                 return found.value();
             }
@@ -159,11 +173,11 @@ final class PullWaiter {
                 checkInterrupted();
                 continue;
             }
-            long remaining = deadline - System.nanoTime();
+            remaining = deadline - System.nanoTime();
             if (remaining <= 0) {
                 return empty.get();
             }
-            Duration pause = pauseFor(result, pollInterval, remaining);
+            pause = pauseFor(result, pollInterval, remaining);
             hint.await(seen, pause);
             if (!storageHint) {
                 pollInterval = Math.min(pollInterval * 2, MAX_POLL_INTERVAL_NANOS);
@@ -177,8 +191,9 @@ final class PullWaiter {
         }
     }
 
-    private static Duration pauseFor(Attempt<?> result, long pollInterval, long remaining) {
-        Duration pause = Duration.ofNanos(Math.min(pollInterval, remaining));
+    private static Duration pauseFor(final Attempt<?> result, final long pollInterval, final long remaining) {
+        final Duration pause;
+        pause = Duration.ofNanos(Math.min(pollInterval, remaining));
         if (result instanceof Attempt.Empty<?> pending
                 && pending.untilReady().isPositive()
                 && pending.untilReady().compareTo(pause) < 0) {
@@ -193,7 +208,8 @@ final class PullWaiter {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
-    private <T> Optional<Attempt<T>> attemptUnlessClosed(InterruptibleAttempt<T> attempt) throws InterruptedException {
+    private <T> Optional<Attempt<T>> attemptUnlessClosed(final InterruptibleAttempt<T> attempt)
+            throws InterruptedException {
         try {
             return Optional.of(attempt.get());
         } catch (RuntimeException e) {

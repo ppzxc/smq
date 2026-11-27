@@ -14,7 +14,7 @@ final class QueueCounters {
     private static final class Slot {
         volatile QueueCounts value;
 
-        Slot(QueueCounts value) {
+        Slot(final QueueCounts value) {
             this.value = value;
         }
     }
@@ -23,20 +23,22 @@ final class QueueCounters {
 
     private final Map<Long, Slot> byId = new HashMap<>();
 
-    void register(String name, long queueId, QueueCounts initial) {
-        Slot slot = new Slot(initial);
+    void register(final String name, final long queueId, final QueueCounts initial) {
+        final Slot slot;
+        slot = new Slot(initial);
         byName.put(name, slot);
         byId.put(queueId, slot);
     }
 
-    private void unregister(String name, long queueId) {
+    private void unregister(final String name, final long queueId) {
         byName.remove(name);
         byId.remove(queueId);
     }
 
     @Nullable
-    QueueCounts get(String name) {
-        Slot slot = byName.get(name);
+    QueueCounts get(final String name) {
+        final Slot slot;
+        slot = byName.get(name);
         return slot == null ? null : slot.value;
     }
 
@@ -48,44 +50,47 @@ final class QueueCounters {
         private final Map<Long, long[]> deltas = new LinkedHashMap<>();
         private final List<Runnable> registrations = new ArrayList<>();
 
-        void ready(long queueId, long n) {
+        void ready(final long queueId, final long n) {
             delta(queueId)[0] += n;
         }
 
-        void leased(long queueId, long n) {
+        void leased(final long queueId, final long n) {
             delta(queueId)[1] += n;
         }
 
-        void delayed(long queueId, long n) {
+        void delayed(final long queueId, final long n) {
             delta(queueId)[2] += n;
         }
 
-        void declared(String name, long queueId) {
+        void declared(final String name, final long queueId) {
             registrations.add(() -> register(name, queueId, new QueueCounts(0, 0, 0)));
         }
 
-        void deleted(String name, long queueId) {
+        void deleted(final String name, final long queueId) {
             registrations.add(() -> unregister(name, queueId));
         }
 
-        private long[] delta(long queueId) {
+        private long[] delta(final long queueId) {
             return deltas.computeIfAbsent(queueId, k -> new long[3]);
         }
 
         void apply() {
-            for (Runnable r : registrations) {
+            for (final Runnable r : registrations) {
                 r.run();
             }
-            for (Map.Entry<Long, long[]> e : deltas.entrySet()) {
-                Slot slot = byId.get(e.getKey());
+            for (final Map.Entry<Long, long[]> e : deltas.entrySet()) {
+                final Slot slot;
+                final long[] d;
+                final QueueCounts v;
+                slot = byId.get(e.getKey());
                 if (slot == null) {
 
                     System.getLogger(QueueCounters.class.getName())
                             .log(System.Logger.Level.ERROR, "no counter registered for queue id " + e.getKey());
                     continue;
                 }
-                long[] d = e.getValue();
-                QueueCounts v = slot.value;
+                d = e.getValue();
+                v = slot.value;
                 slot.value = new QueueCounts(v.ready() + d[0], v.leased() + d[1], v.delayed() + d[2]);
             }
         }

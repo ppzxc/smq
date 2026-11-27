@@ -58,22 +58,37 @@ record Options(
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
-    static Options parse(String[] args, long nowMillis) {
-        OptionalLong seed = OptionalLong.empty();
-        Duration budget = DEFAULT_BUDGET;
-        long master = nowMillis;
-        Duration load = null;
-        boolean smoke = false;
-        boolean jfr = false;
-        long rate = 0;
-        int messageBytes = 0;
-        int depth = 0;
-        boolean standingQueue = false;
-        double minAchieved = 0;
-        Optional<Durability> durability = Optional.empty();
-        Path out = Path.of("build/random-bench");
+    static Options parse(final String[] args, final long nowMillis) {
+        OptionalLong seed;
+        Duration budget;
+        long master;
+        Duration load;
+        boolean smoke;
+        boolean jfr;
+        long rate;
+        int messageBytes;
+        int depth;
+        boolean standingQueue;
+        double minAchieved;
+        Optional<Durability> durability;
+        Path out;
+        seed = OptionalLong.empty();
+        budget = DEFAULT_BUDGET;
+        master = nowMillis;
+        load = null;
+        smoke = false;
+        jfr = false;
+        rate = 0;
+        messageBytes = 0;
+        depth = 0;
+        standingQueue = false;
+        minAchieved = 0;
+        durability = Optional.empty();
+        out = Path.of("build/random-bench");
         for (int i = 0; i < args.length; i++) {
-            String a = args[i];
+            final String a;
+            final String v;
+            a = args[i];
             if (a.equals("--smoke")) {
                 smoke = true;
                 continue;
@@ -90,7 +105,7 @@ record Options(
                 throw new IllegalArgumentException("잘못된 인자: " + a);
             }
             i++;
-            String v = args[i];
+            v = args[i];
             switch (a) {
                 case "--seed" -> seed = OptionalLong.of(parseLong(a, v));
                 case "--budget" -> budget = parseDuration(v);
@@ -136,7 +151,7 @@ record Options(
                 durability);
     }
 
-    private static Durability parseDurability(String v) {
+    private static Durability parseDurability(final String v) {
         try {
             return Durability.valueOf(v.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
@@ -144,8 +159,8 @@ record Options(
         }
     }
 
-    private static double parseRatio(String option, String v) {
-        double d;
+    private static double parseRatio(final String option, final String v) {
+        final double d;
         try {
             d = Double.parseDouble(v.trim());
         } catch (NumberFormatException e) {
@@ -157,23 +172,25 @@ record Options(
         return d;
     }
 
-    private static int parsePositiveInt(String option, String v) {
-        long n = parseLong(option, v);
+    private static int parsePositiveInt(final String option, final String v) {
+        final long n;
+        n = parseLong(option, v);
         if (n <= 0 || n > Integer.MAX_VALUE) {
             throw new IllegalArgumentException(option + "는 양의 정수여야 한다: " + v);
         }
         return (int) n;
     }
 
-    private static long parseRate(String v) {
-        long n = parseLong("--rate", v);
+    private static long parseRate(final String v) {
+        final long n;
+        n = parseLong("--rate", v);
         if (n <= 0) {
             throw new IllegalArgumentException("--rate는 양의 정수여야 한다: " + v);
         }
         return n;
     }
 
-    private static long parseLong(String option, String v) {
+    private static long parseLong(final String option, final String v) {
         try {
             return Long.parseLong(v);
         } catch (NumberFormatException e) {
@@ -188,16 +205,18 @@ record Options(
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
-    static Duration parseDuration(String v) {
-        String s = v.trim();
+    static Duration parseDuration(final String v) {
+        final String s;
+        s = v.trim();
         try {
+            final long n;
             if (s.regionMatches(true, 0, "PT", 0, 2)) {
                 return Duration.parse(s);
             }
             if (s.endsWith("ms")) {
                 return Duration.ofMillis(Long.parseLong(s.substring(0, s.length() - 2)));
             }
-            long n = Long.parseLong(s.substring(0, s.length() - (Character.isDigit(s.charAt(s.length() - 1)) ? 0 : 1)));
+            n = Long.parseLong(s.substring(0, s.length() - (Character.isDigit(s.charAt(s.length() - 1)) ? 0 : 1)));
             return switch (Character.toLowerCase(s.charAt(s.length() - 1))) {
                 case 'h' -> Duration.ofHours(n);
                 case 'm' -> Duration.ofMinutes(n);

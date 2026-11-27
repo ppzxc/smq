@@ -36,9 +36,10 @@ final class RecordSpool implements AutoCloseable {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.CloseResource", "PMD.AvoidCatchingGenericException"})
-    RecordSpool(Path dir) throws IOException {
+    RecordSpool(final Path dir) throws IOException {
+        final DataOutputStream second;
         this.published = open(publishedFile(dir));
-        DataOutputStream second;
+
         try {
             second = open(deliveriesFile(dir));
         } catch (IOException | RuntimeException e) {
@@ -48,25 +49,25 @@ final class RecordSpool implements AutoCloseable {
         this.deliveries = second;
     }
 
-    static Path publishedFile(Path dir) {
+    static Path publishedFile(final Path dir) {
         return dir.resolve("published.bin");
     }
 
-    static Path deliveriesFile(Path dir) {
+    static Path deliveriesFile(final Path dir) {
         return dir.resolve("deliveries.bin");
     }
 
     /** {@code dir}의 발행 기록 파일. */
-    static List<Path> publishedFiles(Path dir) throws IOException {
+    static List<Path> publishedFiles(final Path dir) throws IOException {
         return files(dir, "published");
     }
 
     /** {@code dir}의 전달 기록 파일. */
-    static List<Path> deliveriesFiles(Path dir) throws IOException {
+    static List<Path> deliveriesFiles(final Path dir) throws IOException {
         return files(dir, "deliveries");
     }
 
-    private static List<Path> files(Path dir, String kind) throws IOException {
+    private static List<Path> files(final Path dir, final String kind) throws IOException {
         try (Stream<Path> s = Files.list(dir)) {
             return s.filter(f -> f.getFileName().toString().equals(kind + ".bin"))
                     .sorted()
@@ -74,11 +75,11 @@ final class RecordSpool implements AutoCloseable {
         }
     }
 
-    private static DataOutputStream open(Path file) throws IOException {
+    private static DataOutputStream open(final Path file) throws IOException {
         return new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(file), BUFFER_BYTES));
     }
 
-    void add(Published p) {
+    void add(final Published p) {
         try {
             synchronized (publishedLock) {
                 RecordCodec.write(published, p);
@@ -88,7 +89,7 @@ final class RecordSpool implements AutoCloseable {
         }
     }
 
-    void add(Delivery d) {
+    void add(final Delivery d) {
         try {
             synchronized (deliveriesLock) {
                 RecordCodec.write(deliveries, d);

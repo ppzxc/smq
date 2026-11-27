@@ -39,7 +39,8 @@ final class JvmMetricsSampler implements AutoCloseable {
             long peakRssBytes) {
 
         Map<String, Object> toMap() {
-            Map<String, Object> m = new LinkedHashMap<>();
+            final Map<String, Object> m;
+            m = new LinkedHashMap<>();
             m.put("peakHeapUsedMB", peakHeapUsedBytes / (1024.0 * 1024.0));
             m.put("peakNonHeapUsedMB", peakNonHeapUsedBytes / (1024.0 * 1024.0));
             m.put("peakLiveThreads", peakLiveThreads);
@@ -79,7 +80,7 @@ final class JvmMetricsSampler implements AutoCloseable {
     private final ThreadMXBean threads = ManagementFactory.getThreadMXBean();
     private final List<GarbageCollectorMXBean> gcBeans = ManagementFactory.getGarbageCollectorMXBeans();
 
-    private JvmMetricsSampler(Path file, long intervalMs) {
+    private JvmMetricsSampler(final Path file, final long intervalMs) {
         this.file = file;
         this.intervalMs = intervalMs;
         this.thread = new Thread(this::loop, "jvm-metrics-sampler");
@@ -87,21 +88,25 @@ final class JvmMetricsSampler implements AutoCloseable {
     }
 
     /** 기본 5초 간격으로 표본한다. */
-    static JvmMetricsSampler start(Path dir) {
+    static JvmMetricsSampler start(final Path dir) {
         return start(dir, DEFAULT_INTERVAL_MS);
     }
 
-    static JvmMetricsSampler start(Path dir, long intervalMs) {
-        Path file = dir.resolve("jvm-metrics.jsonl");
-        JvmMetricsSampler s = new JvmMetricsSampler(file, intervalMs);
+    static JvmMetricsSampler start(final Path dir, final long intervalMs) {
+        final Path file;
+        final JvmMetricsSampler s;
+        file = dir.resolve("jvm-metrics.jsonl");
+        s = new JvmMetricsSampler(file, intervalMs);
         s.thread.start();
         return s;
     }
 
     Summary summary() {
-        long totalGcCount = 0;
-        long totalGcTime = 0;
-        for (GarbageCollectorMXBean gc : gcBeans) {
+        long totalGcCount;
+        long totalGcTime;
+        totalGcCount = 0;
+        totalGcTime = 0;
+        for (final GarbageCollectorMXBean gc : gcBeans) {
             totalGcCount += gc.getCollectionCount();
             totalGcTime += gc.getCollectionTime();
         }
@@ -129,30 +134,44 @@ final class JvmMetricsSampler implements AutoCloseable {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CyclomaticComplexity")
-    static Summary summarize(Path file) {
-        long peakHeap = 0;
-        long peakNonHeap = 0;
-        long peakThreads = 0;
-        long gcCount = 0;
-        long gcTime = 0;
-        long peakFds = 0;
-        long maxFds = 0;
-        int n = 0;
-        double peakCpu = -1;
-        double cpuSum = 0;
-        int cpuN = 0;
-        long peakRss = -1;
-        List<String> lines;
+    static Summary summarize(final Path file) {
+        final List<String> lines;
+        long peakHeap;
+        long peakNonHeap;
+        long peakThreads;
+        long gcCount;
+        long gcTime;
+        long peakFds;
+        long maxFds;
+        int n;
+        double peakCpu;
+        double cpuSum;
+        int cpuN;
+        long peakRss;
+        peakHeap = 0;
+        peakNonHeap = 0;
+        peakThreads = 0;
+        gcCount = 0;
+        gcTime = 0;
+        peakFds = 0;
+        maxFds = 0;
+        n = 0;
+        peakCpu = -1;
+        cpuSum = 0;
+        cpuN = 0;
+        peakRss = -1;
+
         try {
             lines = Files.exists(file) ? Files.readAllLines(file) : List.of();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        for (String line : lines) {
+        for (final String line : lines) {
+            final Map<?, ?> m;
             if (line.isBlank()) {
                 continue;
             }
-            Map<?, ?> m = (Map<?, ?>) Json.parse(line);
+            m = (Map<?, ?>) Json.parse(line);
             n++;
             peakHeap = Math.max(peakHeap, megabytes(m.get("heapUsedMB")));
             peakNonHeap = Math.max(peakNonHeap, megabytes(m.get("nonHeapUsedMB")));
@@ -184,11 +203,11 @@ final class JvmMetricsSampler implements AutoCloseable {
                 peakRss);
     }
 
-    private static long megabytes(Object v) {
+    private static long megabytes(final Object v) {
         return v instanceof Number x ? Math.round(x.doubleValue() * 1024 * 1024) : 0;
     }
 
-    private static long longOf(Object v) {
+    private static long longOf(final Object v) {
         return v instanceof Number x ? x.longValue() : 0;
     }
 
@@ -222,18 +241,29 @@ final class JvmMetricsSampler implements AutoCloseable {
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void sample() {
-        long now = System.currentTimeMillis();
-        MemoryUsage heap = memory.getHeapMemoryUsage();
-        MemoryUsage nonHeap = memory.getNonHeapMemoryUsage();
-        int liveThreads = threads.getThreadCount();
+        final long now;
+        final MemoryUsage heap;
+        final MemoryUsage nonHeap;
+        final int liveThreads;
+        final GcTotals gc;
+        long openFds;
+        long mxFds;
+        final long rssBytes;
+        double cpuLoad;
+        long cpuTimeMs;
+        final Map<String, Object> m;
+        now = System.currentTimeMillis();
+        heap = memory.getHeapMemoryUsage();
+        nonHeap = memory.getNonHeapMemoryUsage();
+        liveThreads = threads.getThreadCount();
 
-        GcTotals gc = gcTotals();
+        gc = gcTotals();
 
-        long openFds = -1;
-        long mxFds = -1;
+        openFds = -1;
+        mxFds = -1;
         try {
             // com.sun.management.UnixOperatingSystemMXBean (Linux/Mac)
-            var os = ManagementFactory.getOperatingSystemMXBean();
+            final var os = ManagementFactory.getOperatingSystemMXBean();
             if (os instanceof com.sun.management.UnixOperatingSystemMXBean unix) {
                 openFds = unix.getOpenFileDescriptorCount();
                 mxFds = unix.getMaxFileDescriptorCount();
@@ -242,11 +272,11 @@ final class JvmMetricsSampler implements AutoCloseable {
             // Windows 등에서는 지원하지 않는다
         }
 
-        long rssBytes = readRssBytes();
+        rssBytes = readRssBytes();
         peakRssBytes = Math.max(peakRssBytes, rssBytes);
 
-        double cpuLoad = -1;
-        long cpuTimeMs = -1;
+        cpuLoad = -1;
+        cpuTimeMs = -1;
         try {
             if (ManagementFactory.getOperatingSystemMXBean()
                     instanceof com.sun.management.OperatingSystemMXBean sunOs) {
@@ -264,7 +294,7 @@ final class JvmMetricsSampler implements AutoCloseable {
         peakThreads = Math.max(peakThreads, liveThreads);
         sampleCount++;
 
-        Map<String, Object> m = new LinkedHashMap<>();
+        m = new LinkedHashMap<>();
         m.put("timestampMs", now);
         m.put("heapUsedMB", round2(heap.getUsed() / (1024.0 * 1024.0)));
         m.put("heapMaxMB", round2(heap.getMax() / (1024.0 * 1024.0)));
@@ -284,18 +314,22 @@ final class JvmMetricsSampler implements AutoCloseable {
     private record GcTotals(long count, long timeMillis) {}
 
     private GcTotals gcTotals() {
-        long count = 0;
-        long time = 0;
-        for (GarbageCollectorMXBean gc : gcBeans) {
-            long c = gc.getCollectionCount();
-            long t = gc.getCollectionTime();
+        long count;
+        long time;
+        count = 0;
+        time = 0;
+        for (final GarbageCollectorMXBean gc : gcBeans) {
+            final long c;
+            final long t;
+            c = gc.getCollectionCount();
+            t = gc.getCollectionTime();
             if (c >= 0) count += c;
             if (t >= 0) time += t;
         }
         return new GcTotals(count, time);
     }
 
-    private void updateOptionalPeaks(double cpuLoad, long openFds, long mxFds) {
+    private void updateOptionalPeaks(final double cpuLoad, final long openFds, final long mxFds) {
         if (cpuLoad >= 0) {
             peakCpuLoad = Math.max(peakCpuLoad, cpuLoad);
             cpuLoadSum += cpuLoad;
@@ -306,7 +340,12 @@ final class JvmMetricsSampler implements AutoCloseable {
     }
 
     private static void addOptionalMetrics(
-            Map<String, Object> m, long openFds, long mxFds, long rssBytes, double cpuLoad, long cpuTimeMs) {
+            final Map<String, Object> m,
+            final long openFds,
+            final long mxFds,
+            final long rssBytes,
+            final double cpuLoad,
+            final long cpuTimeMs) {
         if (openFds >= 0) m.put("openFds", openFds);
         if (mxFds >= 0) m.put("maxFds", mxFds);
         if (rssBytes >= 0) m.put("rssMB", round2(rssBytes / (1024.0 * 1024.0)));
@@ -330,8 +369,8 @@ final class JvmMetricsSampler implements AutoCloseable {
         }
     }
 
-    static long parseVmRssBytes(List<String> statusLines) {
-        for (String line : statusLines) {
+    static long parseVmRssBytes(final List<String> statusLines) {
+        for (final String line : statusLines) {
             if (line.startsWith("VmRSS:")) {
                 try {
                     return Long.parseLong(line.substring("VmRSS:".length())
@@ -346,11 +385,11 @@ final class JvmMetricsSampler implements AutoCloseable {
         return -1;
     }
 
-    private static double round4(double v) {
+    private static double round4(final double v) {
         return Math.round(v * 10_000.0) / 10_000.0;
     }
 
-    private static double round2(double v) {
+    private static double round2(final double v) {
         return Math.round(v * 100.0) / 100.0;
     }
 }

@@ -38,7 +38,7 @@ final class TransactionExecutor {
 
     static final long WAL_FILE_KEEP_BYTES = 12L * 1024 * 1024;
 
-    static void configureWal(Statement s) throws SQLException {
+    static void configureWal(final Statement s) throws SQLException {
         s.execute("PRAGMA wal_autocheckpoint = 0");
         s.execute("PRAGMA journal_size_limit = " + WAL_FILE_KEEP_BYTES);
         s.execute("PRAGMA journal_mode = WAL");
@@ -68,11 +68,11 @@ final class TransactionExecutor {
         long size(Path walFile) throws IOException;
     }
 
-    TransactionExecutor(Connection connection) {
+    TransactionExecutor(final Connection connection) {
         this(connection, Files::size);
     }
 
-    TransactionExecutor(Connection connection, WalSizeReader walSizeReader) {
+    TransactionExecutor(final Connection connection, final WalSizeReader walSizeReader) {
         this.connection = connection;
         this.walSizeReader = walSizeReader;
     }
@@ -87,19 +87,19 @@ final class TransactionExecutor {
         boolean apply(Connection connection) throws SQLException;
     }
 
-    boolean anyOrUncertain(ReadProbe probe) {
+    boolean anyOrUncertain(final ReadProbe probe) {
         return anyOrUncertain(probe, Deadline.NONE);
     }
 
-    boolean anyOrUncertain(ReadProbe probe, Deadline deadline) {
+    boolean anyOrUncertain(final ReadProbe probe, final Deadline deadline) {
         return read(probe::apply, deadline);
     }
 
-    <T> T read(TxBody<T> probe) {
+    <T> T read(final TxBody<T> probe) {
         return read(probe, Deadline.NONE);
     }
 
-    <T> T read(TxBody<T> probe, Deadline deadline) {
+    <T> T read(final TxBody<T> probe, final Deadline deadline) {
         acquire(deadline);
         try {
             checkFailure();
@@ -111,15 +111,15 @@ final class TransactionExecutor {
         }
     }
 
-    <T> T execute(TxBody<T> body) {
+    <T> T execute(final TxBody<T> body) {
         return execute(body, Deadline.NONE);
     }
 
-    <T> T execute(TxBody<T> body, Deadline deadline) {
+    <T> T execute(final TxBody<T> body, final Deadline deadline) {
         return execute(body, deadline, () -> {});
     }
 
-    <T> T execute(TxBody<T> body, Deadline deadline, Runnable afterCommit) {
+    <T> T execute(final TxBody<T> body, final Deadline deadline, final Runnable afterCommit) {
         return runLocked(() -> runOnce(body, afterCommit), deadline);
     }
 
@@ -140,11 +140,12 @@ final class TransactionExecutor {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
-    private <T> T runOnce(TxBody<T> body, Runnable afterCommit) throws SQLException {
+    private <T> T runOnce(final TxBody<T> body, final Runnable afterCommit) throws SQLException {
+        final T result;
         try (Statement s = connection.createStatement()) {
             s.execute("BEGIN IMMEDIATE");
         }
-        T result;
+
         try {
             result = body.apply(connection);
             try (Statement s = connection.createStatement()) {
@@ -195,7 +196,7 @@ final class TransactionExecutor {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
-    static void logCheckpointFailure(Throwable failure, Runnable log) {
+    static void logCheckpointFailure(final Throwable failure, final Runnable log) {
         try {
             log.run();
         } catch (Throwable loggingFailure) {
@@ -206,7 +207,7 @@ final class TransactionExecutor {
     }
 
     @SuppressWarnings("ReferenceEquality") // Suppress self-suppression by comparing Throwable identity.
-    private static boolean differentFailures(Throwable first, Throwable second) {
+    private static boolean differentFailures(final Throwable first, final Throwable second) {
         return first != second;
     }
 
@@ -217,7 +218,8 @@ final class TransactionExecutor {
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void checkWalSizeAndRewind() {
-        Long size = walSize();
+        final Long size;
+        size = walSize();
         if (size == null) {
             return;
         }
@@ -250,6 +252,7 @@ final class TransactionExecutor {
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private @Nullable Long walSize() {
+        long size;
         if (!walFileLocated) {
             try {
                 walFile = locateWalFile();
@@ -260,7 +263,7 @@ final class TransactionExecutor {
                 return null;
             }
         }
-        long size;
+
         if (walFile.equals(NO_WAL)) {
             size = 0;
         } else {
@@ -278,7 +281,7 @@ final class TransactionExecutor {
         return size;
     }
 
-    private void rewindFailed(@Nullable Exception cause) {
+    private void rewindFailed(final @Nullable Exception cause) {
         walSizeAtRestart = 0;
         checkpointFailed(CHECKPOINT_INCOMPLETE, cause);
     }
@@ -310,13 +313,15 @@ final class TransactionExecutor {
     private static final String CHECKPOINT_UNEXPECTED =
             "sqlite checkpoint check failed unexpectedly after commit (not rate-limited); the next check will retry";
 
-    private void checkpointFailed(String what, @Nullable Throwable cause) {
+    private void checkpointFailed(final String what, final @Nullable Throwable cause) {
+        final long failures;
+        final String message;
         consecutiveCheckpointFailures++;
-        long failures = consecutiveCheckpointFailures;
+        failures = consecutiveCheckpointFailures;
         if (failures != 1 && failures % CHECKPOINT_FAILURE_LOG_EVERY != 0) {
             return;
         }
-        String message = what + " (consecutive failures: " + failures + ", the WAL may be growing)";
+        message = what + " (consecutive failures: " + failures + ", the WAL may be growing)";
         if (cause == null) {
             LOG.log(System.Logger.Level.WARNING, message);
         } else {
@@ -329,7 +334,8 @@ final class TransactionExecutor {
                 ResultSet rs = s.executeQuery("PRAGMA database_list")) {
             while (rs.next()) {
                 if ("main".equals(rs.getString(2))) {
-                    String file = rs.getString(3);
+                    final String file;
+                    file = rs.getString(3);
                     return file == null || file.isEmpty() ? NO_WAL : Path.of(file + "-wal");
                 }
             }
@@ -349,11 +355,11 @@ final class TransactionExecutor {
         }
     }
 
-    <T> T executeOutsideTransaction(SqlAction<T> action) {
+    <T> T executeOutsideTransaction(final SqlAction<T> action) {
         return runLocked(action, Deadline.NONE);
     }
 
-    private <T> T runLocked(SqlAction<T> action, Deadline deadline) {
+    private <T> T runLocked(final SqlAction<T> action, final Deadline deadline) {
         acquire(deadline);
         try {
             checkFailure();
@@ -365,7 +371,7 @@ final class TransactionExecutor {
         }
     }
 
-    private void acquire(Deadline deadline) {
+    private void acquire(final Deadline deadline) {
         if (!deadline.bounded()) {
             lock.lock();
             return;
@@ -379,7 +385,7 @@ final class TransactionExecutor {
         }
     }
 
-    static boolean isBusy(SQLException e) {
+    static boolean isBusy(final SQLException e) {
 
         return (e.getErrorCode() & 0xFF) == SQLITE_BUSY;
     }

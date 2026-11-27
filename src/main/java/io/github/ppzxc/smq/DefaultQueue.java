@@ -24,13 +24,13 @@ final class DefaultQueue implements Queue {
     private final QueueOptions options;
 
     DefaultQueue(
-            Storage storage,
-            InstantSource clock,
-            Duration defaultLease,
-            PullWaiter waiter,
-            Object session,
-            String name,
-            QueueOptions options) {
+            final Storage storage,
+            final InstantSource clock,
+            final Duration defaultLease,
+            final PullWaiter waiter,
+            final Object session,
+            final String name,
+            final QueueOptions options) {
         this.storage = storage;
         this.clock = clock;
         this.defaultLease = defaultLease;
@@ -57,10 +57,12 @@ final class DefaultQueue implements Queue {
     }
 
     @Override
-    public List<MessageId> publish(List<OutgoingMessage> batch) {
+    public List<MessageId> publish(final List<OutgoingMessage> batch) {
+        final List<NewMessage> converted;
+        final List<MessageId> ids;
         Objects.requireNonNull(batch, "batch");
         waiter.requireOpen();
-        List<NewMessage> converted = batch.stream()
+        converted = batch.stream()
                 .map(m -> {
                     Objects.requireNonNull(m, "batch element");
                     return new NewMessage(m.payload(), m.headers(), m.delay());
@@ -69,23 +71,24 @@ final class DefaultQueue implements Queue {
         if (converted.isEmpty()) {
             return List.of();
         }
-        List<MessageId> ids = storage.publish(name, converted, clock);
+        ids = storage.publish(name, converted, clock);
         waiter.wake(name);
         return ids;
     }
 
     @Override
-    public MessageId publish(OutgoingMessage message) {
+    public MessageId publish(final OutgoingMessage message) {
         return publish(List.of(Objects.requireNonNull(message, "message"))).getFirst();
     }
 
     @Override
-    public Chunk pull(int max, Duration wait) throws InterruptedException {
+    public Chunk pull(final int max, final Duration wait) throws InterruptedException {
         return pull(max, wait, defaultLease);
     }
 
     @Override
-    public Chunk pull(int max, Duration wait, Duration leaseDuration) throws InterruptedException {
+    public Chunk pull(final int max, final Duration wait, final Duration leaseDuration) throws InterruptedException {
+        final long deadline;
         if (max < 1) {
             throw new IllegalArgumentException("max must be >= 1: " + max);
         }
@@ -93,13 +96,16 @@ final class DefaultQueue implements Queue {
             throw new IllegalArgumentException("wait must not be negative: " + wait);
         }
         Validation.positive(leaseDuration, "leaseDuration");
-        long deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
+        deadline = System.nanoTime() + Validation.saturatedWaitNanos(wait);
         return waiter.await(
                 name,
                 deadline,
                 () -> {
-                    Duration remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
-                    PullResult r = storage.pull(name, max, leaseDuration, clock, remaining, this::wakeDeadLetter);
+                    final Duration remaining;
+                    final PullResult r;
+                    final long nanos;
+                    remaining = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
+                    r = storage.pull(name, max, leaseDuration, clock, remaining, this::wakeDeadLetter);
                     if (!r.messages().isEmpty()) {
                         return PullWaiter.Attempt.found(new Chunk(
                                 session,
@@ -112,7 +118,7 @@ final class DefaultQueue implements Queue {
                     if (r.deadLettersRemain()) {
                         return PullWaiter.Attempt.retryNow();
                     }
-                    long nanos = deadline - System.nanoTime();
+                    nanos = deadline - System.nanoTime();
                     if (nanos <= 0) {
                         return PullWaiter.Attempt.empty();
                     }
@@ -124,15 +130,16 @@ final class DefaultQueue implements Queue {
     }
 
     @Override
-    public Outcomes settle(Settlement settlement) {
+    public Outcomes settle(final Settlement settlement) {
+        final Map<MessageId, Outcome> byMessage;
         Objects.requireNonNull(settlement, "settlement");
         requireOwn(settlement.queue(), settlement.session(), "settlement");
         waiter.requireOpen();
         if (settlement.items().isEmpty()) {
             return new Outcomes(Map.of());
         }
-        Map<MessageId, Outcome> byMessage = new LinkedHashMap<>();
-        for (Result r : storage.settle(
+        byMessage = new LinkedHashMap<>();
+        for (final Result r : storage.settle(
                 Objects.requireNonNull(settlement.token(), "non-empty settlement must have a lease token"),
                 settlement.items(),
                 clock,
@@ -145,7 +152,9 @@ final class DefaultQueue implements Queue {
     }
 
     @Override
-    public Extension extend(Chunk chunk, Duration leaseDuration) {
+    public Extension extend(final Chunk chunk, final Duration leaseDuration) {
+        final Extended extended;
+        final Map<MessageId, Outcome> byMessage;
         Objects.requireNonNull(chunk, "chunk");
         Validation.positive(leaseDuration, "leaseDuration");
         requireOwn(chunk.queue(), chunk.session(), "chunk");
@@ -153,24 +162,24 @@ final class DefaultQueue implements Queue {
         if (chunk.isEmpty()) {
             return new Extension(null, new Outcomes(Map.of()));
         }
-        Extended extended = storage.extend(
+        extended = storage.extend(
                 Objects.requireNonNull(chunk.token(), "non-empty chunk must have a lease token"),
                 chunk.messageIds(),
                 leaseDuration,
                 clock);
-        Map<MessageId, Outcome> byMessage = new LinkedHashMap<>();
-        for (Result r : extended.results()) {
+        byMessage = new LinkedHashMap<>();
+        for (final Result r : extended.results()) {
             byMessage.put(r.id(), r.outcome());
         }
         waiter.wake(name);
         return new Extension(extended.leaseDeadline(), new Outcomes(byMessage));
     }
 
-    private void wakeDeadLetter(Optional<String> destination) {
+    private void wakeDeadLetter(final Optional<String> destination) {
         destination.ifPresentOrElse(waiter::wake, waiter::wake);
     }
 
-    private void requireOwn(String sourceQueue, Object sourceSession, String what) {
+    private void requireOwn(final String sourceQueue, final Object sourceSession, final String what) {
         if (!name.equals(sourceQueue) || !session.equals(sourceSession)) {
             throw new IllegalArgumentException(what + " is not from this queue session");
         }

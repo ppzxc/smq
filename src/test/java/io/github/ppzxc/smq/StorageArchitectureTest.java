@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class StorageArchitectureTest {
@@ -22,50 +23,79 @@ class StorageArchitectureTest {
     private static final String CORE = "io.github.ppzxc.smq.";
 
     @Test
-    void 코어는_저장소_구현과_jdbc를_참조하지_않고_조립은_허용한다() throws IOException {
-        Path root = Path.of("src/main/java/io/github/ppzxc/smq");
-        List<String> violations = new ArrayList<>();
+    @DisplayName("코어는 저장소 구현과 jdbc를 참조하지 않고 조립은 허용한다")
+    void theCoreAllowsAssemblyWithoutReferencingTheRepositoryImplementationAndJDBC() throws IOException {
+        final Path root;
+        final List<String> violations;
+        root = Path.of("src/main/java/io/github/ppzxc/smq");
+        violations = new ArrayList<>();
         try (Stream<Path> files = Files.walk(root)) {
             files.filter(p -> p.toString().endsWith(".java"))
                     .forEach(
                             path -> violations.addAll(violations(path.toString().replace('\\', '/'), read(path))));
         }
         assertTrue(violations.isEmpty(), String.join("\n", violations));
-        assertTrue(violations(
-                        "src/main/java/io/github/ppzxc/smq/DefaultQueue.java",
-                        "import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;\n")
-                .getFirst()
-                .contains("core"));
-        assertTrue(violations(
-                        "src/main/java/io/github/ppzxc/smq/Smq.java",
-                        "import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;\n")
-                .isEmpty());
     }
 
     @Test
-    void 저장소_구현은_서로_참조하지_않는다() {
-        assertTrue(violations(
-                        "src/main/java/io/github/ppzxc/smq/storage/memory/M.java",
-                        "import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;\n")
-                .getFirst()
-                .contains("storage"));
+    @DisplayName("코어 구현에서 SQLite 저장소 참조를 금지한다")
+    void coreImplementationCannotReferenceSqliteStorage() {
+        assertTrue(
+                violations(
+                                "src/main/java/io/github/ppzxc/smq/DefaultQueue.java",
+                                "import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;\n")
+                        .getFirst()
+                        .contains("core"),
+                "Violations should contain the expected value.");
+    }
+
+    @Test
+    @DisplayName("조립 코드는 SQLite 저장소 참조를 허용한다")
+    void assemblyCanReferenceSqliteStorage() {
+        assertTrue(
+                violations(
+                                "src/main/java/io/github/ppzxc/smq/Smq.java",
+                                "import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;\n")
+                        .isEmpty(),
+                "Violations should be empty.");
+    }
+
+    @Test
+    @DisplayName("저장소 구현은 서로 참조하지 않는다 — memory isolation")
+    void memoryStorageCannotReferenceSqlite() {
+        assertTrue(
+                violations(
+                                "src/main/java/io/github/ppzxc/smq/storage/memory/M.java",
+                                "import io.github.ppzxc.smq.storage.sqlite.SqliteStorage;\n")
+                        .getFirst()
+                        .contains("storage"),
+                "Violations should contain the expected value.");
+    }
+
+    @Test
+    @DisplayName("저장소 구현은 서로 참조하지 않는다 — storage SPI")
+    void sqliteStorageCanReferenceStorageSpi() {
         assertEquals(
                 List.of(),
                 violations(
                         "src/main/java/io/github/ppzxc/smq/storage/sqlite/S.java",
-                        "import io.github.ppzxc.smq.storage.Storage;\n"));
+                        "import io.github.ppzxc.smq.storage.Storage;\n"),
+                "Violations should match the expected value.");
     }
 
     @Test
-    void import_없이_쓴_전체_클래스명도_금지한다() {
-        assertTrue(violations(
-                        "src/main/java/io/github/ppzxc/smq/DefaultQueue.java",
-                        "io.github.ppzxc.smq.storage.sqlite.SqliteStorage storage;\n")
-                .getFirst()
-                .contains("storage.sqlite.SqliteStorage"));
+    @DisplayName("import 없이 쓴 전체 클래스명도 금지한다")
+    void fullClassNamesWrittenWithoutAnImportAreAlsoProhibited() {
+        assertTrue(
+                violations(
+                                "src/main/java/io/github/ppzxc/smq/DefaultQueue.java",
+                                "io.github.ppzxc.smq.storage.sqlite.SqliteStorage storage;\n")
+                        .getFirst()
+                        .contains("storage.sqlite.SqliteStorage"),
+                "Violations should contain the expected value.");
     }
 
-    private static String read(Path path) {
+    private static String read(final Path path) {
         try {
             return Files.readString(path);
         } catch (IOException e) {
@@ -73,23 +103,31 @@ class StorageArchitectureTest {
         }
     }
 
-    private static List<String> violations(String path, String source) {
-        boolean core = path.contains("/smq/") && !path.contains("/smq/storage/");
-        boolean assembly = path.endsWith("/Smq.java");
-        String implementation =
+    private static List<String> violations(final String path, final String source) {
+        final boolean core;
+        final boolean assembly;
+        final String implementation;
+        final Matcher imports;
+        final Set<String> names;
+        final Matcher qualified;
+        final List<String> violations;
+        core = path.contains("/smq/") && !path.contains("/smq/storage/");
+        assembly = path.endsWith("/Smq.java");
+        implementation =
                 path.contains("/storage/memory/") ? "memory" : path.contains("/storage/sqlite/") ? "sqlite" : "";
-        Matcher imports = IMPORT.matcher(source);
-        Set<String> names = new LinkedHashSet<>();
+        imports = IMPORT.matcher(source);
+        names = new LinkedHashSet<>();
         while (imports.find()) {
             names.add(imports.group(1));
         }
-        Matcher qualified = QUALIFIED.matcher(source);
+        qualified = QUALIFIED.matcher(source);
         while (qualified.find()) {
             names.add(qualified.group());
         }
-        List<String> violations = new ArrayList<>();
-        for (String name : names) {
-            boolean forbidden = core
+        violations = new ArrayList<>();
+        for (final String name : names) {
+            boolean forbidden;
+            forbidden = core
                     && !assembly
                     && (name.startsWith(CORE + "storage.memory.")
                             || name.startsWith(CORE + "storage.sqlite.")

@@ -52,16 +52,6 @@ import org.sqlite.SQLiteConfig;
 import org.sqlite.SQLiteErrorCode;
 import org.sqlite.SQLiteException;
 
-/**
- * SQLite 파일 하나를 쓰는 저장소. 이 클래스에는 열기 순서, 큐 연산 SQL, row codec이 있다.
- * 한 JVM만 파일을 열 수 있다. 열 때 {@link StorageLock}으로 락 파일을 잡고 연결을 {@code locking_mode=EXCLUSIVE}로
- * 열며, 이미 누가 쥐고 있으면 기다리지 않고 {@code StorageLockedException}이다(ADR-0012).
- * 단일 연결과 단일 lock은 {@link TransactionExecutor}가 소유한다. 큐 연산은 모두 {@link #inTransaction}으로 그 실행기의
- * 쓰기 트랜잭션({@code BEGIN IMMEDIATE})을 거친다.
- * 읽기 경로는 따로 있다. 꺼내기 대기용 {@link #anyReady}는 같은 실행기의 autocommit 읽기를 써서 쓰기 락 없이
- * 보고, 확실하지 않으면 "있다"고 답해 쓰기 경로가 다시 확인하게 한다.
- * 열 때의 스키마 판정(생성, 거부, 업그레이드)은 상태 없는 {@link SqliteSchema}가 맡는다.
- */
 @PolicyException(
         rule = "PMD.CyclomaticComplexity",
         reason =
@@ -72,7 +62,6 @@ public final class SqliteStorage implements Storage {
 
     private static final System.Logger LOG = System.getLogger(SqliteStorage.class.getName());
 
-    /** 'SMQ1'. smq 파일임을 알리는 {@code application_id}. */
     public static final int APPLICATION_ID = SqliteSchema.APPLICATION_ID;
 
     public static final int SCHEMA_VERSION = 2;
@@ -116,11 +105,11 @@ public final class SqliteStorage implements Storage {
     private volatile boolean closed;
 
     private SqliteStorage(
-            Path path,
-            TransactionExecutor executor,
-            Duration lockWaitFloor,
-            StorageLock storageLock,
-            QueueCounters counters) {
+            final Path path,
+            final TransactionExecutor executor,
+            final Duration lockWaitFloor,
+            final StorageLock storageLock,
+            final QueueCounters counters) {
         this.path = path;
         this.counters = counters;
         this.executor = executor;
@@ -128,21 +117,16 @@ public final class SqliteStorage implements Storage {
         this.storageLock = storageLock;
     }
 
-    public static SqliteStorage open(Path path, Durability durability) {
+    public static SqliteStorage open(final Path path, final Durability durability) {
         return open(path, durability, Deadline.DEFAULT_LOCK_WAIT_FLOOR);
     }
 
-    /**
-     * 연산 lock 대기 하한을 정해 저장소 경합 중 빈 청크를 피한다.
-     *
-     * @param lockWaitFloor 꺼내기가 {@code wait}와 상관없이 저장소의 lock을 최소한 이만큼은 기다리는 시간(ADR-0016).
-     *     0 이상이다. 공개 설정이 아니므로({@code Smq}의 빌더는 기본 100ms를 쓴다) 이 값을 바꿔 쓰는 곳은 테스트다.
-     */
-    public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor) {
+    public static SqliteStorage open(final Path path, final Durability durability, final Duration lockWaitFloor) {
         return open(path, durability, lockWaitFloor, true);
     }
 
-    public static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor, boolean autoVacuum) {
+    public static SqliteStorage open(
+            final Path path, final Durability durability, final Duration lockWaitFloor, final boolean autoVacuum) {
         return open(path, durability, lockWaitFloor, SqliteStorage::connect, autoVacuum);
     }
 
@@ -151,7 +135,8 @@ public final class SqliteStorage implements Storage {
         Connection connect(Path path, Durability durability) throws SQLException;
     }
 
-    static SqliteStorage open(Path path, Durability durability, Duration lockWaitFloor, Connector connector) {
+    static SqliteStorage open(
+            final Path path, final Durability durability, final Duration lockWaitFloor, final Connector connector) {
         return open(path, durability, lockWaitFloor, connector, true);
     }
 
@@ -166,21 +151,37 @@ public final class SqliteStorage implements Storage {
                     "Opening must translate SQLite failures while releasing the connection and file lock on every failure.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings({"PMD.UseTryWithResources", "PMD.AvoidCatchingGenericException"})
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The connection is closed on failure and transferred to storage on success.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({"PMD.UseTryWithResources", "PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
     private static SqliteStorage open(
-            Path path, Durability durability, Duration lockWaitFloor, Connector connector, boolean autoVacuum) {
+            final Path path,
+            final Durability durability,
+            final Duration lockWaitFloor,
+            final Connector connector,
+            final boolean autoVacuum) {
+        final StorageLock storageLock;
+        @Nullable Connection connection;
+        boolean success;
         if (lockWaitFloor.isNegative()) {
             throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
         }
-        StorageLock storageLock = StorageLock.acquire(path);
-        @Nullable Connection connection = null;
-        boolean success = false;
+        storageLock = StorageLock.acquire(path);
+        connection = null;
+        success = false;
         try {
+            final TransactionExecutor executor;
+            final QueueCounters counters;
+            final SqliteStorage storage;
             connection = StatementCachingConnection.wrap(connector.connect(path, durability));
             SqliteSchema.configureNewDatabase(connection, autoVacuum);
-            TransactionExecutor executor = new TransactionExecutor(connection);
+            executor = new TransactionExecutor(connection);
             executor.execute(c -> {
-                int version = SCHEMA.establish(c);
+                final int version;
+                version = SCHEMA.establish(c);
                 SqliteSchema.ensureDelayedIdIndex(c);
                 return version;
             });
@@ -191,12 +192,12 @@ public final class SqliteStorage implements Storage {
                     return Boolean.TRUE;
                 }
             });
-            QueueCounters counters = new QueueCounters();
+            counters = new QueueCounters();
             executor.execute(c -> {
                 loadCounters(c, counters);
                 return Boolean.TRUE;
             });
-            SqliteStorage storage = new SqliteStorage(path, executor, lockWaitFloor, storageLock, counters);
+            storage = new SqliteStorage(path, executor, lockWaitFloor, storageLock, counters);
             success = true;
             return storage;
         } catch (SQLException | RuntimeException e) {
@@ -212,7 +213,7 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static RuntimeException openFailure(Path path, Exception e) {
+    private static RuntimeException openFailure(final Path path, final Exception e) {
         if (isNotADatabase(e)) {
             throw SCHEMA.notSmq("not a SQLite file");
         }
@@ -236,12 +237,14 @@ public final class SqliteStorage implements Storage {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.UseTryWithResources", "PMD.UnusedAssignment"})
-    static Connection connect(Path path, Durability durability) throws SQLException {
-        SQLiteConfig config = new SQLiteConfig();
+    static Connection connect(final Path path, final Durability durability) throws SQLException {
+        final SQLiteConfig config;
+        final Connection connection;
+        boolean ok;
+        config = new SQLiteConfig();
         config.setBusyTimeout(0);
-        Connection connection =
-                DriverManager.getConnection("jdbc:sqlite:" + path.toAbsolutePath(), config.toProperties());
-        boolean ok = false;
+        connection = DriverManager.getConnection("jdbc:sqlite:" + path.toAbsolutePath(), config.toProperties());
+        ok = false;
         try (Statement s = connection.createStatement()) {
 
             try (ResultSet rs = s.executeQuery("PRAGMA locking_mode = EXCLUSIVE")) {
@@ -261,13 +264,13 @@ public final class SqliteStorage implements Storage {
         return connection;
     }
 
-    static void requireExclusive(@Nullable String mode) throws SQLException {
+    static void requireExclusive(final @Nullable String mode) throws SQLException {
         if (!"exclusive".equalsIgnoreCase(mode)) {
             throw new SQLException("locking_mode=EXCLUSIVE was not applied: " + mode);
         }
     }
 
-    private static boolean isBusyCause(Throwable t) {
+    private static boolean isBusyCause(final Throwable t) {
         for (Throwable cause = t; cause != null; cause = cause.getCause()) {
             if (cause instanceof SQLException se && TransactionExecutor.isBusy(se)) {
                 return true;
@@ -276,7 +279,7 @@ public final class SqliteStorage implements Storage {
         return false;
     }
 
-    private static boolean isNotADatabase(Throwable t) {
+    private static boolean isNotADatabase(final Throwable t) {
         for (Throwable cause = t; cause != null; cause = cause.getCause()) {
             if (cause instanceof SQLiteException se && se.getResultCode() == SQLiteErrorCode.SQLITE_NOTADB) {
                 return true;
@@ -285,11 +288,11 @@ public final class SqliteStorage implements Storage {
         return false;
     }
 
-    <T> T inTransaction(TransactionExecutor.TxBody<T> body) {
+    <T> T inTransaction(final TransactionExecutor.TxBody<T> body) {
         return inTransaction(body, Deadline.NONE);
     }
 
-    private <T> T inTransaction(TransactionExecutor.TxBody<T> body, Deadline deadline) {
+    private <T> T inTransaction(final TransactionExecutor.TxBody<T> body, final Deadline deadline) {
         return executor.execute(body, deadline);
     }
 
@@ -298,16 +301,17 @@ public final class SqliteStorage implements Storage {
         T apply(Connection connection, QueueCounters.Tx tx) throws SQLException;
     }
 
-    private <T> T inCountingTransaction(CountingBody<T> body) {
+    private <T> T inCountingTransaction(final CountingBody<T> body) {
         return inCountingTransaction(body, Deadline.NONE);
     }
 
-    private <T> T inCountingTransaction(CountingBody<T> body, Deadline deadline) {
-        QueueCounters.Tx tx = counters.begin();
+    private <T> T inCountingTransaction(final CountingBody<T> body, final Deadline deadline) {
+        final QueueCounters.Tx tx;
+        tx = counters.begin();
         return executor.execute(c -> body.apply(c, tx), deadline, tx::apply);
     }
 
-    private static void loadCounters(Connection c, QueueCounters counters) throws SQLException {
+    private static void loadCounters(final Connection c, final QueueCounters counters) throws SQLException {
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("""
                         SELECT q.id, q.name,
@@ -324,10 +328,11 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public void declare(String queue, QueueOptions options) {
+    public void declare(final String queue, final QueueOptions options) {
         inCountingTransaction((c, tx) -> {
             if (findQueue(c, queue) != null) {
-                QueueOptions existing = readOptions(c, queue);
+                final QueueOptions existing;
+                existing = readOptions(c, queue);
                 if (!existing.equals(options)) {
                     throw new QueueDeclarationConflictException(queue, existing, options);
                 }
@@ -339,8 +344,10 @@ public final class SqliteStorage implements Storage {
         });
     }
 
-    private static void insertQueue(Connection c, String queue, QueueOptions options) throws SQLException {
-        Long dlqId = null;
+    private static void insertQueue(final Connection c, final String queue, final QueueOptions options)
+            throws SQLException {
+        Long dlqId;
+        dlqId = null;
         if (options.deadLetterQueue().isPresent()) {
             dlqId = requireQueue(c, options.deadLetterQueue().get());
         }
@@ -364,9 +371,10 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public boolean delete(String queue) {
+    public boolean delete(final String queue) {
         return inCountingTransaction((c, tx) -> {
-            Long queueId = findQueue(c, queue);
+            final Long queueId;
+            queueId = findQueue(c, queue);
             if (queueId == null) {
                 return false;
             }
@@ -393,28 +401,30 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public boolean exists(String queue) {
+    public boolean exists(final String queue) {
         return executor.read(c -> findQueue(c, queue) != null);
     }
 
     @Override
-    public Optional<QueueOptions> options(String queue) {
+    public Optional<QueueOptions> options(final String queue) {
         return executor.read(
                 c -> findQueue(c, queue) == null ? Optional.<QueueOptions>empty() : Optional.of(readOptions(c, queue)));
     }
 
-    private static QueueOptions readOptions(Connection c, String queue) throws SQLException {
+    private static QueueOptions readOptions(final Connection c, final String queue) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT q.max_deliveries, d.name, q.single_active_consumer
                 FROM queue q LEFT JOIN queue d ON d.id = q.dead_letter_queue_id
                 WHERE q.name = ?""")) {
             ps.setString(1, queue);
             try (ResultSet rs = ps.executeQuery()) {
+                final int max;
+                final OptionalInt maxDeliveries;
                 if (!rs.next()) {
                     throw new QueueNotFoundException(queue);
                 }
-                int max = rs.getInt(1);
-                OptionalInt maxDeliveries = rs.wasNull() ? OptionalInt.empty() : OptionalInt.of(max);
+                max = rs.getInt(1);
+                maxDeliveries = rs.wasNull() ? OptionalInt.empty() : OptionalInt.of(max);
                 return new QueueOptions(maxDeliveries, Optional.ofNullable(rs.getString(2)), rs.getInt(3) != 0);
             }
         }
@@ -423,7 +433,8 @@ public final class SqliteStorage implements Storage {
     static final String SELECT_ACTIVE_LEASE = "SELECT 1 FROM message INDEXED BY message_lease_deadline"
             + " WHERE queue_id = ? AND lease_deadline > ? LIMIT 1";
 
-    private static boolean hasActiveLease(Connection c, long queueId, Instant now) throws SQLException {
+    private static boolean hasActiveLease(final Connection c, final long queueId, final Instant now)
+            throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(SELECT_ACTIVE_LEASE)) {
             ps.setLong(1, queueId);
             ps.setLong(2, toNanos(now));
@@ -433,7 +444,7 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static @Nullable Long findQueue(Connection c, String queue) throws SQLException {
+    private static @Nullable Long findQueue(final Connection c, final String queue) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("SELECT id FROM queue WHERE name = ?")) {
             ps.setString(1, queue);
             try (ResultSet rs = ps.executeQuery()) {
@@ -442,23 +453,22 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static long requireQueue(Connection c, String queue) throws SQLException {
-        Long id = findQueue(c, queue);
+    private static long requireQueue(final Connection c, final String queue) throws SQLException {
+        final Long id;
+        id = findQueue(c, queue);
         if (id == null) {
             throw new QueueNotFoundException(queue);
         }
         return id;
     }
 
-    /**
-     * 메모리 개수를 읽는다. DB도 쓰기 락도 쓰지 않는다. 기한이 지난 리스와 끝난 지연은 다음에 꺼낼 때 반영된다(ADR-0018).
-     */
     @Override
-    public QueueCounts counts(String queue) {
+    public QueueCounts counts(final String queue) {
+        final QueueCounts counts;
         if (closed) {
             throw new IllegalStateException("storage is closed");
         }
-        QueueCounts counts = counters.get(queue);
+        counts = counters.get(queue);
         if (counts == null) {
             throw new QueueNotFoundException(queue);
         }
@@ -466,20 +476,24 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public List<MessageId> publish(String queue, List<NewMessage> batch, InstantSource clock) {
+    public List<MessageId> publish(final String queue, final List<NewMessage> batch, final InstantSource clock) {
         return inCountingTransaction((c, tx) -> {
-            Instant now = clock.instant();
-            long queueId = requireQueue(c, queue);
-            List<MessageId> ids = new ArrayList<>(batch.size());
+            final Instant now;
+            final long queueId;
+            final List<MessageId> ids;
+            now = clock.instant();
+            queueId = requireQueue(c, queue);
+            ids = new ArrayList<>(batch.size());
             try (PreparedStatement ps = c.prepareStatement(
                     "INSERT INTO message(queue_id, payload, headers, published_at, available_at) VALUES (?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS)) {
-                for (NewMessage m : batch) {
+                for (final NewMessage m : batch) {
+                    final Instant availableAt;
                     ps.setLong(1, queueId);
                     ps.setBytes(2, m.payload());
                     ps.setBytes(3, encodeHeaders(m.headers()));
                     ps.setLong(4, toNanos(now));
-                    Instant availableAt = m.availableAt(now);
+                    availableAt = m.availableAt(now);
                     setInstantOrNull(ps, 5, availableAt);
                     ps.executeUpdate();
                     if (availableAt == null) {
@@ -497,13 +511,17 @@ public final class SqliteStorage implements Storage {
         });
     }
 
-    private boolean anyReady(String queue, InstantSource clock, Deadline waitDeadline) {
+    private boolean anyReady(final String queue, final InstantSource clock, final Deadline waitDeadline) {
         return executor.anyOrUncertain(
                 connection -> {
-                    Instant now = clock.instant();
-                    long queueId = 0;
-                    boolean queueExists = false;
-                    boolean singleActiveConsumer = false;
+                    final Instant now;
+                    long queueId;
+                    boolean queueExists;
+                    boolean singleActiveConsumer;
+                    now = clock.instant();
+                    queueId = 0;
+                    queueExists = false;
+                    singleActiveConsumer = false;
                     try (PreparedStatement ps = connection.prepareStatement(
                             "SELECT id, single_active_consumer FROM queue WHERE name = ?")) {
                         ps.setString(1, queue);
@@ -519,7 +537,8 @@ public final class SqliteStorage implements Storage {
                         return false;
                     }
                     try (PreparedStatement ps = connection.prepareStatement(ANY_READY)) {
-                        long nowNanos = toNanos(now);
+                        final long nowNanos;
+                        nowNanos = toNanos(now);
                         ps.setString(1, queue);
                         ps.setString(2, queue);
                         ps.setLong(3, nowNanos);
@@ -536,13 +555,13 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
+    public PullResult pull(final String queue, final int max, final Duration lease, final InstantSource clock) {
         return pull(queue, max, lease, clock, Deadline.NONE, new HashSet<>());
     }
 
-    /** {@code wait} 안에 lock이나 쓰기 트랜잭션을 잡지 못하면 아무것도 반영하지 않고 빈 결과를 돌려준다(ADR-0016). */
     @Override
-    public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait)
+    public PullResult pull(
+            final String queue, final int max, final Duration lease, final InstantSource clock, final Duration wait)
             throws InterruptedException {
         return pull(queue, max, lease, clock, wait, _ -> {});
     }
@@ -555,16 +574,18 @@ public final class SqliteStorage implements Storage {
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.PreserveStackTrace")
     public PullResult pull(
-            String queue,
-            int max,
-            Duration lease,
-            InstantSource clock,
-            Duration wait,
-            Consumer<Optional<String>> deadLetter)
+            final String queue,
+            final int max,
+            final Duration lease,
+            final InstantSource clock,
+            final Duration wait,
+            final Consumer<Optional<String>> deadLetter)
             throws InterruptedException {
         try {
-            Set<String> destinations = new HashSet<>();
-            PullResult result = pull(queue, max, lease, clock, Deadline.after(wait, lockWaitFloor), destinations);
+            final Set<String> destinations;
+            final PullResult result;
+            destinations = new HashSet<>();
+            result = pull(queue, max, lease, clock, Deadline.after(wait, lockWaitFloor), destinations);
             destinations.forEach(name -> deadLetter.accept(Optional.of(name)));
             return result;
         } catch (Deadline.Interrupted e) {
@@ -586,11 +607,13 @@ public final class SqliteStorage implements Storage {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.PreserveStackTrace")
-    public Optional<Instant> nextReadyAt(String queue, InstantSource clock, Duration wait) throws InterruptedException {
+    public Optional<Instant> nextReadyAt(final String queue, final InstantSource clock, final Duration wait)
+            throws InterruptedException {
         try {
             return executor.read(
                     c -> {
-                        long now = toNanos(clock.instant());
+                        final long now;
+                        now = toNanos(clock.instant());
                         try (PreparedStatement ps = c.prepareStatement("""
                         WITH candidates AS (
                           SELECT
@@ -622,10 +645,11 @@ public final class SqliteStorage implements Storage {
                             ps.setLong(1, now);
                             ps.setString(2, queue);
                             try (ResultSet rs = ps.executeQuery()) {
+                                final long value;
                                 if (!rs.next()) {
                                     return Optional.<Instant>empty();
                                 }
-                                long value = rs.getLong(1);
+                                value = rs.getLong(1);
                                 return rs.wasNull() ? Optional.<Instant>empty() : Optional.of(fromNanos(value));
                             }
                         }
@@ -639,56 +663,68 @@ public final class SqliteStorage implements Storage {
     }
 
     private PullResult pull(
-            String queue,
-            int max,
-            Duration lease,
-            InstantSource clock,
-            Deadline waitDeadline,
-            Set<String> destinations) {
+            final String queue,
+            final int max,
+            final Duration lease,
+            final InstantSource clock,
+            final Deadline waitDeadline,
+            final Set<String> destinations) {
         if (!anyReady(queue, clock, waitDeadline)) {
             return PullResult.empty();
         }
         return inCountingTransaction(
                 (c, tx) -> {
-                    Instant now = clock.instant();
-                    long queueId = requireQueue(c, queue);
-                    QueueOptions options = readOptions(c, queue);
+                    final Instant now;
+                    final long queueId;
+                    final QueueOptions options;
+                    final int limit;
+                    final MoveResult moved;
+                    final long barrier;
+                    final PullCounts counts;
+                    final long fromReady;
+                    final long picked;
+                    final long token;
+                    final Instant deadline;
+                    final List<Message> messages;
+                    now = clock.instant();
+                    queueId = requireQueue(c, queue);
+                    options = readOptions(c, queue);
 
                     if (options.singleActiveConsumer() && hasActiveLease(c, queueId, now)) {
                         return PullResult.empty();
                     }
                     promote(c, tx, queueId, toNanos(now));
-                    int limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
-                    MoveResult moved = options.maxDeliveries().isPresent()
+                    limit = options.maxDeliveries().orElse(Integer.MAX_VALUE);
+                    moved = options.maxDeliveries().isPresent()
                             ? moveExhausted(c, tx, queue, queueId, options, limit, now)
                             : new MoveResult(false, false);
                     if (moved.moved()) {
                         destinations.add(options.deadLetterQueue().orElseThrow());
                     }
-                    long barrier = options.singleActiveConsumer() ? delayBarrier(c, queueId) : Long.MAX_VALUE;
+                    barrier = options.singleActiveConsumer() ? delayBarrier(c, queueId) : Long.MAX_VALUE;
 
-                    PullCounts counts = countPullable(c, queueId, limit, barrier, max);
-                    long fromReady = counts.ready();
-                    long picked = counts.total();
+                    counts = countPullable(c, queueId, limit, barrier, max);
+                    fromReady = counts.ready();
+                    picked = counts.total();
                     if (picked == 0) {
                         return emptyPullResult(moved);
                     }
                     tx.ready(queueId, -fromReady);
                     tx.leased(queueId, fromReady);
-                    long token = nextLeaseToken(c);
-                    Instant deadline = now.plus(lease);
-                    List<Message> messages = leaseMessages(c, token, deadline, queueId, limit, barrier, max);
+                    token = nextLeaseToken(c);
+                    deadline = now.plus(lease);
+                    messages = leaseMessages(c, token, deadline, queueId, limit, barrier, max);
                     messages.sort((a, b) -> a.id().compareTo(b.id()));
                     return PullResult.of(new LeaseToken(token), deadline, messages, moved.moved());
                 },
                 waitDeadline);
     }
 
-    private static PullResult emptyPullResult(MoveResult moved) {
+    private static PullResult emptyPullResult(final MoveResult moved) {
         return moved.remain() ? PullResult.emptyDeadLettersRemain(moved.moved()) : PullResult.empty(moved.moved());
     }
 
-    private static long nextLeaseToken(Connection c) throws SQLException {
+    private static long nextLeaseToken(final Connection c) throws SQLException {
         try (Statement s = c.createStatement();
                 ResultSet rs =
                         s.executeQuery("UPDATE meta SET value = value + 1 WHERE key = 'lease_seq' RETURNING value")) {
@@ -700,9 +736,16 @@ public final class SqliteStorage implements Storage {
     }
 
     private static List<Message> leaseMessages(
-            Connection c, long token, Instant deadline, long queueId, int limit, long barrier, int max)
+            final Connection c,
+            final long token,
+            final Instant deadline,
+            final long queueId,
+            final int limit,
+            final long barrier,
+            final int max)
             throws SQLException {
-        List<Message> messages = new ArrayList<>();
+        final List<Message> messages;
+        messages = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement("""
     UPDATE message SET lease_token = ?, lease_deadline = ?, delivery_count = delivery_count + 1
     WHERE id IN (""" + SELECT_PULLABLE + """
@@ -730,10 +773,13 @@ public final class SqliteStorage implements Storage {
 
     private record PullCounts(long ready, long total) {}
 
-    private static PullCounts countPullable(Connection c, long queueId, int limit, long barrier, int max)
+    private static PullCounts countPullable(
+            final Connection c, final long queueId, final int limit, final long barrier, final int max)
             throws SQLException {
-        long ready = 0;
-        long total = 0;
+        long ready;
+        long total;
+        ready = 0;
+        total = 0;
         try (PreparedStatement peek = c.prepareStatement(SELECT_PULLABLE_STATE)) {
             peek.setLong(1, queueId);
             peek.setInt(2, limit);
@@ -751,7 +797,8 @@ public final class SqliteStorage implements Storage {
         return new PullCounts(ready, total);
     }
 
-    private static void promote(Connection c, QueueCounters.Tx tx, long queueId, long nowNanos) throws SQLException {
+    private static void promote(final Connection c, final QueueCounters.Tx tx, final long queueId, final long nowNanos)
+            throws SQLException {
 
         try (PreparedStatement ps = c.prepareStatement(PROMOTE_EXPIRED_LEASES)) {
             ps.setLong(1, queueId);
@@ -759,19 +806,30 @@ public final class SqliteStorage implements Storage {
             ps.executeUpdate();
         }
         try (PreparedStatement ps = c.prepareStatement(PROMOTE_DUE_DELAYS)) {
+            final long promoted;
             ps.setLong(1, queueId);
             ps.setLong(2, nowNanos);
-            long promoted = ps.executeLargeUpdate();
+            promoted = ps.executeLargeUpdate();
             tx.delayed(queueId, -promoted);
             tx.ready(queueId, promoted);
         }
     }
 
     private static MoveResult moveExhausted(
-            Connection c, QueueCounters.Tx tx, String queue, long queueId, QueueOptions options, int limit, Instant now)
+            final Connection c,
+            final QueueCounters.Tx tx,
+            final String queue,
+            final long queueId,
+            final QueueOptions options,
+            final int limit,
+            final Instant now)
             throws SQLException {
-        long dlqId = requireQueue(c, options.deadLetterQueue().orElseThrow());
-        List<Exhausted> found = new ArrayList<>();
+        final long dlqId;
+        final List<Exhausted> found;
+        final boolean deadLettersRemain;
+        final List<Exhausted> moving;
+        dlqId = requireQueue(c, options.deadLetterQueue().orElseThrow());
+        found = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(SELECT_EXHAUSTED)) {
             ps.setLong(1, queueId);
             ps.setInt(2, limit);
@@ -788,13 +846,13 @@ public final class SqliteStorage implements Storage {
             }
         }
 
-        boolean deadLettersRemain = found.size() > DeadLetters.MAX_MOVES_PER_PULL;
-        List<Exhausted> moving = found.subList(0, Math.min(found.size(), DeadLetters.MAX_MOVES_PER_PULL));
+        deadLettersRemain = found.size() > DeadLetters.MAX_MOVES_PER_PULL;
+        moving = found.subList(0, Math.min(found.size(), DeadLetters.MAX_MOVES_PER_PULL));
         try (PreparedStatement insert = c.prepareStatement("""
                 INSERT INTO message(queue_id, payload, headers, delivery_count, published_at)
                 VALUES (?, ?, ?, 0, ?)""");
                 PreparedStatement delete = c.prepareStatement("DELETE FROM message WHERE id = ?")) {
-            for (Exhausted e : moving) {
+            for (final Exhausted e : moving) {
                 insert.setLong(1, dlqId);
                 insert.setBytes(2, e.payload());
                 insert.setBytes(
@@ -824,12 +882,13 @@ public final class SqliteStorage implements Storage {
     @SuppressWarnings("ArrayRecordComponent") // This private record carries a database-owned payload.
     private record Exhausted(long id, byte[] payload, Map<String, String> headers, int deliveryCount, boolean leased) {}
 
-    private static long delayBarrier(Connection c, long queueId) throws SQLException {
+    private static long delayBarrier(final Connection c, final long queueId) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(SELECT_DELAY_BARRIER)) {
             ps.setLong(1, queueId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    long id = rs.getLong(1);
+                    final long id;
+                    id = rs.getLong(1);
                     if (!rs.wasNull()) {
                         return id - 1;
                     }
@@ -840,7 +899,7 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
+    public List<Result> settle(final LeaseToken token, final List<Disposition> items, final InstantSource clock) {
         return settle(token, items, clock, _ -> {});
     }
 
@@ -852,11 +911,18 @@ public final class SqliteStorage implements Storage {
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.ExhaustiveSwitchHasDefault")
     public List<Result> settle(
-            LeaseToken token, List<Disposition> items, InstantSource clock, Consumer<Optional<String>> deadLetter) {
-        Set<String> destinations = new HashSet<>();
-        List<Result> settled = inCountingTransaction((c, tx) -> {
-            Instant now = clock.instant();
-            List<Result> results = new ArrayList<>(items.size());
+            final LeaseToken token,
+            final List<Disposition> items,
+            final InstantSource clock,
+            final Consumer<Optional<String>> deadLetter) {
+        final Set<String> destinations;
+        final List<Result> settled;
+        destinations = new HashSet<>();
+        settled = inCountingTransaction((c, tx) -> {
+            final Instant now;
+            final List<Result> results;
+            now = clock.instant();
+            results = new ArrayList<>(items.size());
             try (PreparedStatement ack = c.prepareStatement("DELETE FROM message WHERE id = ? AND lease_token = ?");
                     PreparedStatement ackFrom = c.prepareStatement(
                             "DELETE FROM message WHERE id = ? AND lease_token = ? RETURNING queue_id");
@@ -872,8 +938,9 @@ public final class SqliteStorage implements Storage {
                             UPDATE message SET lease_token = NULL, lease_deadline = NULL, available_at = ?
                             WHERE id = ? AND lease_token = ?
                             RETURNING queue_id""")) {
-                for (Disposition d : items) {
-                    int updated = switch (d.kind()) {
+                for (final Disposition d : items) {
+                    final int updated;
+                    updated = switch (d.kind()) {
                         case ACK -> settleAck(ackFrom, tx, token, d);
                         case NACK -> settleNack(nack, tx, token, d, now);
                         case REJECT -> reject(find, insert, ack, tx, token, d, now, destinations);
@@ -888,7 +955,8 @@ public final class SqliteStorage implements Storage {
         return settled;
     }
 
-    private static int settleAck(PreparedStatement ack, QueueCounters.Tx tx, LeaseToken token, Disposition d)
+    private static int settleAck(
+            final PreparedStatement ack, final QueueCounters.Tx tx, final LeaseToken token, final Disposition d)
             throws SQLException {
         ack.setLong(1, d.id().value());
         ack.setLong(2, token.value());
@@ -902,17 +970,23 @@ public final class SqliteStorage implements Storage {
     }
 
     private static int settleNack(
-            PreparedStatement nack, QueueCounters.Tx tx, LeaseToken token, Disposition d, Instant now)
+            final PreparedStatement nack,
+            final QueueCounters.Tx tx,
+            final LeaseToken token,
+            final Disposition d,
+            final Instant now)
             throws SQLException {
-        Instant availableAt = d.availableAt(now);
+        final Instant availableAt;
+        availableAt = d.availableAt(now);
         setInstantOrNull(nack, 1, availableAt);
         nack.setLong(2, d.id().value());
         nack.setLong(3, token.value());
         try (ResultSet rs = nack.executeQuery()) {
+            final long queueId;
             if (!rs.next()) {
                 return 0;
             }
-            long queueId = rs.getLong(1);
+            queueId = rs.getLong(1);
             tx.leased(queueId, -1);
             if (availableAt == null) {
                 tx.ready(queueId, 1);
@@ -924,24 +998,26 @@ public final class SqliteStorage implements Storage {
     }
 
     private static int reject(
-            PreparedStatement find,
-            PreparedStatement insert,
-            PreparedStatement delete,
-            QueueCounters.Tx tx,
-            LeaseToken token,
-            Disposition d,
-            Instant now,
-            Set<String> destinations)
+            final PreparedStatement find,
+            final PreparedStatement insert,
+            final PreparedStatement delete,
+            final QueueCounters.Tx tx,
+            final LeaseToken token,
+            final Disposition d,
+            final Instant now,
+            final Set<String> destinations)
             throws SQLException {
+        final long sourceId;
+        final String queueName;
+        final String destination;
+        final long dlqId;
+        final byte[] payload;
+        final Map<String, String> headers;
+        final int deliveryCount;
+        final int deleted;
         find.setLong(1, d.id().value());
         find.setLong(2, token.value());
-        long sourceId;
-        String queueName;
-        String destination;
-        long dlqId;
-        byte[] payload;
-        Map<String, String> headers;
-        int deliveryCount;
+
         try (ResultSet rs = find.executeQuery()) {
             if (!rs.next()) {
                 return 0;
@@ -969,7 +1045,7 @@ public final class SqliteStorage implements Storage {
         insert.executeUpdate();
         delete.setLong(1, d.id().value());
         delete.setLong(2, token.value());
-        int deleted = delete.executeUpdate();
+        deleted = delete.executeUpdate();
         if (deleted == 1) {
             destinations.add(destination);
             tx.leased(sourceId, -1);
@@ -979,11 +1055,15 @@ public final class SqliteStorage implements Storage {
     }
 
     @Override
-    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock) {
+    public Extended extend(
+            final LeaseToken token, final List<MessageId> ids, final Duration d, final InstantSource clock) {
         return inTransaction(c -> {
-            Instant now = clock.instant();
-            Instant deadline = now.plus(d);
-            List<Result> results = new ArrayList<>(ids.size());
+            final Instant now;
+            final Instant deadline;
+            final List<Result> results;
+            now = clock.instant();
+            deadline = now.plus(d);
+            results = new ArrayList<>(ids.size());
 
             try (PreparedStatement ps = c.prepareStatement("""
                     UPDATE message SET lease_deadline = ?
@@ -991,7 +1071,7 @@ public final class SqliteStorage implements Storage {
                       AND (lease_deadline > ?
                            OR NOT EXISTS (SELECT 1 FROM queue q
                                           WHERE q.id = message.queue_id AND q.single_active_consumer = 1))""")) {
-                for (MessageId id : ids) {
+                for (final MessageId id : ids) {
                     ps.setLong(1, toNanos(deadline));
                     ps.setLong(2, id.value());
                     ps.setLong(3, token.value());
@@ -1010,14 +1090,16 @@ public final class SqliteStorage implements Storage {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.AvoidCatchingGenericException")
-    public void snapshot(Path target) {
+    public void snapshot(final Path target) {
         try {
+            final Path parent;
+            final Path temp;
             validateSnapshotTarget(target);
-            Path parent = target.toAbsolutePath().getParent();
+            parent = target.toAbsolutePath().getParent();
             if (parent == null) {
                 throw new IllegalArgumentException("not a file path: " + target);
             }
-            Path temp = Files.createTempFile(parent, "smq-snapshot-", ".tmp");
+            temp = Files.createTempFile(parent, "smq-snapshot-", ".tmp");
             try {
                 executor.executeOutsideTransaction(() -> {
                     StatementCachingConnection.releaseStatements(executor.connection());
@@ -1047,9 +1129,11 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private void validateSnapshotTarget(Path target) throws IOException {
-        Path realTarget = realPathOf(target);
-        Path realDb = realPathOf(path);
+    private void validateSnapshotTarget(final Path target) throws IOException {
+        final Path realTarget;
+        final Path realDb;
+        realTarget = realPathOf(target);
+        realDb = realPathOf(path);
         if (realTarget.equals(realDb)
                 || realTarget.equals(realDb.resolveSibling(realDb.getFileName() + "-wal"))
                 || realTarget.equals(StorageLock.lockPathOf(realDb))) {
@@ -1060,10 +1144,13 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static Path realPathOf(Path file) throws IOException {
-        Path absolute = file.toAbsolutePath().normalize();
-        Path parent = absolute.getParent();
-        Path name = absolute.getFileName();
+    private static Path realPathOf(final Path file) throws IOException {
+        final Path absolute;
+        final Path parent;
+        final Path name;
+        absolute = file.toAbsolutePath().normalize();
+        parent = absolute.getParent();
+        name = absolute.getFileName();
         if (parent == null || name == null) {
             throw new IllegalArgumentException("not a file path: " + file);
         }
@@ -1086,7 +1173,7 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static void closeQuietly(@Nullable Connection c) {
+    private static void closeQuietly(final @Nullable Connection c) {
         if (c != null) {
             try {
                 c.close();
@@ -1096,7 +1183,8 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static void setInstantOrNull(PreparedStatement ps, int index, @Nullable Instant t) throws SQLException {
+    private static void setInstantOrNull(final PreparedStatement ps, final int index, final @Nullable Instant t)
+            throws SQLException {
         if (t == null) {
             ps.setNull(index, java.sql.Types.INTEGER);
         } else {
@@ -1104,20 +1192,22 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static long toNanos(Instant t) {
+    private static long toNanos(final Instant t) {
         return Math.addExact(Math.multiplyExact(t.getEpochSecond(), 1_000_000_000L), t.getNano());
     }
 
-    private static Instant fromNanos(long nanos) {
+    private static Instant fromNanos(final long nanos) {
         return Instant.ofEpochSecond(Math.floorDiv(nanos, 1_000_000_000L), Math.floorMod(nanos, 1_000_000_000L));
     }
 
-    private static byte[] encodeHeaders(Map<String, String> headers) {
+    private static byte[] encodeHeaders(final Map<String, String> headers) {
         try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(bytes);
+            final ByteArrayOutputStream bytes;
+            final DataOutputStream out;
+            bytes = new ByteArrayOutputStream();
+            out = new DataOutputStream(bytes);
             out.writeInt(headers.size());
-            for (Map.Entry<String, String> e : headers.entrySet()) {
+            for (final Map.Entry<String, String> e : headers.entrySet()) {
                 writeString(out, e.getKey());
                 writeString(out, e.getValue());
             }
@@ -1133,14 +1223,17 @@ public final class SqliteStorage implements Storage {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.ExceptionAsFlowControl")
-    private static Map<String, String> decodeHeaders(byte[] raw) {
+    private static Map<String, String> decodeHeaders(final byte[] raw) {
         try {
-            DataInputStream in = new DataInputStream(new ByteArrayInputStream(raw));
-            int n = in.readInt();
+            final DataInputStream in;
+            final int n;
+            final Map<String, String> headers;
+            in = new DataInputStream(new ByteArrayInputStream(raw));
+            n = in.readInt();
             if (n < 0 || n > in.available() / 8) {
                 throw new IOException("invalid header count");
             }
-            Map<String, String> headers = new LinkedHashMap<>();
+            headers = new LinkedHashMap<>();
             for (int i = 0; i < n; i++) {
                 headers.put(readString(in), readString(in));
             }
@@ -1150,18 +1243,21 @@ public final class SqliteStorage implements Storage {
         }
     }
 
-    private static void writeString(DataOutputStream out, String s) throws IOException {
-        byte[] b = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    private static void writeString(final DataOutputStream out, final String s) throws IOException {
+        final byte[] b;
+        b = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         out.writeInt(b.length);
         out.write(b);
     }
 
-    private static String readString(DataInputStream in) throws IOException {
-        int length = in.readInt();
+    private static String readString(final DataInputStream in) throws IOException {
+        final int length;
+        final byte[] b;
+        length = in.readInt();
         if (length < 0 || length > in.available()) {
             throw new IOException("invalid header string length");
         }
-        byte[] b = new byte[length];
+        b = new byte[length];
         in.readFully(b);
         return new String(b, java.nio.charset.StandardCharsets.UTF_8);
     }

@@ -80,7 +80,33 @@ class CommentPolicyRuleTest {
         }
     }
 
-    @Test void onlyPublicApiAndLicenseAreAllowed() {
+    @Test void policyExceptionAllowsRepeatedMatchingApprovals() {
+        var rule = new PolicyExceptionRule();
+        rule.setLanguage(net.sourceforge.pmd.lang.java.JavaLanguageModule.getInstance());
+        rule.setName("PolicyException");
+        rule.setMessage("Invalid exception");
+        try (var pmd = PmdAnalysis.create(new PMDConfiguration())) {
+            pmd.addRuleSet(RuleSet.forSingleRule(rule));
+            pmd.files().addSourceFile(FileId.fromPathLikeString("Example.java"), """
+                    import java.lang.SuppressWarnings;
+                    @interface PolicyException { String rule(); String reason(); String approvedBy(); String reviewBy(); }
+                    @interface PolicyExceptions { PolicyException[] value(); }
+                    class Example {
+                      @PolicyExceptions({
+                        @PolicyException(rule="PMD.CloseResource", reason="Fixture owns it", approvedBy="owner", reviewBy="2099-01-01"),
+                        @PolicyException(rule="PMD.AvoidCatchingGenericException", reason="Worker forwards it", approvedBy="owner", reviewBy="2099-01-01")
+                      })
+                      @SuppressWarnings({"PMD.CloseResource", "PMD.AvoidCatchingGenericException"})
+                      void run() {}
+                    }
+                    """);
+            var report = pmd.performAnalysisAndCollectReport();
+            assertEquals(List.of(), report.getProcessingErrors());
+            assertEquals(0, report.getViolations().size());
+        }
+    }
+
+    @Test void publicApiJavadocIsForbidden() {
         String source = """
             /* Copyright Example */
             package sample;
@@ -91,7 +117,7 @@ class CommentPolicyRuleTest {
                 /** Private type */ private class Hidden { /** Hidden */ public void bad() {} }
             }
             """;
-        assertEquals(List.of(5, 7, 7), scan("Example.java", source).stream().map(RuleViolation::getBeginLine).toList());
+        assertEquals(List.of(3, 4, 5, 6, 6, 7, 7), scan("Example.java", source).stream().map(RuleViolation::getBeginLine).toList());
     }
 
     @Test void legalNoticeMayPrecedeFirstDeclaration() {

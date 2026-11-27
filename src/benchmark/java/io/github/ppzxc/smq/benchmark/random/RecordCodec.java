@@ -19,14 +19,14 @@ final class RecordCodec {
 
     private RecordCodec() {}
 
-    static void write(DataOutput out, Published p) throws IOException {
+    static void write(final DataOutput out, final Published p) throws IOException {
         writeTag(out, p.tag());
         writeContent(out, p.content());
         out.writeLong(p.atMillis());
         out.writeLong(p.delayMillis());
     }
 
-    static void write(DataOutput out, Delivery d) throws IOException {
+    static void write(final DataOutput out, final Delivery d) throws IOException {
         out.writeByte(d.queue().spoolCode());
         writeTag(out, d.tag());
         out.writeLong(d.messageId());
@@ -43,10 +43,12 @@ final class RecordCodec {
     }
 
     /** 다음 발행 기록. 파일 끝(또는 잘린 기록)이면 null. */
-    static Published readPublished(DataInput in) throws IOException {
+    static Published readPublished(final DataInput in) throws IOException {
         try {
-            Tag tag = readTag(in);
-            Content content = readContent(in);
+            final Tag tag;
+            final Content content;
+            tag = readTag(in);
+            content = readContent(in);
             return new Published(tag, content, in.readLong(), in.readLong());
         } catch (EOFException e) {
             return null;
@@ -54,44 +56,55 @@ final class RecordCodec {
     }
 
     /** 다음 전달 기록. 파일 끝(또는 잘린 기록)이면 null. */
-    static Delivery readDelivery(DataInput in) throws IOException {
+    static Delivery readDelivery(final DataInput in) throws IOException {
         try {
-            QueueKind queue = QueueKind.fromSpoolCode(in.readUnsignedByte());
-            Tag tag = readTag(in);
-            long messageId = in.readLong();
-            int deliveryCount = in.readInt();
-            Content content = readContent(in);
-            Pull pull = new Pull(in.readLong(), in.readInt(), in.readLong(), in.readLong());
-            Action action = Action.fromSpoolCode(in.readUnsignedByte());
-            Settle settle = new Settle(action, in.readBoolean(), in.readLong(), in.readLong());
+            final QueueKind queue;
+            final Tag tag;
+            final long messageId;
+            final int deliveryCount;
+            final Content content;
+            final Pull pull;
+            final Action action;
+            final Settle settle;
+            queue = QueueKind.fromSpoolCode(in.readUnsignedByte());
+            tag = readTag(in);
+            messageId = in.readLong();
+            deliveryCount = in.readInt();
+            content = readContent(in);
+            pull = new Pull(in.readLong(), in.readInt(), in.readLong(), in.readLong());
+            action = Action.fromSpoolCode(in.readUnsignedByte());
+            settle = new Settle(action, in.readBoolean(), in.readLong(), in.readLong());
             return new Delivery(queue, tag, messageId, deliveryCount, content, pull, settle);
         } catch (EOFException e) {
             return null;
         }
     }
 
-    private static void writeTag(DataOutput out, Tag t) throws IOException {
+    private static void writeTag(final DataOutput out, final Tag t) throws IOException {
         out.writeLong(t.seed());
         out.writeLong(t.seq());
     }
 
-    private static Tag readTag(DataInput in) throws IOException {
+    private static Tag readTag(final DataInput in) throws IOException {
         return new Tag(in.readLong(), in.readLong());
     }
 
-    private static void writeContent(DataOutput out, Content c) throws IOException {
+    private static void writeContent(final DataOutput out, final Content c) throws IOException {
         out.writeLong(c.payloadChecksum());
         out.writeInt(c.headers().size());
-        for (Map.Entry<String, String> e : c.headers().entrySet()) {
+        for (final Map.Entry<String, String> e : c.headers().entrySet()) {
             out.writeUTF(e.getKey());
             out.writeUTF(e.getValue());
         }
     }
 
-    private static Content readContent(DataInput in) throws IOException {
-        long checksum = in.readLong();
-        int n = in.readInt();
-        Map<String, String> headers = new LinkedHashMap<>();
+    private static Content readContent(final DataInput in) throws IOException {
+        final long checksum;
+        final int n;
+        final Map<String, String> headers;
+        checksum = in.readLong();
+        n = in.readInt();
+        headers = new LinkedHashMap<>();
         for (int i = 0; i < n; i++) {
             headers.put(in.readUTF(), in.readUTF());
         }

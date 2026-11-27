@@ -19,26 +19,31 @@ final class Runner {
 
     private final Path workDir;
 
-    Runner(Path workDir) {
+    Runner(final Path workDir) {
         this.workDir = workDir;
     }
 
-    Map<String, Double> run(RunSpec spec) throws IOException, InterruptedException {
-        Path dir = workDir.resolve("run");
+    Map<String, Double> run(final RunSpec spec) throws IOException, InterruptedException {
+        final Path dir;
+        dir = workDir.resolve("run");
         deleteTree(dir);
         Files.createDirectories(dir);
         try {
-            Path db = dir.resolve("smq.db");
+            final Path db;
+            final long margin;
+            final long startAt;
+            final ChildJvm child;
+            final long timeout;
+            db = dir.resolve("smq.db");
             if (spec.storage() == Storage.SQLITE) {
                 try (Smq smq = Workload.open(spec, db)) {
                     Workload.prepare(smq, spec);
                 }
             }
-            long margin = STARTUP_MARGIN_MS + (spec.storage() == Storage.MEMORY ? spec.depth() / 100 : 0);
-            long startAt = System.currentTimeMillis() + margin + spec.warmupMs();
-            ChildJvm child = launch(spec, role(spec), db, startAt, dir);
-            long timeout =
-                    startAt + spec.durationMs() + Workload.S3_DRAIN_MS + KILL_GRACE_MS - System.currentTimeMillis();
+            margin = STARTUP_MARGIN_MS + (spec.storage() == Storage.MEMORY ? spec.depth() / 100 : 0);
+            startAt = System.currentTimeMillis() + margin + spec.warmupMs();
+            child = launch(spec, role(spec), db, startAt, dir);
+            timeout = startAt + spec.durationMs() + Workload.S3_DRAIN_MS + KILL_GRACE_MS - System.currentTimeMillis();
             child.await(timeout);
             return Aggregator.aggregate(spec, List.of(ChildResult.fromJson(child.lastJsonLine())));
         } finally {
@@ -46,14 +51,15 @@ final class Runner {
         }
     }
 
-    static Role role(RunSpec spec) {
+    static Role role(final RunSpec spec) {
         return switch (spec.scenario()) {
             case S1, S2 -> Role.WORKER;
             case S3 -> Role.BOTH;
         };
     }
 
-    private static ChildJvm launch(RunSpec spec, Role role, Path db, long startAt, Path dir) throws IOException {
+    private static ChildJvm launch(
+            final RunSpec spec, final Role role, final Path db, final long startAt, final Path dir) throws IOException {
         return ChildJvm.start(
                 ChildMain.class.getName(),
                 List.of(spec.toArg(), role.name(), db.toString(), String.valueOf(startAt)),
@@ -61,7 +67,7 @@ final class Runner {
                 role.name());
     }
 
-    private static void deleteTree(Path dir) throws IOException {
+    private static void deleteTree(final Path dir) throws IOException {
         if (!Files.exists(dir)) return;
         try (Stream<Path> s = Files.walk(dir)) {
             s.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());

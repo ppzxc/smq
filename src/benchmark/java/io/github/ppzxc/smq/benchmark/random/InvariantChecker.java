@@ -51,9 +51,13 @@ final class InvariantChecker {
         }
     }
 
-    static List<Violation> check(
-            Config config, List<Published> published, List<Delivery> deliveries, List<CountsSample> samples) {
-        List<Violation> out = new ArrayList<>(checkTags(config, published, deliveries));
+    static List<Violation> findViolations(
+            final Config config,
+            final List<Published> published,
+            final List<Delivery> deliveries,
+            final List<CountsSample> samples) {
+        final List<Violation> out;
+        out = new ArrayList<>(checkTags(config, published, deliveries));
         SampleChecks.checkChunkOrder(deliveries, out);
         if (config.singleActiveConsumer()) {
             SampleChecks.checkSingleActive(deliveries, out);
@@ -72,18 +76,26 @@ final class InvariantChecker {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CyclomaticComplexity")
-    static List<Violation> checkTags(Config config, List<Published> published, List<Delivery> deliveries) {
-        List<Violation> out = new ArrayList<>();
-        Map<Tag, Published> byTag = new LinkedHashMap<>();
-        for (Published p : published) {
+    static List<Violation> checkTags(
+            final Config config, final List<Published> published, final List<Delivery> deliveries) {
+        final List<Violation> out;
+        final Map<Tag, Published> byTag;
+        final List<Delivery> known;
+        final Map<String, Message> messages;
+        final Map<Tag, List<Message>> targets;
+        final Map<Tag, List<Message>> deadLetters;
+        out = new ArrayList<>();
+        byTag = new LinkedHashMap<>();
+        for (final Published p : published) {
             if (byTag.put(p.tag(), p) != null) {
                 throw new IllegalArgumentException("같은 태그를 두 번 발행했다: " + p.tag());
             }
         }
 
-        List<Delivery> known = new ArrayList<>();
-        for (Delivery d : deliveries) {
-            Published p = byTag.get(d.tag());
+        known = new ArrayList<>();
+        for (final Delivery d : deliveries) {
+            final Published p;
+            p = byTag.get(d.tag());
             if (p == null) {
                 out.add(new Violation(
                         Invariant.GHOST,
@@ -91,7 +103,8 @@ final class InvariantChecker {
                         List.of(d.messageId()),
                         "발행하지 않은 태그가 " + d.queue() + "에서 전달됐다"));
             } else {
-                String diff = contentDiff(p.content(), d.content());
+                final String diff;
+                diff = contentDiff(p.content(), d.content());
                 if (diff != null) {
                     out.add(new Violation(
                             Invariant.GHOST,
@@ -103,16 +116,16 @@ final class InvariantChecker {
             }
         }
 
-        Map<String, Message> messages = groupMessages(known);
-        Map<Tag, List<Message>> targets = new LinkedHashMap<>();
-        Map<Tag, List<Message>> deadLetters = new LinkedHashMap<>();
-        for (Message m : messages.values()) {
+        messages = groupMessages(known);
+        targets = new LinkedHashMap<>();
+        deadLetters = new LinkedHashMap<>();
+        for (final Message m : messages.values()) {
             checkMessage(config, byTag.get(m.tag()), m, out);
             (m.queue() == QueueKind.TARGET ? targets : deadLetters)
                     .computeIfAbsent(m.tag(), t -> new ArrayList<>())
                     .add(m);
         }
-        for (Published p : published) {
+        for (final Published p : published) {
             checkOutcome(
                     config,
                     p.tag(),
@@ -125,30 +138,35 @@ final class InvariantChecker {
     }
 
     /** 청크 안의 메시지 id 순서. 한 청크의 전달이 모두 들어 있어야 맞게 판정한다. */
-    static List<Violation> checkChunks(List<Delivery> deliveries) {
-        List<Violation> out = new ArrayList<>();
+    static List<Violation> checkChunks(final List<Delivery> deliveries) {
+        final List<Violation> out;
+        out = new ArrayList<>();
         SampleChecks.checkChunkOrder(deliveries, out);
         return out;
     }
 
     /** counts 표본 검사. */
-    static List<Violation> checkSamples(List<CountsSample> samples) {
-        List<Violation> out = new ArrayList<>();
+    static List<Violation> checkSamples(final List<CountsSample> samples) {
+        final List<Violation> out;
+        out = new ArrayList<>();
         SampleChecks.checkCounts(samples, out);
         return out;
     }
 
     // ---- 메시지 단위: 유령(같은 id에 다른 태그), 중복, 지연
 
-    private static Map<String, Message> groupMessages(List<Delivery> known) {
-        Map<String, List<Delivery>> grouped = new LinkedHashMap<>();
-        for (Delivery d : known) {
+    private static Map<String, Message> groupMessages(final List<Delivery> known) {
+        final Map<String, List<Delivery>> grouped;
+        final Map<String, Message> out;
+        grouped = new LinkedHashMap<>();
+        for (final Delivery d : known) {
             grouped.computeIfAbsent(d.queue() + "#" + d.messageId(), k -> new ArrayList<>())
                     .add(d);
         }
-        Map<String, Message> out = new LinkedHashMap<>();
+        out = new LinkedHashMap<>();
         grouped.forEach((k, list) -> {
-            List<Delivery> sorted = list.stream()
+            final List<Delivery> sorted;
+            sorted = list.stream()
                     .sorted(Comparator.comparingInt(Delivery::deliveryCount))
                     .toList();
             out.put(k, new Message(sorted.getFirst().queue(), sorted.getFirst().messageId(), sorted));
@@ -167,10 +185,14 @@ final class InvariantChecker {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
-    private static void checkMessage(Config config, Published pub, Message m, List<Violation> out) {
-        List<Delivery> ds = m.deliveries();
-        List<Tag> tags = List.of(m.tag());
-        List<Long> ids = List.of(m.id());
+    private static void checkMessage(
+            final Config config, final Published pub, final Message m, final List<Violation> out) {
+        final List<Delivery> ds;
+        final List<Tag> tags;
+        final List<Long> ids;
+        ds = m.deliveries();
+        tags = List.of(m.tag());
+        ids = List.of(m.id());
 
         if (ds.stream().anyMatch(d -> !d.tag().equals(m.tag()))) {
             out.add(new Violation(
@@ -205,8 +227,10 @@ final class InvariantChecker {
         }
 
         if (m.queue() == QueueKind.TARGET && pub.delayMillis() > 0) {
-            long due = pub.atMillis() + pub.delayMillis();
-            long at = ds.getFirst().pull().atMillis();
+            final long due;
+            final long at;
+            due = pub.atMillis() + pub.delayMillis();
+            at = ds.getFirst().pull().atMillis();
             if (at < due - TOLERANCE_MILLIS) {
                 out.add(new Violation(
                         Invariant.DELAY,
@@ -217,9 +241,12 @@ final class InvariantChecker {
         }
 
         for (int i = 1; i < ds.size(); i++) {
-            Delivery prev = ds.get(i - 1);
-            Delivery cur = ds.get(i);
-            long at = cur.pull().atMillis();
+            final Delivery prev;
+            final Delivery cur;
+            final long at;
+            prev = ds.get(i - 1);
+            cur = ds.get(i);
+            at = cur.pull().atMillis();
             if (prev.settle().applied(Action.ACK) || prev.settle().applied(Action.REJECT)) {
                 out.add(new Violation(
                         Invariant.DUPLICATE,
@@ -227,7 +254,8 @@ final class InvariantChecker {
                         ids,
                         m.queue() + " " + prev.settle().action() + "이 반영된 뒤 " + cur.deliveryCount() + "번째로 다시 전달됐다"));
             } else if (prev.settle().applied(Action.NACK)) {
-                long due = prev.settle().atMillis() + prev.settle().nackDelayMillis();
+                final long due;
+                due = prev.settle().atMillis() + prev.settle().nackDelayMillis();
                 if (at < due - TOLERANCE_MILLIS) {
                     out.add(new Violation(
                             Invariant.DELAY,
@@ -260,21 +288,30 @@ final class InvariantChecker {
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
     private static void checkOutcome(
-            Config config, Tag tag, List<Message> targets, List<Message> deadLetters, List<Violation> out) {
-        List<Tag> tags = List.of(tag);
-        List<Long> targetIds = targets.stream().map(Message::id).toList();
-        List<Long> dlIds = deadLetters.stream().map(Message::id).toList();
+            final Config config,
+            final Tag tag,
+            final List<Message> targets,
+            final List<Message> deadLetters,
+            final List<Violation> out) {
+        final List<Tag> tags;
+        final List<Long> targetIds;
+        final List<Long> dlIds;
+        final long acks;
+        final Delivery last;
+        tags = List.of(tag);
+        targetIds = targets.stream().map(Message::id).toList();
+        dlIds = deadLetters.stream().map(Message::id).toList();
 
         if (targets.size() > 1) {
             out.add(new Violation(
                     Invariant.DUPLICATE, tags, targetIds, "한 번 발행한 태그가 대상 큐에 " + targets.size() + "개 메시지로 들어갔다"));
             return;
         }
-        long acks = targets.stream()
+        acks = targets.stream()
                 .flatMap(m -> m.deliveries().stream())
                 .filter(d -> d.settle().applied(Action.ACK))
                 .count();
-        Delivery last = targets.isEmpty() ? null : targets.getFirst().last();
+        last = targets.isEmpty() ? null : targets.getFirst().last();
 
         // 한 메시지가 두 번 OK로 ACK되는 경우는 ACK 뒤 재전달로 이미 보고된다.
         if (acks >= 1 && !deadLetters.isEmpty()) {
@@ -284,8 +321,10 @@ final class InvariantChecker {
             out.add(new Violation(
                     Invariant.DEAD_LETTER, tags, dlIds, "한 태그가 dead letter 큐로 " + deadLetters.size() + "번 옮겨졌다"));
         } else if (deadLetters.size() == 1) {
-            Message dl = deadLetters.getFirst();
-            String problem = moveProblem(
+            final Message dl;
+            final String problem;
+            dl = deadLetters.getFirst();
+            problem = moveProblem(
                     config, last, dl.deliveries().getFirst().content().headers());
             if (problem != null) {
                 out.add(new Violation(Invariant.DEAD_LETTER, tags, concat(targetIds, dlIds), problem));
@@ -304,7 +343,7 @@ final class InvariantChecker {
         }
     }
 
-    private static boolean mustHaveMoved(Config config, Delivery last) {
+    private static boolean mustHaveMoved(final Config config, final Delivery last) {
         return last.settle().applied(Action.REJECT)
                 || (config.maxDeliveries() > 0 && last.deliveryCount() >= config.maxDeliveries());
     }
@@ -316,12 +355,14 @@ final class InvariantChecker {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CyclomaticComplexity")
-    private static String moveProblem(Config config, Delivery last, Map<String, String> headers) {
+    private static String moveProblem(final Config config, final Delivery last, final Map<String, String> headers) {
+        final List<String> problems;
+        final String reason;
         if (last == null) {
             return "대상 큐에서 한 번도 전달되지 않은 메시지가 dead letter 큐로 옮겨졌다";
         }
-        List<String> problems = new ArrayList<>();
-        String reason = headers.get(REASON);
+        problems = new ArrayList<>();
+        reason = headers.get(REASON);
         if (REASON_REJECTED.equals(reason)) {
             if (!last.settle().applied(Action.REJECT)) {
                 problems.add("reason=rejected인데 마지막 전달이 reject되지 않았다");
@@ -347,11 +388,12 @@ final class InvariantChecker {
     // ---- 유틸
 
     /** 헤더의 {@code smq-} 접두사는 시스템 예약이라 dead letter 이동 때 붙은 것은 비교에서 뺀다. */
-    private static String contentDiff(Content published, Content delivered) {
+    private static String contentDiff(final Content published, final Content delivered) {
+        final Map<String, String> user;
         if (published.payloadChecksum() != delivered.payloadChecksum()) {
             return "payload 체크섬 " + published.payloadChecksum() + " -> " + delivered.payloadChecksum();
         }
-        Map<String, String> user = delivered.headers().entrySet().stream()
+        user = delivered.headers().entrySet().stream()
                 .filter(e -> !e.getKey().startsWith(SYSTEM_PREFIX))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         if (!published.headers().equals(user)) {
@@ -360,8 +402,9 @@ final class InvariantChecker {
         return null;
     }
 
-    private static List<Long> concat(List<Long> a, List<Long> b) {
-        List<Long> out = new ArrayList<>(a);
+    private static List<Long> concat(final List<Long> a, final List<Long> b) {
+        final List<Long> out;
+        out = new ArrayList<>(a);
         out.addAll(b);
         return out;
     }

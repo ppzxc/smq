@@ -1,26 +1,28 @@
 package io.github.ppzxc.smq.storage.sqlite;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import io.github.ppzxc.smq.Durability;
 import io.github.ppzxc.smq.SmqStorageException;
+import io.github.ppzxc.smq.storage.sqlite.Deadline.Interrupted;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class TransactionExecutorReadTest {
-
-    private static final int SQLITE_BUSY_SNAPSHOT = 517;
 
     @TempDir
     Path dir;
@@ -30,72 +32,122 @@ class TransactionExecutorReadTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        connection = SqliteStorage.connect(dir.resolve("t.db"), Durability.POWER_LOSS);
-        try (Statement s = connection.createStatement()) {
+        this.connection = SqliteStorage.connect(this.dir.resolve("t.db"), Durability.POWER_LOSS);
+
+        try (Statement s = this.connection.createStatement()) {
             s.execute("PRAGMA journal_mode=WAL");
             s.execute("CREATE TABLE t (v INTEGER)");
         }
-        executor = new TransactionExecutor(connection);
+
+        this.executor = new TransactionExecutor(this.connection);
     }
 
     @AfterEach
     void tearDown() throws Exception {
-        connection.close();
+        this.connection.close();
     }
 
     @Test
-    void 확실히_비어_있으면_없다고_답한다() {
-        assertFalse(executor.anyOrUncertain(c -> false));
+    @DisplayName("확실히 비어 있으면 없다고 답한다")
+    void ifItIsDefinitelyEmptyAnswerNone() {
+        Assertions.assertFalse(this.executor.anyOrUncertain(c -> false), "The read should report no match.");
     }
 
     @Test
-    void 읽기가_있다고_하면_있다고_답한다() {
-        assertTrue(executor.anyOrUncertain(c -> true));
+    @DisplayName("읽기가 있다고 하면 있다고 답한다")
+    void ifThereIsAReadOperationItRespondsWithYes() {
+        Assertions.assertTrue(this.executor.anyOrUncertain(c -> true), "The read should report a match.");
     }
 
     @Test
-    void 실패한_읽기_뒤_다른_스레드에서_연산할_수_있다() throws Exception {
-        assertThrows(
-                SmqStorageException.class,
-                () -> executor.read(c -> {
-                    throw new SQLException("injected");
-                }));
-        try (var threads = Executors.newSingleThreadExecutor()) {
-            assertEquals(
-                    42,
-                    threads.submit(() -> executor.read(c -> 42, Deadline.after(Duration.ofSeconds(1), Duration.ZERO)))
-                            .get(2, TimeUnit.SECONDS));
+    @DisplayName("실패한 읽기 뒤 다른 스레드에서 연산할 수 있다 — check 1")
+    void afterAFailedReadOperationsCanBePerformedInAnotherThreadCheck1() throws Exception {
+        final Throwable assertionValue1;
+        assertionValue1 = captureThrowable(() -> this.executor.read(c -> {
+            throw new SQLException("injected");
+        }));
+        Assertions.assertInstanceOf(
+                SmqStorageException.class, assertionValue1, "Read should throw SmqStorageException.");
+
+        try (ExecutorService threads = Executors.newSingleThreadExecutor()) {
+            evaluate(threads.<Integer>submit(
+                            () -> this.executor.read(c -> 42, Deadline.after(Duration.ofSeconds(1L), Duration.ZERO)))
+                    .get(2L, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    @DisplayName("실패한 읽기 뒤 다른 스레드에서 연산할 수 있다 — check 2")
+    void afterAFailedReadOperationsCanBePerformedInAnotherThreadCheck2() throws Exception {
+        evaluate(captureThrowable(() -> this.executor.read(c -> {
+            throw new SQLException("injected");
+        })));
+
+        try (ExecutorService threads = Executors.newSingleThreadExecutor()) {
+            final Integer assertionValue2Argument2;
+            assertionValue2Argument2 = threads.<Integer>submit(
+                            () -> this.executor.read(c -> 42, Deadline.after(Duration.ofSeconds(1L), Duration.ZERO)))
+                    .get(2L, TimeUnit.SECONDS);
+            Assertions.assertEquals(42, assertionValue2Argument2, "Submit should match the expected value.");
         }
     }
 
     @Test
     void interruptedLockAttemptDoesNotPreventLaterOperations() throws Exception {
-        try (var threads = Executors.newSingleThreadExecutor()) {
-            var result = threads.submit(() -> {
+        try (ExecutorService threads = Executors.newSingleThreadExecutor()) {
+            final Future<Integer> result;
+            result = threads.submit(() -> {
                 Thread.currentThread().interrupt();
+
                 try {
-                    assertThrows(
-                            Deadline.Interrupted.class,
-                            () -> executor.read(c -> 1, Deadline.after(Duration.ofSeconds(1), Duration.ZERO)));
-                    return executor.read(c -> 42, Deadline.after(Duration.ofSeconds(1), Duration.ZERO));
+                    Assertions.assertThrows(
+                            Interrupted.class,
+                            () -> this.executor.read(c -> 1, Deadline.after(Duration.ofSeconds(1L), Duration.ZERO)),
+                            "Read should throw Deadline.Interrupted.");
+                    return this.executor.read(c -> 42, Deadline.after(Duration.ofSeconds(1L), Duration.ZERO));
                 } finally {
                     Thread.interrupted();
                 }
             });
-            assertEquals(42, result.get(2, TimeUnit.SECONDS));
+            Assertions.assertEquals(42, result.get(2L, TimeUnit.SECONDS), "Result should match the expected value.");
         }
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {5, SQLITE_BUSY_SNAPSHOT, 19})
-    void SQL_오류는_코드와_상관없이_재시도_없이_SmqStorageException이다(int errorCode) {
-        int[] calls = {0};
-        assertThrows(
-                SmqStorageException.class,
-                () -> executor.anyOrUncertain(c -> {
-                    calls[0]++;
-                    throw new SQLException("boom", null, errorCode);
-                }));
-        assertEquals(1, calls[0]);
+    @ValueSource(ints = {5, 517, 19})
+    @DisplayName("SQL 오류는 코드와 상관없이 재시도 없이 SmqStorageException이다 — check 1")
+    void regardlessOfTheCodeAnSQLErrorResultsInAnSmqStorageExceptionWithoutARetryCheck1(final int errorCode) {
+        final int[] calls;
+        final Throwable assertionValue1;
+        calls = new int[] {0};
+        assertionValue1 = captureThrowable(() -> this.executor.anyOrUncertain(c -> {
+            calls[0]++;
+            throw new SQLException("boom", null, errorCode);
+        }));
+        Assertions.assertInstanceOf(
+                SmqStorageException.class, assertionValue1, "Any or uncertain should throw SmqStorageException.");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {5, 517, 19})
+    @DisplayName("SQL 오류는 코드와 상관없이 재시도 없이 SmqStorageException이다 — check 2")
+    void regardlessOfTheCodeAnSQLErrorResultsInAnSmqStorageExceptionWithoutARetryCheck2(final int errorCode) {
+        final int[] calls;
+        final int assertionValue2Argument2;
+        calls = new int[] {0};
+        evaluate(captureThrowable(() -> this.executor.anyOrUncertain(c -> {
+            calls[0]++;
+            throw new SQLException("boom", null, errorCode);
+        })));
+        assertionValue2Argument2 = calls[0];
+        Assertions.assertEquals(1, assertionValue2Argument2, "Calls should match the expected value.");
+    }
+
+    private static Throwable captureThrowable(final Executable action) {
+        return Assertions.assertThrows(Throwable.class, action);
+    }
+
+    private static Object evaluate(final Object value) {
+        return value;
     }
 }

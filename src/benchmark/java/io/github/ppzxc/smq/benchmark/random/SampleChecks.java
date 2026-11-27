@@ -14,18 +14,22 @@ import java.util.Set;
 final class SampleChecks {
     private SampleChecks() {}
 
-    static void checkChunkOrder(List<Delivery> deliveries, List<Violation> out) {
-        Map<Long, List<Delivery>> chunks = new LinkedHashMap<>();
-        for (Delivery d : deliveries) {
+    static void checkChunkOrder(final List<Delivery> deliveries, final List<Violation> out) {
+        final Map<Long, List<Delivery>> chunks;
+        chunks = new LinkedHashMap<>();
+        for (final Delivery d : deliveries) {
             chunks.computeIfAbsent(d.pull().chunk(), k -> new ArrayList<>()).add(d);
         }
-        for (List<Delivery> chunk : chunks.values()) {
-            List<Delivery> sorted = chunk.stream()
+        for (final List<Delivery> chunk : chunks.values()) {
+            final List<Delivery> sorted;
+            sorted = chunk.stream()
                     .sorted(Comparator.comparingInt(d -> d.pull().position()))
                     .toList();
             for (int i = 1; i < sorted.size(); i++) {
-                Delivery prev = sorted.get(i - 1);
-                Delivery cur = sorted.get(i);
+                final Delivery prev;
+                final Delivery cur;
+                prev = sorted.get(i - 1);
+                cur = sorted.get(i);
                 if (cur.messageId() <= prev.messageId()) {
                     out.add(new Violation(
                             Invariant.CHUNK_ORDER,
@@ -47,16 +51,21 @@ final class SampleChecks {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CyclomaticComplexity")
-    static void checkSingleActive(List<Delivery> deliveries, List<Violation> out) {
-        Map<Long, List<Delivery>> chunks = new LinkedHashMap<>();
-        for (Delivery d : deliveries) {
+    static void checkSingleActive(final List<Delivery> deliveries, final List<Violation> out) {
+        final Map<Long, List<Delivery>> chunks;
+        final List<Lease> leases;
+        Lease widest;
+        chunks = new LinkedHashMap<>();
+        for (final Delivery d : deliveries) {
             if (d.queue() == QueueKind.TARGET) {
                 chunks.computeIfAbsent(d.pull().chunk(), k -> new ArrayList<>()).add(d);
             }
         }
-        List<Lease> leases = new ArrayList<>();
-        for (List<Delivery> chunk : chunks.values()) {
-            long end = chunk.stream()
+        leases = new ArrayList<>();
+        for (final List<Delivery> chunk : chunks.values()) {
+            long end;
+            final Delivery first;
+            end = chunk.stream()
                     .mapToLong(d -> d.pull().leaseDeadlineMillis())
                     .max()
                     .orElseThrow();
@@ -68,14 +77,14 @@ final class SampleChecks {
                                 .max()
                                 .orElseThrow());
             }
-            Delivery first = chunk.stream()
+            first = chunk.stream()
                     .min(Comparator.comparingInt(d -> d.pull().position()))
                     .orElseThrow();
             leases.add(new Lease(first, first.pull().atMillis(), end));
         }
         leases.sort(Comparator.comparingLong(Lease::start));
-        Lease widest = null;
-        for (Lease cur : leases) {
+        widest = null;
+        for (final Lease cur : leases) {
             if (widest != null && cur.start() < widest.end() - InvariantChecker.TOLERANCE_MILLIS) {
                 out.add(new Violation(
                         Invariant.SINGLE_ACTIVE,
@@ -98,11 +107,13 @@ final class SampleChecks {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CyclomaticComplexity")
-    static void checkCounts(List<CountsSample> samples, List<Violation> out) {
-        Set<QueueKind> drained = EnumSet.noneOf(QueueKind.class);
-        for (CountsSample s : samples) {
-            String where = s.queue() + (s.afterDrain() ? " 소진 뒤" : " 부하 중") + " counts=(" + s.ready() + ", "
-                    + s.leased() + ", " + s.delayed() + ")";
+    static void checkCounts(final List<CountsSample> samples, final List<Violation> out) {
+        final Set<QueueKind> drained;
+        drained = EnumSet.noneOf(QueueKind.class);
+        for (final CountsSample s : samples) {
+            final String where;
+            where = s.queue() + (s.afterDrain() ? " 소진 뒤" : " 부하 중") + " counts=(" + s.ready() + ", " + s.leased()
+                    + ", " + s.delayed() + ")";
             if (s.ready() < 0 || s.leased() < 0 || s.delayed() < 0) {
                 out.add(new Violation(Invariant.COUNTS, List.of(), List.of(), where + "에 음수가 있다"));
             } else if (s.afterDrain() && (s.ready() != 0 || s.leased() != 0 || s.delayed() != 0)) {
@@ -112,7 +123,7 @@ final class SampleChecks {
                 drained.add(s.queue());
             }
         }
-        for (QueueKind q : QueueKind.values()) {
+        for (final QueueKind q : QueueKind.values()) {
             if (!drained.contains(q)) {
                 out.add(new Violation(Invariant.COUNTS, List.of(), List.of(), q + " 소진 뒤 counts 표본이 없다"));
             }

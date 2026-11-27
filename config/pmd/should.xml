@@ -11,6 +11,8 @@
     <rule ref="category/java/bestpractices.xml/MethodReturnsInternalArray">
         </rule>
     <rule ref="category/java/bestpractices.xml/UnitTestShouldIncludeAssert" />
+    <rule ref="category/java/bestpractices.xml/UnitTestAssertionsShouldIncludeMessage" />
+    <rule ref="category/java/bestpractices.xml/UnitTestContainsTooManyAsserts" />
     <!-- Include MUST rules with suppressions so this rule can validate them. -->
     <rule ref="category/java/bestpractices.xml/SystemPrintln" />
     <rule ref="category/java/bestpractices.xml/UnusedLocalVariable" />
@@ -29,6 +31,11 @@
     </rule>
     <rule ref="category/java/bestpractices.xml/UseStandardCharsets" />
     <!-- codestyle -->
+    <rule ref="category/java/codestyle.xml/MethodNamingConventions" />
+    <rule ref="category/java/codestyle.xml/MethodArgumentCouldBeFinal" />
+    <rule ref="category/java/codestyle.xml/LocalVariableCouldBeFinal" />
+    <rule ref="category/java/codestyle.xml/LocalVariableDeclarationShouldBeAtStartOfBlock" />
+    <rule ref="category/java/codestyle.xml/UseUnderscoresInNumericLiterals" />
     <rule ref="category/java/codestyle.xml/VariableCanBeInlined" />
     <!-- design -->
     <rule ref="category/java/design.xml/AvoidDeeplyNestedIfStmts" />

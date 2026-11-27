@@ -9,7 +9,7 @@ enum QueueKind {
 
     private final int spoolCode;
 
-    QueueKind(int spoolCode) {
+    QueueKind(final int spoolCode) {
         this.spoolCode = spoolCode;
     }
 
@@ -17,7 +17,7 @@ enum QueueKind {
         return spoolCode;
     }
 
-    static QueueKind fromSpoolCode(int code) throws IOException {
+    static QueueKind fromSpoolCode(final int code) throws IOException {
         return switch (code) {
             case 0 -> TARGET;
             case 1 -> DEAD_LETTER;

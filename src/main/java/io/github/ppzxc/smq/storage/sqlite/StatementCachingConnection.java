@@ -17,14 +17,16 @@ final class StatementCachingConnection {
 
     private StatementCachingConnection() {}
 
-    static Connection wrap(Connection connection) {
-        Map<String, PreparedStatement> cache = new HashMap<>();
-        InvocationHandler handler = new CacheHandler(connection, cache);
+    static Connection wrap(final Connection connection) {
+        final Map<String, PreparedStatement> cache;
+        final InvocationHandler handler;
+        cache = new HashMap<>();
+        handler = new CacheHandler(connection, cache);
         return (Connection)
                 Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, handler);
     }
 
-    static void releaseStatements(Connection wrapped) {
+    static void releaseStatements(final Connection wrapped) {
         if (Proxy.isProxyClass(wrapped.getClass())
                 && Proxy.getInvocationHandler(wrapped) instanceof CacheHandler handler) {
             closeAll(handler.cache);
@@ -36,7 +38,7 @@ final class StatementCachingConnection {
     private record CacheHandler(Connection connection, Map<String, PreparedStatement> cache)
             implements InvocationHandler {
         @Override
-        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        public Object invoke(Object proxy, final Method method, final Object[] args) throws Throwable {
             return switch (method.getName()) {
                 case "prepareStatement" -> prepare(connection, cache, method, args);
                 case "close" -> {
@@ -49,15 +51,22 @@ final class StatementCachingConnection {
     }
 
     private static Object prepare(
-            Connection connection, Map<String, PreparedStatement> cache, Method method, Object[] args)
+            final Connection connection,
+            final Map<String, PreparedStatement> cache,
+            final Method method,
+            final Object[] args)
             throws Throwable {
-        boolean plain = args.length == 1;
-        boolean withKeys = args.length == 2 && args[1] instanceof Integer;
+        final boolean plain;
+        final boolean withKeys;
+        final String key;
+        PreparedStatement statement;
+        plain = args.length == 1;
+        withKeys = args.length == 2 && args[1] instanceof Integer;
         if (!plain && !withKeys) {
             return invoke(connection, method, args);
         }
-        String key = (plain ? "" : args[1] + ":") + args[0];
-        PreparedStatement statement = cache.get(key);
+        key = (plain ? "" : args[1] + ":") + args[0];
+        statement = cache.get(key);
         if (statement == null) {
             statement = (PreparedStatement) invoke(connection, method, args);
             cache.put(key, statement);
@@ -67,7 +76,7 @@ final class StatementCachingConnection {
         return retained(statement);
     }
 
-    private static PreparedStatement retained(PreparedStatement statement) {
+    private static PreparedStatement retained(final PreparedStatement statement) {
         return (PreparedStatement) Proxy.newProxyInstance(
                 PreparedStatement.class.getClassLoader(),
                 new Class<?>[] {PreparedStatement.class},
@@ -81,8 +90,8 @@ final class StatementCachingConnection {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CloseResource")
-    private static void closeAll(Map<String, PreparedStatement> cache) {
-        for (PreparedStatement statement : cache.values()) {
+    private static void closeAll(final Map<String, PreparedStatement> cache) {
+        for (final PreparedStatement statement : cache.values()) {
             try {
                 statement.close();
             } catch (SQLException e) {
@@ -92,7 +101,7 @@ final class StatementCachingConnection {
         cache.clear();
     }
 
-    private static Object invoke(Object target, Method method, Object[] args) throws Throwable {
+    private static Object invoke(final Object target, final Method method, final Object[] args) throws Throwable {
         try {
             return method.invoke(target, args);
         } catch (InvocationTargetException e) {

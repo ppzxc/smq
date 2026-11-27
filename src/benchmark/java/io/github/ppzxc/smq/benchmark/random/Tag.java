@@ -4,9 +4,10 @@ package io.github.ppzxc.smq.benchmark.random;
 record Tag(long seed, long seq) {
 
     /** {@link #toString()}의 역. 형식이 틀리면 {@link IllegalArgumentException}. */
-    static Tag parse(String raw) {
+    static Tag parse(final String raw) {
         try {
-            String[] parts = raw.split("/");
+            final String[] parts;
+            parts = raw.split("/");
             if (parts.length != 2) {
                 throw new IllegalArgumentException("태그 형식이 아니다: " + raw);
             }

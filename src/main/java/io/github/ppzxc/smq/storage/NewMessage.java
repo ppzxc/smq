@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
-/** 발행할 메시지 한 건. {@code delay}가 {@link Duration#ZERO}이면 지연이 없다. */
 @SuppressWarnings("ArrayRecordComponent") // Internal storage input retains its caller-owned payload.
 public record NewMessage(byte[] payload, Map<String, String> headers, Duration delay) {
 
@@ -14,12 +13,11 @@ public record NewMessage(byte[] payload, Map<String, String> headers, Duration d
         Objects.requireNonNull(delay, "delay");
     }
 
-    /** 꺼낼 수 있게 되는 시각. 지연이 없으면 null이다. */
-    public @Nullable Instant availableAt(Instant now) {
+    public @Nullable Instant availableAt(final Instant now) {
         return delay.isZero() ? null : now.plus(delay);
     }
 
-    public NewMessage(byte[] payload, Map<String, String> headers) {
+    public NewMessage(final byte[] payload, final Map<String, String> headers) {
         this(payload, headers, Duration.ZERO);
     }
 }

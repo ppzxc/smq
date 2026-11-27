@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.ppzxc.smq.storage.StorageFactory;
 import java.util.Arrays;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class InMemorySmqTest extends SmqConformanceTest {
@@ -15,16 +16,23 @@ class InMemorySmqTest extends SmqConformanceTest {
     }
 
     @Test
-    void 인메모리_빌더에는_durability가_없다() {
+    @DisplayName("인메모리 빌더에는 durability가 없다")
+    void inMemoryBuildersLackDurability() {
 
-        assertFalse(Arrays.stream(Smq.Builder.class.getMethods())
-                .anyMatch(m -> m.getName().equals("durability")));
+        assertFalse(
+                Arrays.stream(Smq.Builder.class.getMethods())
+                        .anyMatch(m -> m.getName().equals("durability")),
+                "The memory builder should not expose durability.");
     }
 
     @Test
-    void 인메모리_저장소는_스냅샷을_지원하지_않는다() {
+    @DisplayName("인메모리 저장소는 스냅샷을 지원하지 않는다")
+    void inMemoryStorageDoesNotSupportSnapshots() {
         try (Smq smq = Smq.inMemory().open()) {
-            assertThrows(UnsupportedOperationException.class, () -> smq.snapshot(dir.resolve("snap.db")));
+            assertThrows(
+                    UnsupportedOperationException.class,
+                    () -> smq.snapshot(dir.resolve("snap.db")),
+                    "Snapshot should throw UnsupportedOperationException.");
         }
     }
 }

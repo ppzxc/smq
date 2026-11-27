@@ -7,7 +7,7 @@ enum Storage {
 
     private final String id;
 
-    Storage(String id) {
+    Storage(final String id) {
         this.id = id;
     }
 

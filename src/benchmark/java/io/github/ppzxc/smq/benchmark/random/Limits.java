@@ -31,15 +31,15 @@ record Limits(
     /** 고정 속도 모드의 기본 메시지 크기 상한. 운영의 작은 메시지에 가깝다. */
     static final int DEFAULT_SOAK_MESSAGE_BYTES = 1024;
 
-    static Limits full(long loadMillis) {
+    static Limits full(final long loadMillis) {
         return new Limits(loadMillis, 100_000, 10_000, 0, 0, false, 0, Optional.empty());
     }
 
-    static Limits smoke(long loadMillis) {
+    static Limits smoke(final long loadMillis) {
         return new Limits(loadMillis, 2_000, 1_000, 0, 0, false, 0, Optional.empty());
     }
 
-    Limits withRate(long ratePerSecond) {
+    Limits withRate(final long ratePerSecond) {
         return new Limits(
                 loadMillis,
                 maxDepth,
@@ -51,7 +51,7 @@ record Limits(
                 durability);
     }
 
-    Limits withMessageBytes(int soakMessageBytes) {
+    Limits withMessageBytes(final int soakMessageBytes) {
         return new Limits(
                 loadMillis,
                 maxDepth,
@@ -63,7 +63,7 @@ record Limits(
                 durability);
     }
 
-    Limits withDepth(int maxDepth) {
+    Limits withDepth(final int maxDepth) {
         return new Limits(
                 loadMillis,
                 maxDepth,
@@ -75,7 +75,7 @@ record Limits(
                 durability);
     }
 
-    Limits withStandingQueue(boolean standingQueue) {
+    Limits withStandingQueue(final boolean standingQueue) {
         return new Limits(
                 loadMillis,
                 maxDepth,
@@ -87,7 +87,7 @@ record Limits(
                 durability);
     }
 
-    Limits withDurability(Durability durability) {
+    Limits withDurability(final Durability durability) {
         return new Limits(
                 loadMillis,
                 maxDepth,
@@ -99,7 +99,7 @@ record Limits(
                 Optional.of(durability));
     }
 
-    Limits withMinAchieved(double minAchieved) {
+    Limits withMinAchieved(final double minAchieved) {
         return new Limits(
                 loadMillis,
                 maxDepth,

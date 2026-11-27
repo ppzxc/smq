@@ -30,37 +30,44 @@ record RunSpec(
     static final int DEEP = 1_000_000;
 
     static RunSpec s1(
-            Storage storage, Profile profile, Durability durability, int depth, long durationMs, long warmupMs) {
+            final Storage storage,
+            final Profile profile,
+            final Durability durability,
+            final int depth,
+            final long durationMs,
+            final long warmupMs) {
         return new RunSpec(storage, Scenario.S1, profile, durability, depth, QueueKind.DEFAULT, durationMs, warmupMs);
     }
 
-    static RunSpec s1(QueueKind kind, int depth, long durationMs, long warmupMs) {
+    static RunSpec s1(final QueueKind kind, final int depth, final long durationMs, final long warmupMs) {
         return new RunSpec(
                 Storage.SQLITE, Scenario.S1, Profile.P1, Durability.PROCESS_CRASH, depth, kind, durationMs, warmupMs);
     }
 
-    static RunSpec s2(Storage storage, Profile profile, long durationMs, long warmupMs) {
+    static RunSpec s2(final Storage storage, final Profile profile, final long durationMs, final long warmupMs) {
         return new RunSpec(
                 storage, Scenario.S2, profile, defaultDurability(storage), 0, QueueKind.DEFAULT, durationMs, warmupMs);
     }
 
-    static RunSpec s3(Storage storage, Profile profile, long durationMs, long warmupMs) {
+    static RunSpec s3(final Storage storage, final Profile profile, final long durationMs, final long warmupMs) {
         return new RunSpec(
                 storage, Scenario.S3, profile, defaultDurability(storage), 0, QueueKind.DEFAULT, durationMs, warmupMs);
     }
 
-    private static Durability defaultDurability(Storage storage) {
+    private static Durability defaultDurability(final Storage storage) {
         return storage == Storage.SQLITE ? Durability.POWER_LOSS : null;
     }
 
     /** 결과와 기준선에서 이 조건을 가리키는 키. 예: {@code sqlite/S1/P1/POWER_LOSS/1m}. */
     String key() {
-        String key = Keys.of(storage, scenario, profile, durability == null ? "none" : durability.name(), depth);
+        final String key;
+        key = Keys.of(storage, scenario, profile, durability == null ? "none" : durability.name(), depth);
         return queueKind == QueueKind.DEFAULT ? key : key + "/" + queueKind;
     }
 
     String toJson() {
-        Map<String, Object> m = new LinkedHashMap<>();
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("storage", storage.name());
         m.put("scenario", scenario.name());
         m.put("profile", profile.name());
@@ -80,13 +87,15 @@ record RunSpec(
         return Base64.getUrlEncoder().withoutPadding().encodeToString(toJson().getBytes(StandardCharsets.UTF_8));
     }
 
-    static RunSpec fromArg(String arg) {
+    static RunSpec fromArg(final String arg) {
         return fromJson(new String(Base64.getUrlDecoder().decode(arg), StandardCharsets.UTF_8));
     }
 
-    static RunSpec fromJson(String json) {
-        Map<?, ?> m = (Map<?, ?>) Json.parse(json);
-        Object d = m.get("durability");
+    static RunSpec fromJson(final String json) {
+        final Map<?, ?> m;
+        final Object d;
+        m = (Map<?, ?>) Json.parse(json);
+        d = m.get("durability");
         return new RunSpec(
                 Storage.valueOf((String) m.get("storage")),
                 Scenario.valueOf((String) m.get("scenario")),

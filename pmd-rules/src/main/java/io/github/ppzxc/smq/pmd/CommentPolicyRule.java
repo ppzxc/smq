@@ -1,15 +1,10 @@
 package io.github.ppzxc.smq.pmd;
 
 import java.util.Locale;
-import net.sourceforge.pmd.lang.ast.Node;
 import net.sourceforge.pmd.lang.java.ast.ASTCompilationUnit;
 import net.sourceforge.pmd.lang.java.ast.ASTPackageDeclaration;
-import net.sourceforge.pmd.lang.java.ast.ASTTypeDeclaration;
 import net.sourceforge.pmd.lang.java.ast.JavaComment;
 import net.sourceforge.pmd.lang.java.ast.JavadocComment;
-import net.sourceforge.pmd.lang.java.ast.JavadocCommentOwner;
-import net.sourceforge.pmd.lang.java.ast.ModifierOwner;
-import net.sourceforge.pmd.lang.java.ast.ModifierOwner.Visibility;
 import net.sourceforge.pmd.lang.java.rule.AbstractJavaRule;
 
 public class CommentPolicyRule extends AbstractJavaRule {
@@ -44,8 +39,7 @@ public class CommentPolicyRule extends AbstractJavaRule {
                     && lower.matches("(?s)/\\*+\\s*(?:\\*\\s*)?(?:copyright\\b|spdx-license-identifier:|all rights reserved\\b|licensed under\\b).*");
             if (license) { licenseSeen = true; continue; }
             if (!lower.contains("todo") && !lower.contains("fixme") && comment instanceof JavadocComment doc
-                    && ((doc.getOwner() instanceof ASTPackageDeclaration && (path.endsWith("/package-info.java") || path.equals("package-info.java")))
-                            || publicApi(doc))) continue;
+                    && doc.getOwner() instanceof ASTPackageDeclaration && (path.endsWith("/package-info.java") || path.equals("package-info.java"))) continue;
             int line = comment.getReportLocation().getStartLine();
             String prefix = lines[line - 1].substring(0, Math.min(lines[line - 1].length(), comment.getReportLocation().getStartColumn() - 1));
             if ((path.endsWith("/io/github/ppzxc/smq/storage/memory/MemoryStorage.java") && prefix.contains("@SuppressWarnings(\"NonApiType\")") && text.trim().equals("// TreeMap keeps messages in FIFO order for pulls."))
@@ -59,16 +53,4 @@ public class CommentPolicyRule extends AbstractJavaRule {
         return data;
     }
 
-    private static boolean publicApi(JavadocComment doc) {
-        JavadocCommentOwner owner = doc.getOwner();
-        if (!(owner instanceof ModifierOwner modifiers) || !visible(modifiers)) return false;
-        for (Node node = owner.getParent(); node != null; node = node.getParent()) {
-            if (node instanceof ASTTypeDeclaration type && !visible(type)) return false;
-        }
-        return true;
-    }
-
-    private static boolean visible(ModifierOwner owner) {
-        return owner.getEffectiveVisibility() == Visibility.V_PUBLIC || owner.getEffectiveVisibility() == Visibility.V_PROTECTED;
-    }
 }

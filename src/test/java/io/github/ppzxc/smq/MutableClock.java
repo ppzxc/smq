@@ -8,7 +8,7 @@ final class MutableClock implements InstantSource {
 
     private volatile Instant now;
 
-    MutableClock(Instant now) {
+    MutableClock(final Instant now) {
         this.now = now;
     }
 
@@ -17,7 +17,7 @@ final class MutableClock implements InstantSource {
         return now;
     }
 
-    void advance(Duration d) {
+    void advance(final Duration d) {
         now = now.plus(d);
     }
 }

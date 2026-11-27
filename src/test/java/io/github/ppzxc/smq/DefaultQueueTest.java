@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
@@ -33,17 +34,18 @@ class DefaultQueueTest {
         final Queue<PullResult> script = new ArrayDeque<>();
         int pulls;
 
-        ScriptedStorage(PullResult... results) {
+        ScriptedStorage(final PullResult... results) {
             script.addAll(List.of(results));
         }
 
         @Override
         public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
+            final PullResult next;
             pulls++;
             if (pulls > MAX_PULL_CALLS) {
                 throw new AssertionError("꺼내기를 " + MAX_PULL_CALLS + "번 넘게 되풀이했다");
             }
-            PullResult next = script.poll();
+            next = script.poll();
             return next != null ? next : PullResult.empty();
         }
 
@@ -96,7 +98,7 @@ class DefaultQueueTest {
         public void close() {}
     }
 
-    private static DefaultQueue queueOver(ScriptedStorage storage) {
+    private static DefaultQueue queueOver(final ScriptedStorage storage) {
         return new DefaultQueue(
                 storage,
                 () -> T0,
@@ -108,54 +110,99 @@ class DefaultQueueTest {
     }
 
     private static PullResult delivered() {
-        Message m = new Message(new MessageId(1), new byte[] {1}, Map.of(), 1, T0);
+        final Message m;
+        m = new Message(new MessageId(1), new byte[] {1}, Map.of(), 1, T0);
         return PullResult.of(new LeaseToken(1), T0.plusSeconds(10), List.of(m));
     }
 
     @Test
-    void 비어_돌아오고_남은_dead_letter_표시가_없으면_한_번만_꺼내고_빈_청크다() throws Exception {
+    @DisplayName("남은 dead letter가 없으면 빈 청크를 반환한다")
+    void emptyWithoutDeadLettersReturnsEmptyChunk() throws Exception {
         try (ScriptedStorage storage = new ScriptedStorage(PullResult.empty())) {
-
-            Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
-
-            assertTrue(chunk.isEmpty());
-            assertNull(chunk.leaseDeadline());
-            assertEquals(1, storage.pulls);
+            final Chunk chunk;
+            chunk = queueOver(storage).pull(1, Duration.ZERO);
+            assertTrue(chunk.isEmpty(), "The returned chunk should be empty.");
         }
     }
 
     @Test
-    void 남은_dead_letter_표시가_있으면_기다리지_않고_바로_다시_꺼내_표시가_없어질_때까지_되풀이한다() throws Exception {
+    @DisplayName("남은 dead letter가 없으면 빈 청크의 리스 기한이 없다")
+    void emptyWithoutDeadLettersHasNoLeaseDeadline() throws Exception {
+        try (ScriptedStorage storage = new ScriptedStorage(PullResult.empty())) {
+            final Chunk chunk;
+            chunk = queueOver(storage).pull(1, Duration.ZERO);
+            assertNull(chunk.leaseDeadline(), "The empty chunk should have no lease deadline.");
+        }
+    }
+
+    @Test
+    @DisplayName("남은 dead letter가 없으면 한 번만 꺼낸다")
+    void emptyWithoutDeadLettersPullsOnce() throws Exception {
+        try (ScriptedStorage storage = new ScriptedStorage(PullResult.empty())) {
+            queueOver(storage).pull(1, Duration.ZERO);
+            assertEquals(1, storage.pulls, "Storage should be queried once.");
+        }
+    }
+
+    @Test
+    @DisplayName("남은 dead letter 처리가 끝나면 빈 청크를 반환한다")
+    void deadLetterRetriesReturnEmptyChunk() throws Exception {
         try (ScriptedStorage storage = new ScriptedStorage(
                 PullResult.emptyDeadLettersRemain(), PullResult.emptyDeadLettersRemain(), PullResult.empty())) {
-
-            Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
-
-            assertTrue(chunk.isEmpty());
-            assertEquals(3, storage.pulls);
+            final Chunk chunk;
+            chunk = queueOver(storage).pull(1, Duration.ZERO);
+            assertTrue(chunk.isEmpty(), "The returned chunk should be empty.");
         }
     }
 
     @Test
-    void 남은_dead_letter_표시_뒤에_메시지가_나오면_그_청크를_돌려주고_더_꺼내지_않는다() throws Exception {
+    @DisplayName("남은 dead letter가 있는 동안 즉시 다시 꺼낸다")
+    void deadLetterRetriesContinueUntilComplete() throws Exception {
+        try (ScriptedStorage storage = new ScriptedStorage(
+                PullResult.emptyDeadLettersRemain(), PullResult.emptyDeadLettersRemain(), PullResult.empty())) {
+            queueOver(storage).pull(1, Duration.ZERO);
+            assertEquals(3, storage.pulls, "Storage should be queried until no dead letters remain.");
+        }
+    }
+
+    @Test
+    @DisplayName("dead letter 처리 뒤 메시지가 나오면 그 메시지를 반환한다")
+    void messageAfterDeadLettersIsReturned() throws Exception {
         try (ScriptedStorage storage = new ScriptedStorage(PullResult.emptyDeadLettersRemain(), delivered())) {
-
-            Chunk chunk = queueOver(storage).pull(1, Duration.ZERO);
-
+            final Chunk chunk;
+            chunk = queueOver(storage).pull(1, Duration.ZERO);
             assertEquals(
                     List.of(new MessageId(1)),
-                    chunk.messages().stream().map(Message::id).toList());
-            assertEquals(2, storage.pulls);
+                    chunk.messages().stream().map(Message::id).toList(),
+                    "The delivered message ID should be preserved.");
         }
     }
 
     @Test
-    void 표시가_없으면_wait_동안만_폴링하고_그_안의_호출_수는_한정된다() throws Exception {
-        try (ScriptedStorage storage = new ScriptedStorage()) {
-            Chunk chunk = queueOver(storage).pull(1, Duration.ofMillis(30));
+    @DisplayName("dead letter 처리 뒤 메시지가 나오면 더 꺼내지 않는다")
+    void messageAfterDeadLettersStopsFurtherPulls() throws Exception {
+        try (ScriptedStorage storage = new ScriptedStorage(PullResult.emptyDeadLettersRemain(), delivered())) {
+            queueOver(storage).pull(1, Duration.ZERO);
+            assertEquals(2, storage.pulls, "Storage should not be queried after delivery.");
+        }
+    }
 
-            assertTrue(chunk.isEmpty());
-            assertTrue(storage.pulls >= 2, "pulls=" + storage.pulls);
+    @Test
+    @DisplayName("빈 저장소를 기다리면 빈 청크를 반환한다")
+    void emptyPollReturnsEmptyChunk() throws Exception {
+        try (ScriptedStorage storage = new ScriptedStorage()) {
+            final Chunk chunk;
+            chunk = queueOver(storage).pull(1, Duration.ofMillis(30));
+            assertTrue(chunk.isEmpty(), "The returned chunk should be empty.");
+        }
+    }
+
+    @Test
+    @DisplayName("빈 저장소를 기다리는 동안 다시 조회한다")
+    void emptyPollRetriesWhileWaiting() throws Exception {
+        try (ScriptedStorage storage = new ScriptedStorage()) {
+            queueOver(storage).pull(1, Duration.ofMillis(30));
+            assertTrue(storage.pulls >= 2, "Storage should be queried more than once.");
         }
     }
 }

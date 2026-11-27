@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** 청크에서 만든 정산 값. 불변이며 같은 값을 다시 반영해도 안전하다. */
 public final class Settlement {
 
     private final Object session;
@@ -18,7 +17,8 @@ public final class Settlement {
     private final @Nullable LeaseToken token;
     private final List<Disposition> items;
 
-    Settlement(Object session, String queue, @Nullable LeaseToken token, List<Disposition> items) {
+    Settlement(
+            final Object session, final String queue, final @Nullable LeaseToken token, final List<Disposition> items) {
         this.session = session;
         this.queue = queue;
         this.token = token;
@@ -42,38 +42,34 @@ public final class Settlement {
         return items;
     }
 
-    /** 청크 안의 메시지마다 처리 결과를 골라 정산 값 하나로 모으는 빌더. "나머지"는 이 빌더에 담긴 것만 기준으로 계산한다. */
     public static final class Builder {
 
         private final Chunk chunk;
         private final Set<MessageId> chunkIds;
         private final Map<MessageId, Disposition> items = new LinkedHashMap<>();
 
-        Builder(Chunk chunk) {
+        Builder(final Chunk chunk) {
             this.chunk = chunk;
             this.chunkIds = new LinkedHashSet<>(chunk.messageIds());
         }
 
-        public Builder ack(MessageId id) {
+        public Builder ack(final MessageId id) {
             return put(new Disposition(id, Disposition.Kind.ACK));
         }
 
-        /** 지연 없이 NACK한다. 메시지는 자기 id 자리로 돌아가 바로 다시 꺼낼 수 있다. */
-        public Builder nack(MessageId id) {
+        public Builder nack(final MessageId id) {
             return put(new Disposition(id, Disposition.Kind.NACK));
         }
 
-        /** {@code delay}가 지난 뒤 다시 꺼낼 수 있게 NACK한다. 0이면 지연 없이 자기 id 자리로 돌아간다. 지연은 최대 36,500일(100년)이다. */
-        public Builder nack(MessageId id, Duration delay) {
+        public Builder nack(final MessageId id, final Duration delay) {
             return put(new Disposition(id, Disposition.Kind.NACK, Validation.nonNegative(delay, "delay")));
         }
 
-        /** 전달 횟수와 상관없이 메시지를 그 큐의 dead letter 큐로 옮긴다. dead letter 큐가 없으면 정산 전체가 반영되지 않는다. */
-        public Builder reject(MessageId id) {
+        public Builder reject(final MessageId id) {
             return put(new Disposition(id, Disposition.Kind.REJECT));
         }
 
-        private Builder put(Disposition d) {
+        private Builder put(final Disposition d) {
             if (!chunkIds.contains(d.id())) {
                 throw new IllegalArgumentException("message is not in the chunk: " + d.id());
             }
@@ -83,18 +79,16 @@ public final class Settlement {
             return this;
         }
 
-        /** 아직 처리 결과를 고르지 않은 나머지 메시지를 모두 ACK하고 마무리한다. */
         public Settlement ackRest() {
-            for (MessageId id : chunkIds) {
+            for (final MessageId id : chunkIds) {
                 items.putIfAbsent(id, new Disposition(id, Disposition.Kind.ACK));
             }
             return build();
         }
 
-        /** 아직 처리 결과를 고르지 않은 나머지 메시지를 모두 {@code delay} 지연 NACK하고 마무리한다. 지연은 최대 36,500일(100년)이다. */
-        public Settlement nackRest(Duration delay) {
+        public Settlement nackRest(final Duration delay) {
             Validation.nonNegative(delay, "delay");
-            for (MessageId id : chunkIds) {
+            for (final MessageId id : chunkIds) {
                 items.putIfAbsent(id, new Disposition(id, Disposition.Kind.NACK, delay));
             }
             return build();

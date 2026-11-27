@@ -15,18 +15,20 @@ record ErrorDetail(String location, String exceptionClass, String message, Strin
 
     static final String HARNESS = "harness";
 
-    static ErrorDetail of(String location, Throwable t) {
+    static ErrorDetail of(final String location, final Throwable t) {
         return new ErrorDetail(location, t.getClass().getName(), t.getMessage(), stackTraceOf(t));
     }
 
-    static String stackTraceOf(Throwable t) {
-        StringWriter w = new StringWriter();
+    static String stackTraceOf(final Throwable t) {
+        final StringWriter w;
+        w = new StringWriter();
         t.printStackTrace(new PrintWriter(w));
         return w.toString();
     }
 
     Map<String, Object> toMap() {
-        Map<String, Object> m = new LinkedHashMap<>();
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("location", location);
         m.put("exceptionClass", exceptionClass);
         m.put("message", message);
@@ -36,7 +38,8 @@ record ErrorDetail(String location, String exceptionClass, String message, Strin
 
     /** 사람이 읽는 여러 줄 형식(콘솔과 {@code violations.txt}). */
     String describe() {
-        StringBuilder b = new StringBuilder();
+        final StringBuilder b;
+        b = new StringBuilder();
         b.append("errorLocation=").append(location).append('\n');
         b.append("errorClass=").append(exceptionClass).append('\n');
         b.append("errorMessage=").append(message).append('\n');

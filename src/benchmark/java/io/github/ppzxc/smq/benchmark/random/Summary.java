@@ -10,11 +10,12 @@ final class Summary {
 
     private Summary() {}
 
-    static String render(List<RunResult> results, int rows) {
+    static String render(final List<RunResult> results, final int rows) {
+        final StringBuilder sb;
         if (results.isEmpty()) {
             return "";
         }
-        StringBuilder sb = new StringBuilder("\n");
+        sb = new StringBuilder("\n");
         sb.append(table(
                 "처리량이 낮은 순",
                 results.stream()
@@ -31,8 +32,9 @@ final class Summary {
         return sb.toString();
     }
 
-    private static String table(String title, List<RunResult> rows) {
-        StringBuilder sb = new StringBuilder(title).append('\n');
+    private static String table(final String title, final List<RunResult> rows) {
+        final StringBuilder sb;
+        sb = new StringBuilder(title).append('\n');
         sb.append(String.format(
                 Locale.getDefault(Locale.Category.FORMAT),
                 "  %-20s %10s %8s %9s %9s  %s%n",
@@ -42,7 +44,7 @@ final class Summary {
                 "p50",
                 "p99",
                 "판정"));
-        for (RunResult r : rows) {
+        for (final RunResult r : rows) {
             sb.append(String.format(
                     Locale.getDefault(Locale.Category.FORMAT),
                     "  %-20d %10.0f %8.2f %9s %9s  %s%n",
@@ -56,8 +58,9 @@ final class Summary {
         return sb.append('\n').toString();
     }
 
-    private static String ms(RunResult r, Function<RunResult, Double> f) {
-        Double v = f.apply(r);
+    private static String ms(final RunResult r, final Function<RunResult, Double> f) {
+        final Double v;
+        v = f.apply(r);
         return v == null ? "-" : String.format(Locale.getDefault(Locale.Category.FORMAT), "%.0fms", v);
     }
 }

@@ -13,8 +13,16 @@ final class Deadline {
     }
 
     static final class Interrupted extends RuntimeException {
+        private final InterruptedException cause;
+
         Interrupted(InterruptedException cause) {
             super(cause);
+            this.cause = cause;
+        }
+
+        @Override
+        public synchronized InterruptedException getCause() {
+            return cause;
         }
     }
 

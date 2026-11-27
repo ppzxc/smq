@@ -26,8 +26,8 @@ final class SqliteSchema {
     }
 
     int establish(Connection c) throws SQLException {
-        int applicationId = pragmaInt(c, "application_id");
-        int version = pragmaInt(c, "user_version");
+        int applicationId = pragmaInt(c, "PRAGMA application_id", "application_id");
+        int version = pragmaInt(c, "PRAGMA user_version", "user_version");
         boolean empty = schemaIsEmpty(c);
         if (empty && applicationId == 0) {
             createV1(c);
@@ -57,7 +57,7 @@ final class SqliteSchema {
     }
 
     static void configureNewDatabase(Connection c, boolean autoVacuum) throws SQLException {
-        if (pragmaInt(c, "application_id") != 0) {
+        if (pragmaInt(c, "PRAGMA application_id", "application_id") != 0) {
             return;
         }
         try (Statement s = c.createStatement();
@@ -161,9 +161,9 @@ final class SqliteSchema {
         return new IncompatibleStorageException("not an smq database (" + reason + "), supported " + targetVersion);
     }
 
-    static int pragmaInt(Connection c, String name) throws SQLException {
+    static int pragmaInt(Connection c, String sql, String name) throws SQLException {
         try (Statement s = c.createStatement();
-                ResultSet rs = s.executeQuery("PRAGMA " + name)) {
+                ResultSet rs = s.executeQuery(sql)) {
             if (!rs.next()) {
                 throw new SQLException("pragma row missing: " + name);
             }

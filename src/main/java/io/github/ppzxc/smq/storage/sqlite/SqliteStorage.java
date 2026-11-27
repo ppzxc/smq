@@ -243,11 +243,10 @@ public final class SqliteStorage implements Storage {
                 requireExclusive(rs.next() ? rs.getString(1) : null);
             }
 
-            s.execute("PRAGMA synchronous = "
-                    + switch (durability) {
-                        case POWER_LOSS -> "FULL";
-                        case PROCESS_CRASH -> "NORMAL";
-                    });
+            switch (durability) {
+                case POWER_LOSS -> s.execute("PRAGMA synchronous = FULL");
+                case PROCESS_CRASH -> s.execute("PRAGMA synchronous = NORMAL");
+            }
             ok = true;
         } finally {
             if (!ok) {
@@ -564,7 +563,7 @@ public final class SqliteStorage implements Storage {
             destinations.forEach(name -> deadLetter.accept(Optional.of(name)));
             return result;
         } catch (Deadline.Interrupted e) {
-            throw (InterruptedException) e.getCause();
+            throw e.getCause();
         } catch (Deadline.Expired e) {
             return PullResult.empty();
         }
@@ -628,7 +627,7 @@ public final class SqliteStorage implements Storage {
                     },
                     Deadline.after(wait, Duration.ZERO));
         } catch (Deadline.Interrupted e) {
-            throw (InterruptedException) e.getCause();
+            throw e.getCause();
         } catch (Deadline.Expired e) {
             return Optional.empty();
         }

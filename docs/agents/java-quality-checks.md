@@ -26,7 +26,7 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 | | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test, benchmark | error |
 | Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test, benchmark | any violation fails the build |
 | Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | any violation fails the build |
-| TOOL-003 | SpotBugs 4.10.5 with default effort and confidence threshold | main | findings fail the build |
+| TOOL-003 | SpotBugs 4.10.5 with maximum effort and low confidence threshold | main | findings fail the build |
 | NUL-001 | NullAway / JSpecify | main | error; only `@NullMarked` code, explicit nullness required |
 | STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, benchmark, deploy-test Java | `spotlessCheck` is part of `check` |
 
@@ -69,6 +69,7 @@ Run `./gradlew pmdMainAll pmdTestAll pmdBenchmarkAll` for the separate, non-bloc
 
 `SqliteStorage` retains narrowly scoped PMD suppressions for these contracts:
 
+- `UnusedAssignment` keeps the initial cleanup flag for exceptions during statement creation or setup; the SHOULD ruleset also runs that MUST rule with findings suppressed so it can validate the suppression, while the MUST tasks enforce the findings.
 - `UseTryWithResources` preserves connection and lock ownership when initialization succeeds, closes them on failure, and releases storage-owned resources in order on close.
 - `PreserveStackTrace` retains existing exception translation on open and rethrows the original interruption cause from the two deadline-aware methods.
 - `ExhaustiveSwitchHasDefault` preserves the documented exception for unknown dispositions.
@@ -78,7 +79,7 @@ PMD MUST tasks also check each PMD suppression for a matching `@PolicyException`
 
 ## SpotBugs report
 
-Run `./gradlew spotbugsMain` to analyze the compiled production classes with SpotBugs 4.10.5. The existing `check` task also runs it. Findings fail the build and appear in `build/reports/spotbugs/main.html`. Linux and Windows CI upload that report as `linux-spotbugs-report` and `windows-spotbugs-report`, respectively.
+Run `./gradlew spotbugsMain` to analyze the compiled production classes with SpotBugs 4.10.5. It uses maximum analysis effort and reports findings down to low confidence. The existing `check` task also runs it. Findings without a documented exclusion fail the build and appear in `build/reports/spotbugs/main.html`. Linux and Windows CI upload that report as `linux-spotbugs-report` and `windows-spotbugs-report`, respectively.
 
 ## STYLE-011 comment policy
 

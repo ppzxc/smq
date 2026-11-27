@@ -1,6 +1,8 @@
 package io.github.ppzxc.gradle
 
 import com.diffplug.gradle.spotless.SpotlessExtension
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
 import com.github.spotbugs.snom.SpotBugsExtension
 import com.github.spotbugs.snom.SpotBugsTask
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -80,6 +82,8 @@ class JavaQualityPlugin : Plugin<Project> {
         project.pluginManager.apply("com.github.spotbugs-base")
         project.extensions.configure(SpotBugsExtension::class.java) {
             toolVersion.set("4.10.5")
+            effort.set(Effort.MAX)
+            reportLevel.set(Confidence.LOW)
             excludeFilter.set(project.rootProject.file("config/spotbugs/exclude.xml"))
         }
 

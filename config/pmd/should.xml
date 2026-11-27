@@ -21,6 +21,12 @@
     <rule ref="category/java/bestpractices.xml/ExhaustiveSwitchHasDefault" />
     <rule ref="category/java/design.xml/ExceptionAsFlowControl" />
     <rule ref="category/java/bestpractices.xml/UnnecessaryWarningSuppression" />
+    <!-- Run this MUST rule for suppression validation; its findings are enforced by the MUST tasks. -->
+    <rule ref="category/java/bestpractices.xml/UnusedAssignment">
+        <properties>
+            <property name="violationSuppressRegex" value=".*" />
+        </properties>
+    </rule>
     <rule ref="category/java/bestpractices.xml/UseStandardCharsets" />
     <!-- codestyle -->
     <rule ref="category/java/codestyle.xml/VariableCanBeInlined" />

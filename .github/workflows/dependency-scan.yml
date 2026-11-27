@@ -29,7 +29,7 @@ jobs:
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
         with:
-          version: v0.76.1
+          version: v0.76.2
 
       - name: Scan direct and transitive dependencies
         run: >-

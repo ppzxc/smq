@@ -1,6 +1,8 @@
 package io.github.ppzxc.gradle
 
 import com.diffplug.gradle.spotless.SpotlessExtension
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
 import com.github.spotbugs.snom.SpotBugsExtension
 import com.github.spotbugs.snom.SpotBugsTask
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -43,9 +45,11 @@ class JavaQualityPlugin : Plugin<Project> {
             val isMainCompilation = name == "compileJava"
             options.encoding = "UTF-8"
             options.release.set(25)
-            options.compilerArgs.addAll(listOf("-Xlint:unchecked", "-Xlint:rawtypes"))
+            options.compilerArgs.addAll(listOf("-Xlint:unchecked", "-Xlint:rawtypes", "-Werror"))
 
             options.errorprone {
+                allDisabledChecksAsWarnings.set(true)
+                errorproneArgs.add("-XepAllSuggestionsAsWarnings")
                 nullaway {
                     onlyNullMarked.set(true)
                     if (isMainCompilation) {
@@ -56,18 +60,6 @@ class JavaQualityPlugin : Plugin<Project> {
                     }
                 }
                 MUST_ERROR_PRONE_CHECKS.forEach { check(it, CheckSeverity.ERROR) }
-                if (isMainCompilation || name == "compileBenchmarkJava") {
-                    // Tests intentionally capture interrupts to assert the caller contract.
-                    check("InterruptedExceptionSwallowed", CheckSeverity.ERROR)
-                }
-                if (!isMainCompilation) {
-                    // Test scenario names are Korean specifications, so report these without failing compilation.
-                    warn("UnicodeInCode")
-                }
-            }
-
-            if (isMainCompilation) {
-                options.compilerArgs.add("-Werror")
             }
         }
 
@@ -83,6 +75,8 @@ class JavaQualityPlugin : Plugin<Project> {
         project.pluginManager.apply("com.github.spotbugs-base")
         project.extensions.configure(SpotBugsExtension::class.java) {
             toolVersion.set("4.10.5")
+            effort.set(Effort.MAX)
+            reportLevel.set(Confidence.LOW)
             excludeFilter.set(project.rootProject.file("config/spotbugs/exclude.xml"))
         }
 
@@ -128,6 +122,7 @@ class JavaQualityPlugin : Plugin<Project> {
                 classpath = project.files(sourceSet.output, sourceSet.compileClasspath)
                 ruleSetFiles = project.files(shouldRules)
                 ruleSets = emptyList()
+                rulesMinimumPriority.set(5)
                 setIgnoreFailures(false)
                 setConsoleOutput(true)
                 reports {

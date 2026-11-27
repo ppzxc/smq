@@ -19,4 +19,27 @@
         <Method name="acquire"/>
         <Bug pattern="UL_UNRELEASED_LOCK"/>
     </Match>
+    <!-- A close race yields an empty result; otherwise the original storage runtime failure escapes. -->
+    <Match>
+        <Class name="io.github.ppzxc.smq.PullWaiter"/>
+        <Method name="attemptUnlessClosed"/>
+        <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+    </Match>
+    <!-- Opening preserves runtime exception identity and maps SQL failures without changing their cause. -->
+    <Match>
+        <Class name="io.github.ppzxc.smq.storage.sqlite.SqliteStorage"/>
+        <Method name="open" params="java.nio.file.Path,io.github.ppzxc.smq.Durability,java.time.Duration,io.github.ppzxc.smq.storage.sqlite.SqliteStorage$Connector,boolean" returns="io.github.ppzxc.smq.storage.sqlite.SqliteStorage"/>
+        <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+    </Match>
+    <Match>
+        <Class name="io.github.ppzxc.smq.storage.sqlite.SqliteStorage"/>
+        <Method name="openFailure"/>
+        <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+    </Match>
+    <!-- JDBC reflection must propagate the target's original checked exception, runtime exception, or error. -->
+    <Match>
+        <Class name="io.github.ppzxc.smq.storage.sqlite.StatementCachingConnection"/>
+        <Method name="invoke"/>
+        <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_THROWABLE"/>
+    </Match>
 </FindBugsFilter>

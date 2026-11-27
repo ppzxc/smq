@@ -28,7 +28,7 @@
     <!-- Opening preserves runtime exception identity and maps SQL failures without changing their cause. -->
     <Match>
         <Class name="io.github.ppzxc.smq.storage.sqlite.SqliteStorage"/>
-        <Method name="open" params="java.nio.file.Path,io.github.ppzxc.smq.Durability,java.time.Duration,io.github.ppzxc.smq.storage.sqlite.SqliteStorage$Connector,boolean"/>
+        <Method name="open" params="java.nio.file.Path,io.github.ppzxc.smq.Durability,java.time.Duration,io.github.ppzxc.smq.storage.sqlite.SqliteStorage$Connector,boolean" returns="io.github.ppzxc.smq.storage.sqlite.SqliteStorage"/>
         <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
     </Match>
     <Match>

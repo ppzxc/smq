@@ -146,6 +146,40 @@ class SqliteStorageTest {
     }
 
     @Test
+    void 열기에서_SQL_실패의_원인을_보존한다() {
+        SQLException failure = new SQLException("injected");
+        SmqStorageException thrown = assertThrows(
+                SmqStorageException.class,
+                () -> SqliteStorage.open(
+                        dir.resolve("sql-error.db"),
+                        Durability.POWER_LOSS,
+                        Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                        (p, d) -> {
+                            throw failure;
+                        }));
+        assertSame(failure, thrown.getCause());
+    }
+
+    @Test
+    void 열기의_JDBC_프록시는_원래_RuntimeException을_전달한다() {
+        IllegalStateException failure = new IllegalStateException("injected");
+        IllegalStateException thrown = assertThrows(
+                IllegalStateException.class,
+                () -> SqliteStorage.open(
+                        dir.resolve("proxy-error.db"),
+                        Durability.POWER_LOSS,
+                        Deadline.DEFAULT_LOCK_WAIT_FLOOR,
+                        (p, d) -> (Connection) Proxy.newProxyInstance(
+                                Connection.class.getClassLoader(),
+                                new Class<?>[] {Connection.class},
+                                (proxy, method, args) -> {
+                                    if (method.getName().equals("close")) return null;
+                                    throw failure;
+                                })));
+        assertSame(failure, thrown);
+    }
+
+    @Test
     void 열기에서_Error가_나면_락을_놓고_같은_파일을_다시_연다() {
         Path db = dir.resolve("error.db");
         Error failure = new LinkageError("injected");

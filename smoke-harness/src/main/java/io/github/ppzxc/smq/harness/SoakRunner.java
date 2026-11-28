@@ -12,7 +12,9 @@ import io.github.ppzxc.smq.QueueOptions;
 import io.github.ppzxc.smq.Smq;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -115,7 +117,7 @@ final class SoakRunner {
             }
         }
 
-        if (published.size() != plan.messageCount()) {
+        if (published.size() != plan.messageCount() || expected.size() != published.size()) {
             this.addViolation(
                     violations,
                     "LOSS",
@@ -125,16 +127,18 @@ final class SoakRunner {
                     Map.of(
                             "expectedPublished",
                             Integer.toString(plan.messageCount()),
-                            "actualPublished",
-                            Integer.toString(published.size())));
+                            "returnedIds",
+                            ids(published).toString(),
+                            "uniqueReturnedIds",
+                            Integer.toString(expected.size())));
         }
-        if (!new HashSet<>(observed).equals(expected) || observed.size() != expected.size()) {
+        if (!frequencies(published).equals(frequencies(observed))) {
             this.addViolation(
                     violations,
                     "LOSS",
                     "message-accounting",
                     round,
-                    missingIds(published, observed),
+                    mismatchedIds(published, observed),
                     Map.of(
                             "publishedIds",
                             ids(published).toString(),
@@ -394,9 +398,29 @@ final class SoakRunner {
                 new SoakViolation(invariant, scenario, this.options.seed(), round, ids(messageIds), observations));
     }
 
-    private static List<MessageId> missingIds(final List<MessageId> expected, final List<MessageId> observed) {
-        final Set<MessageId> found = new HashSet<>(observed);
-        return expected.stream().filter(id -> !found.contains(id)).toList();
+    private static Map<MessageId, Integer> frequencies(final List<MessageId> ids) {
+        final Map<MessageId, Integer> counts = new HashMap<>();
+        for (final MessageId id : ids) {
+            counts.merge(id, 1, Integer::sum);
+        }
+        return counts;
+    }
+
+    private static List<MessageId> mismatchedIds(final List<MessageId> expected, final List<MessageId> observed) {
+        final Map<MessageId, Integer> expectedCounts = frequencies(expected);
+        final Map<MessageId, Integer> observedCounts = frequencies(observed);
+        final Set<MessageId> mismatches = new LinkedHashSet<>();
+        for (final MessageId id : expected) {
+            if (!expectedCounts.get(id).equals(observedCounts.get(id))) {
+                mismatches.add(id);
+            }
+        }
+        for (final MessageId id : observed) {
+            if (!expectedCounts.getOrDefault(id, 0).equals(observedCounts.get(id))) {
+                mismatches.add(id);
+            }
+        }
+        return List.copyOf(mismatches);
     }
 
     private static List<MessageId> unionIds(final List<MessageId> left, final List<MessageId> right) {

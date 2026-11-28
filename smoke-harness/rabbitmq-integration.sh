@@ -11,6 +11,7 @@ DATA_DIR=${RABBITMQ_DATA_DIR:-"$ROOT/smoke-harness/build/rabbitmq-data"}
 COUNT=${RABBITMQ_COUNT:-1000}
 WARMUP=${RABBITMQ_WARMUP:-100}
 REPEAT=${RABBITMQ_REPEAT:-3}
+export RABBITMQ_USERNAME="$USERNAME" RABBITMQ_PASSWORD="$PASSWORD"
 
 mkdir -p "$DATA_DIR"
 if docker container inspect "$CONTAINER" >/dev/null 2>&1; then

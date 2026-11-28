@@ -64,6 +64,7 @@ Kafka 전달 p99는 발행 완료 뒤 별도로 consume하는 구간의 메시�
 
 - RabbitMQ 두 queue 모두 확인 발행 뒤 복구, 미정산 전달 재전달, 요청 중단의 `UNKNOWN`을 두 번의 비교에서 기록했다. [round 1 복구](rabbit-recovery-round-1.json), [round 2 복구](rabbit-recovery-round-2.json).
 - Kafka는 기본 flush와 `flush.messages=1` 각각에서 확인 발행 복구, offset commit 복구, commit 전 재전달, 요청 진행 중 `UNKNOWN`을 관측했다. 두 보고서 모두 `unknownRequests: 2`다. [round 1](kafka-round-1.json), [round 2](kafka-round-2.json).
+- Kafka 복구 보고서의 `key` 값은 관측을 연결하는 테스트 메시지 UUID다. Gitleaks의 `generic-api-key`가 이를 오탐해 두 보고서의 정확한 finding fingerprint만 저장소 루트 `.gitleaksignore`에 등록했다.
 - Rabbit quorum에는 멤버가 하나뿐이고 Kafka replication factor가 1이다. 이 실험은 노드 장애 허용성이나 quorum failover를 검증하지 않는다.
 - `POWER_LOSS` 비교는 SQLite 동기화 설정과 모의 저장소 스냅샷 검증을 다룬다. 실제 물리 전원 차단은 수행하지 않았다.
 

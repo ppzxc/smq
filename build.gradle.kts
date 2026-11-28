@@ -63,6 +63,10 @@ tasks.javadoc {
     }
 }
 
+tasks.jar {
+    manifest.attributes["Implementation-Version"] = project.version
+}
+
 val minimumCoverage = "0.90".toBigDecimal()
 
 jacoco {
@@ -236,12 +240,35 @@ val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
         listOf(jars.get().asFile, sources.get().asFile).forEach { jar ->
             val entries = ZipFile(jar).use { z -> z.entries().toList().map { it.name } }
             check(entries.any { it.endsWith("smq/Smq.class") || it.endsWith("smq/Smq.java") }) { "${jar.name}에 main 항목이 없다" }
-            val bad = entries.filter { it.contains("smq/benchmark/") }
-            check(bad.isEmpty()) { "${jar.name}에 benchmark 항목이 들어 있다: $bad" }
+            val bad = entries.filter {
+                it.contains("smq/benchmark/")
+                        || it.contains("smq/harness/")
+                        || it.startsWith("org/junit/")
+                        || it.startsWith("org/xerial/")
+            }
+            check(bad.isEmpty()) { "${jar.name}에 benchmark 또는 harness 항목이 들어 있다: $bad" }
         }
     }
 }
 tasks.check { dependsOn(verifyJarExcludesBenchmark, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
+
+val smokeHarnessCheck = tasks.register<GradleBuild>("smokeHarnessCheck") {
+    group = "verification"
+    description = "독립 Gradle 하네스의 공개 API 스모크 테스트를 실행한다."
+    dir = layout.projectDirectory.dir("smoke-harness").asFile
+    tasks = listOf("test")
+    dependsOn("jar")
+}
+tasks.check { dependsOn(smokeHarnessCheck) }
+
+tasks.register<GradleBuild>("smokeHarness") {
+    group = "verification"
+    description = "두 내구성 수준과 단건·배치 공개 API 스모크를 실행한다. -Psmoke.args로 옵션을 넘긴다."
+    dir = layout.projectDirectory.dir("smoke-harness").asFile
+    tasks = listOf("run")
+    dependsOn("jar")
+    findProperty("smoke.args")?.toString()?.let { startParameter.projectProperties["smoke.args"] = it }
+}
 
 val commentRules = layout.projectDirectory.file("config/pmd/comments.xml")
 // PMD 7.29 cannot parse both requires modifiers. Keep the line length for comment locations.

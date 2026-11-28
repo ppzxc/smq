@@ -11,6 +11,11 @@ REVISION = "a" * 40
 
 
 class ReleaseGateTest(unittest.TestCase):
+    def test_timestamp_parser_accepts_java_nanosecond_precision(self):
+        timestamp = release_gate.parse_timestamp("2026-11-28T10:55:30.716066426+00:00")
+
+        self.assertEqual(datetime(2026, 11, 28, 10, 55, 30, 716066, timezone.utc), timestamp)
+
     def test_baseline_uses_repeated_samples_and_gate_accepts_matching_results(self):
         report = make_report()
 
@@ -20,6 +25,38 @@ class ReleaseGateTest(unittest.TestCase):
         self.assertEqual([], result.failures)
         reference = baseline["references"]["PROCESS_CRASH/DEFAULT/EMPTY"]
         self.assertEqual(10_200.0, reference["publishMedianMessagesPerSecond"])
+
+    def test_backlog_latency_can_be_unavailable_while_empty_latency_remains_gated(self):
+        report = make_report()
+
+        baseline = release_gate.build_baseline(report, captured_at="2026-11-28T00:00:00Z")
+        result = release_gate.check_report(report, baseline, expected_revision=REVISION)
+
+        self.assertEqual(
+            [],
+            result.failures,
+            "backlog latency is undefined until consumers reach messages published during measurement",
+        )
+        self.assertIsNone(
+            baseline["references"]["PROCESS_CRASH/DEFAULT/BACKLOG"]["deliveryLatencyP99MedianNanos"]
+        )
+        self.assertTrue(
+            any("delivery p99 latency PROCESS_CRASH/DEFAULT/EMPTY" in passed for passed in result.passes)
+        )
+
+    def test_gate_rejects_an_incorrect_backlog_depth(self):
+        report = make_report()
+        next(row for row in report["results"] if row["preloadedMessages"] > 0)["preloadedMessages"] = 999
+
+        with self.assertRaisesRegex(ValueError, "backlog sample depth must be 1000000"):
+            release_gate.build_baseline(report, captured_at="2026-11-28T00:00:00Z")
+
+    def test_empty_queue_sample_requires_delivery_latency(self):
+        report = make_report()
+        next(row for row in report["results"] if row["preloadedMessages"] == 0)["deliveryLatencyP99Nanos"] = None
+
+        with self.assertRaisesRegex(ValueError, "invalid deliveryLatencyP99Nanos for an empty queue"):
+            release_gate.build_baseline(report, captured_at="2026-11-28T00:00:00Z")
 
     def test_gate_rejects_missing_required_repeat(self):
         report = make_report()
@@ -131,7 +168,9 @@ def make_report():
                             "repeat": repeat,
                             "publishThroughputMessagesPerSecond": (10_000 + repeat * 100) * multiplier,
                             "settleThroughputMessagesPerSecond": (9_000 + repeat * 100) * multiplier,
-                            "deliveryLatencyP99Nanos": 8_000_000 + repeat * 100_000,
+                            "deliveryLatencyP99Nanos": (
+                                None if backlog_count else 8_000_000 + repeat * 100_000
+                            ),
                         }
                     )
     return report

@@ -52,7 +52,7 @@
 ./smoke-harness/run-release-gate.sh  # 48개 새 하네스 표본 누락·회귀 검사
 ```
 
-게이트는 깨끗한 checkout과 현재 코드 revision을 확인하고, 두 내구성 수준·네 큐 설정·빈 큐/100만 건 깊이·각 3회 표본을 별도 JVM과 SQLite 파일로 실행한다. 보고서에 지정 호스트/XFS 정보가 없거나 표본이 누락되거나 기준을 위반하면 실패한다. 결과는 `build/release-benchmark/<revision>/backlog-report.json`과 같은 디렉터리의 개별 표본에 남는다. 릴리스 PR에는 revision, PASS 요약과 보고서 위치를 적는다.
+게이트는 깨끗한 checkout과 현재 코드 revision을 확인하고, 두 내구성 수준·네 큐 설정·빈 큐/100만 건 깊이·각 3회 표본을 별도 JVM과 SQLite 파일로 실행한다. 보고서에 지정 호스트/XFS 정보가 없거나 표본이 누락되거나 기준을 위반하면 실패한다. 백로그 표본에서 측정 중 새 발행분까지 도달하지 못하면 p99가 `null`일 수 있어 p99 회귀는 빈 큐에서 판정하고, 백로그는 처리량과 정착 깊이 비율로 판정한다. 결과는 `build/release-benchmark/<revision>/backlog-report.json`과 같은 디렉터리의 개별 표본에 남는다. 릴리스 PR에는 revision, PASS 요약과 보고서 위치를 적는다.
 
 같은 결과를 릴리스 워크플로가 확인하도록 보고서를 저장소에 추가한다. 보고서는 측정 revision 기준 14일 이내여야 하고, 보고서 생성 뒤 릴리스 코드 변경이 없어야 한다. 결과 파일만 추가한 commit을 릴리스 PR에 포함한다.
 

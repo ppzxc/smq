@@ -171,7 +171,9 @@ def build_baseline(report: dict, captured_at: str | None = None) -> dict:
                     "settleMedianMessagesPerSecond": median_metric(
                         rows, "settleThroughputMessagesPerSecond"
                     ),
-                    "deliveryLatencyP99MedianNanos": median_metric(rows, "deliveryLatencyP99Nanos"),
+                    "deliveryLatencyP99MedianNanos": (
+                        median_metric(rows, "deliveryLatencyP99Nanos") if depth == "EMPTY" else None
+                    ),
                 }
 
     depth_ratios = calculate_depth_ratios(report["results"])
@@ -244,7 +246,7 @@ def check_report(report: dict, baseline: dict, expected_revision: str) -> GateRe
                 if reference is None:
                     failures.append(f"baseline is missing required reference: {key}")
                     continue
-                checks = (
+                checks = [
                     (
                         "publish throughput",
                         median_metric(rows, "publishThroughputMessagesPerSecond"),
@@ -259,14 +261,17 @@ def check_report(report: dict, baseline: dict, expected_revision: str) -> GateRe
                         limits.get("throughputMinimumFraction", THROUGHPUT_MINIMUM_FRACTION),
                         "minimum",
                     ),
-                    (
-                        "delivery p99 latency",
-                        median_metric(rows, "deliveryLatencyP99Nanos"),
-                        reference.get("deliveryLatencyP99MedianNanos"),
-                        limits.get("latencyP99MaximumFraction", LATENCY_MAXIMUM_FRACTION),
-                        "maximum",
-                    ),
-                )
+                ]
+                if depth == "EMPTY":
+                    checks.append(
+                        (
+                            "delivery p99 latency",
+                            median_metric(rows, "deliveryLatencyP99Nanos"),
+                            reference.get("deliveryLatencyP99MedianNanos"),
+                            limits.get("latencyP99MaximumFraction", LATENCY_MAXIMUM_FRACTION),
+                            "maximum",
+                        )
+                    )
                 for name, candidate, reference_value, fraction, direction in checks:
                     if not is_positive_finite(reference_value):
                         failures.append(f"baseline has invalid {name} reference for {key}")
@@ -338,7 +343,9 @@ def result_path_allowed(path: str) -> bool:
 
 
 def parse_timestamp(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    normalized = value.replace("Z", "+00:00")
+    normalized = re.sub(r"(\.\d{6})\d+(?=(?:[+-]\d{2}:\d{2})?$)", r"\1", normalized)
+    return datetime.fromisoformat(normalized)
 
 
 def calculate_depth_ratios(results: list[dict]) -> list[dict]:
@@ -364,8 +371,12 @@ def calculate_depth_ratios(results: list[dict]) -> list[dict]:
                         / empty["publishThroughputMessagesPerSecond"],
                         "settleThroughputRatio": backlog["settleThroughputMessagesPerSecond"]
                         / empty["settleThroughputMessagesPerSecond"],
-                        "deliveryLatencyP99Ratio": backlog["deliveryLatencyP99Nanos"]
-                        / empty["deliveryLatencyP99Nanos"],
+                        "deliveryLatencyP99Ratio": (
+                            backlog["deliveryLatencyP99Nanos"] / empty["deliveryLatencyP99Nanos"]
+                            if is_positive_finite(backlog.get("deliveryLatencyP99Nanos"))
+                            and is_positive_finite(empty.get("deliveryLatencyP99Nanos"))
+                            else None
+                        ),
                     }
                 )
     return ratios
@@ -444,19 +455,23 @@ def index_samples(results: list[dict], failures: list[str]) -> dict[str, list[di
             repeat = row["repeat"]
             if durability not in DURABILITIES or queue_kind not in QUEUE_KINDS or depth not in DEPTHS:
                 raise ValueError("sample has an unsupported condition")
+            expected_preloaded = 0 if depth == "EMPTY" else BACKLOG_COUNT
+            if row["preloadedMessages"] != expected_preloaded:
+                raise ValueError(f"{depth.lower()} sample depth must be {expected_preloaded}")
             if repeat not in REPEATS:
                 raise ValueError("sample repeat must be 1, 2, or 3")
             key_tuple = (durability, queue_kind, depth, repeat)
             if key_tuple in seen:
                 raise ValueError(f"duplicate sample for {key_tuple}")
             seen.add(key_tuple)
-            for metric in (
-                "publishThroughputMessagesPerSecond",
-                "settleThroughputMessagesPerSecond",
-                "deliveryLatencyP99Nanos",
-            ):
+            for metric in ("publishThroughputMessagesPerSecond", "settleThroughputMessagesPerSecond"):
                 if not is_positive_finite(row.get(metric)):
                     raise ValueError(f"sample has invalid {metric}")
+            latency = row.get("deliveryLatencyP99Nanos")
+            if depth == "EMPTY" and not is_positive_finite(latency):
+                raise ValueError("sample has invalid deliveryLatencyP99Nanos for an empty queue")
+            if latency is not None and not is_positive_finite(latency):
+                raise ValueError("sample has invalid deliveryLatencyP99Nanos")
             key = f"{durability}/{queue_kind}/{depth}"
             indexed.setdefault(key, []).append(row)
         except (KeyError, TypeError, ValueError) as error:

@@ -70,11 +70,11 @@
 | 보고 필드 | 의미 |
 |---|---|
 | `publishThroughputMessagesPerSecond` | 측정 구간 안에 완료된 발행 메시지 수 / 설정된 측정 시간 |
-| `deliveryLatencyP50Nanos`, `deliveryLatencyP99Nanos` | 측정 구간 안에 꺼낸 측정 발행 메시지의 발행 시작부터 `pull` 반환까지 지연. nearest-rank 방식이며 표본이 없으면 `null` |
+| `deliveryLatencyP50Nanos`, `deliveryLatencyP99Nanos` | 측정 구간 안에 꺼낸 측정 발행 메시지의 발행 시작부터 `pull` 반환까지 지연. nearest-rank 방식이며 표본이 없으면 `null`. 백로그에서는 사전 적재 메시지에 측정 발행 시각이 없으므로 측정 중 새 발행분까지 도달하지 못하면 `null` |
 | `settleThroughputMessagesPerSecond` | 측정 구간 안에 ACK 정산을 마친 메시지 수 / 설정된 측정 시간 |
 | `startDepth`, `endDepth` | 워크로드 직전과 종료 후의 ready + leased + delayed 합계. `startCounts`와 `endCounts`에 상태별 수가 함께 기록됨 |
 | `queueConfig` | 최대 전달 횟수와 dead letter 큐, 단일 활성 컨슈머 여부, leased-head 설정 |
-| `depthRatios` | 같은 내구성·큐 종류·반복에서 백로그 측정값을 빈 큐 측정값으로 나눈 값. 처리량은 백로그 / 빈 큐, 지연도 백로그 / 빈 큐 |
+| `depthRatios` | 같은 내구성·큐 종류·반복에서 백로그 측정값을 빈 큐 측정값으로 나눈 값. 처리량은 백로그 / 빈 큐. 지연 비율은 양쪽에 유효한 표본이 있을 때만 계산하며 그 외에는 `null` |
 
 두 조건은 같은 payload 크기와 내용, 발행자·컨슈머 수, 발행 배치, 꺼내기 청크, 측정 시간으로 실행한다. 측정 전 워밍업은 내구성·큐 종류별 별도 빈 큐 DB에서 실행하고 결과에는 포함하지 않는다. 측정 DB는 각 깊이와 반복마다 새로 만든다. `LEASED_HEAD`에서는 미리 넣은 메시지를 최대 10,000개씩 한 시간 리스로 꺼내 두어, 리스가 걸린 백로그에서 새 발행을 처리한다.
 
@@ -135,7 +135,7 @@ python3 smoke-harness/release_gate.py baseline \
 ./smoke-harness/run-release-gate.sh
 ```
 
-리포트는 `build/release-benchmark/<revision>/backlog-report.json`에 기록된다. 새 처리량 지표는 기존 S1 단건/묶음 절대 하한과 워크로드가 달라 절대값을 직접 복사하지 않는다. 각 새 조건의 기준선 반복 중앙값에서 처리량 80% 하한과 p99 지연 120% 상한을 적용해 기존 20% 회귀 허용치를 유지한다. 기존 S1 백로그 처리량 기준은 새 `settleThroughput`의 100만 건/빈 큐 비율에 대응시켜 70%를 유지하며, 반복 비율의 중앙값으로 판정한다. 기존 S3의 p99 10ms는 부하·발행 간격이 달라 직접 대응할 수 없어 새 기준선 대비 20% 증가 상한으로 바꾼다. 설정·원시 결과와 기준선은 첫 측정 뒤 `docs/benchmark-results/`에 보존한다.
+리포트는 `build/release-benchmark/<revision>/backlog-report.json`에 기록된다. 새 처리량 지표는 기존 S1 단건/묶음 절대 하한과 워크로드가 달라 절대값을 직접 복사하지 않는다. 각 깊이의 기준선 반복 중앙값에서 처리량 80% 하한을 적용해 기존 20% 회귀 허용치를 유지한다. 기존 S1 백로그 처리량 기준은 새 `settleThroughput`의 100만 건/빈 큐 비율에 대응시켜 70%를 유지하며, 반복 비율의 중앙값으로 판정한다. 기존 S3의 p99 10ms는 부하·발행 간격이 달라 직접 대응할 수 없어 빈 큐 기준선 대비 20% 증가 상한으로 바꾼다. 100만 건 백로그에서는 측정 구간에 새 발행분까지 도달하지 못해 p99가 `null`일 수 있으므로 p99 회귀는 빈 큐에서만 판정한다. 설정·원시 결과와 기준선은 첫 측정 뒤 `benchmark-results/`에 보존한다.
 
 ## RabbitMQ 비교 (선택 실행)
 

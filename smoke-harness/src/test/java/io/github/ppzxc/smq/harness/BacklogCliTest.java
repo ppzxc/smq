@@ -1,6 +1,7 @@
 package io.github.ppzxc.smq.harness;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -73,6 +74,45 @@ class BacklogCliTest {
         assertTrue(json.contains("\"settleThroughput\":"), json);
         assertTrue(json.contains("\"reproduction\":{"), json);
         assertEquals(16, json.split("\\\"databasePath\\\"").length - 1, json);
+    }
+
+    @Test
+    void backlogCanRunOneIsolatedConditionAndReportsHostAndFilesystem() throws Exception {
+        final Path report = this.directory.resolve("single-backlog.json");
+        final Process process = new ProcessBuilder(this.javaCommand(
+                        "backlog",
+                        "--durability",
+                        "PROCESS_CRASH",
+                        "--queue-kind",
+                        "DEFAULT",
+                        "--depth",
+                        "backlog",
+                        "--backlog-count",
+                        "8",
+                        "--duration-ms",
+                        "40",
+                        "--warmup-ms",
+                        "0",
+                        "--repeat",
+                        "1",
+                        "--output",
+                        report.toString(),
+                        "--work-dir",
+                        this.directory.resolve("single-backlog-work").toString()))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(0, process.waitFor(), diagnostics);
+        final String json = Files.readString(report);
+        assertTrue(json.contains("\"host\":"), json);
+        assertTrue(json.contains("\"workDirFileSystem\":"), json);
+        assertFalse(json.contains("\"host\":\"unknown\""), json);
+        assertFalse(json.contains("\"workDirFileSystem\":\"unknown\""), json);
+        assertTrue(json.contains("\"durability\":\"PROCESS_CRASH\""), json);
+        assertTrue(json.contains("\"queueKind\":\"DEFAULT\""), json);
+        assertTrue(json.contains("\"preloadedMessages\":8"), json);
+        assertEquals(1, json.split("\\\"databasePath\\\"").length - 1, json);
     }
 
     private List<String> javaCommand(final String... arguments) {

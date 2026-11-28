@@ -111,6 +111,32 @@ SMQ_KAFKA_DOCKER_TESTS=true ./gradlew -p smoke-harness test --tests io.github.pp
 
 루트의 `./gradlew check`는 smq JAR/소스 JAR에서 하네스와 그 의존성이 빠졌는지 검사하고 하네스 CLI 테스트도 실행한다. 이 테스트는 별도 JVM에서 배포 JAR을 이름 있는 JPMS 모듈로 실행한다.
 
+## 지정 장비 기준선과 릴리스 게이트
+
+`backlog`는 `--queue-kind DEFAULT|MAX_DELIVERIES|SINGLE_ACTIVE_CONSUMER|LEASED_HEAD`와 `--depth EMPTY|BACKLOG`로 단일 조건을 선택할 수 있다. 지정 장비 실행 스크립트는 내구성·큐 설정·깊이·반복 조합마다 별도 Java 프로세스와 새 데이터베이스를 만들고, 같은 조건의 별도 데이터베이스에서 워밍업한 뒤 3회 측정한다. 각 측정 보고서에 실행 호스트, 파일시스템, 코드 revision과 설정을 기록한다.
+
+첫 구·신 하네스 및 smq·RabbitMQ·Kafka 비교는 저장소 루트에서 다음을 실행한다. 이 작업은 ns0270의 로컬 XFS에서만 실행되고, 고정 하네스와 새 하네스의 실행 순서를 바꾸며, RabbitMQ 4.4.1·Kafka 4.4.0 단일 노드 비교 보고서도 만든다.
+
+```sh
+./smoke-harness/run-initial-comparison.sh
+```
+
+원시 보고서와 실행 로그는 `build/initial-comparison-<revision>/`에 남는다. 새 하네스의 `new-backlog-round-1/backlog-report.json`에는 내구성·큐 설정·빈 큐/100만 건 조건별 세 반복이 들어간다. 이를 첫 기준선으로 만든다.
+
+```sh
+python3 smoke-harness/release_gate.py baseline \
+  --report build/initial-comparison-<revision>/new-backlog-round-1/backlog-report.json \
+  --output smoke-harness/release-baseline.json
+```
+
+기준선을 만든 뒤 같은 ns0270 checkout에서 필수 릴리스 게이트를 실행한다. 게이트는 깨끗한 checkout, 현재 코드 revision, 지정 호스트와 XFS, 48개 필수 표본, 보고서 설정, 처리량·지연 회귀 및 깊이 기준을 확인한다. 누락되거나 불일치하는 표본은 실패한다.
+
+```sh
+./smoke-harness/run-release-gate.sh
+```
+
+리포트는 `build/release-benchmark/<revision>/backlog-report.json`에 기록된다. 새 처리량 지표는 기존 S1 단건/묶음 절대 하한과 워크로드가 달라 절대값을 직접 복사하지 않는다. 각 새 조건의 기준선 반복 중앙값에서 처리량 80% 하한과 p99 지연 120% 상한을 적용해 기존 20% 회귀 허용치를 유지한다. 기존 S1 백로그 처리량 기준은 새 `settleThroughput`의 100만 건/빈 큐 비율에 대응시켜 70%를 유지하며, 반복 비율의 중앙값으로 판정한다. 기존 S3의 p99 10ms는 부하·발행 간격이 달라 직접 대응할 수 없어 새 기준선 대비 20% 증가 상한으로 바꾼다. 설정·원시 결과와 기준선은 첫 측정 뒤 `docs/benchmark-results/`에 보존한다.
+
 ## RabbitMQ 비교 (선택 실행)
 
 RabbitMQ 비교기는 smq API가 아니라 공식 RabbitMQ Java 클라이언트로 직접 메시지를 발행·가져온다. RabbitMQ Server 이미지는 `rabbitmq:4.4.1-management`, 클라이언트는 `com.rabbitmq:amqp-client:5.36.0`으로 고정한다. 클래식 큐와 단일 멤버 quorum 큐 모두 durable이며, 메시지는 persistent (`deliveryMode=2`)로 발행한다. quorum 큐는 `x-quorum-initial-group-size=1`로 한 멤버를 지정한다.

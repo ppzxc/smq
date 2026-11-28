@@ -4,6 +4,8 @@ import io.github.ppzxc.smq.QueueCounts;
 import io.github.ppzxc.smq.Smq;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -24,6 +26,9 @@ final class BacklogReport {
         json.append("\n  \"scenario\":\"backlog\",");
         json.append("\n  \"status\":").append(JsonReport.quote(status)).append(',');
         json.append("\n  \"revision\":").append(JsonReport.quote(revision())).append(',');
+        json.append("\n  \"generatedAt\":")
+                .append(JsonReport.quote(Instant.now().toString()))
+                .append(',');
         json.append("\n  \"productVersion\":")
                 .append(JsonReport.quote(productVersion()))
                 .append(',');
@@ -31,11 +36,14 @@ final class BacklogReport {
         json.append("\"os\":")
                 .append(JsonReport.quote(System.getProperty("os.name") + " " + System.getProperty("os.version")));
         json.append(",\"architecture\":").append(JsonReport.quote(System.getProperty("os.arch")));
+        json.append(",\"host\":").append(JsonReport.quote(host()));
         json.append(",\"javaVersion\":")
                 .append(JsonReport.quote(Runtime.version().toString()));
         json.append(",\"processors\":").append(Runtime.getRuntime().availableProcessors());
         json.append(",\"workDir\":")
                 .append(JsonReport.quote(options.workDir().toString()))
+                .append(",\"workDirFileSystem\":")
+                .append(JsonReport.quote(fileSystem(options.workDir())))
                 .append("},");
         json.append("\n  \"config\":{");
         json.append("\"durabilities\":")
@@ -50,8 +58,11 @@ final class BacklogReport {
         json.append(",\"publishers\":").append(options.publishers());
         json.append(",\"consumers\":").append(options.consumers());
         json.append(",\"queueKinds\":")
-                .append(strings(
-                        BacklogRunner.queueKinds().stream().map(Enum::name).toList()))
+                .append(strings(options.queueKinds().stream().map(Enum::name).toList()))
+                .append(",\"depths\":")
+                .append(strings(options.depths().stream()
+                        .map(depth -> depth == 0 ? "EMPTY" : "BACKLOG")
+                        .toList()))
                 .append("},");
         json.append("\n  \"reproduction\":{\"command\":")
                 .append(JsonReport.quote(reproductionCommand(options)))
@@ -217,6 +228,26 @@ final class BacklogReport {
             return "unknown";
         } catch (final InterruptedException exception) {
             Thread.currentThread().interrupt();
+            return "unknown";
+        }
+    }
+
+    private static String host() {
+        final String designatedHost = System.getenv("SMQ_BENCHMARK_HOST");
+        if (designatedHost != null && !designatedHost.isBlank()) {
+            return designatedHost;
+        }
+        try {
+            return java.net.InetAddress.getLocalHost().getCanonicalHostName();
+        } catch (final IOException exception) {
+            return "unknown";
+        }
+    }
+
+    private static String fileSystem(final Path path) {
+        try {
+            return Files.getFileStore(path).type();
+        } catch (final IOException exception) {
             return "unknown";
         }
     }

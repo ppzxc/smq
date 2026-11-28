@@ -67,12 +67,12 @@ final class BacklogRunner {
         Files.createDirectories(options.workDir());
         final Path runDir = Files.createTempDirectory(options.workDir(), "backlog-");
         for (final Durability durability : options.durabilities()) {
-            for (final QueueKind queueKind : QUEUE_KINDS) {
+            for (final QueueKind queueKind : options.queueKinds()) {
                 if (options.warmupMillis() > 0) {
                     this.warmup(options, durability, queueKind, runDir);
                 }
                 for (int repeat = 1; repeat <= options.repeats(); repeat++) {
-                    for (final int backlogCount : new int[] {0, options.backlogCount()}) {
+                    for (final int backlogCount : options.depths()) {
                         results.add(this.measure(options, durability, queueKind, backlogCount, repeat, runDir));
                     }
                 }

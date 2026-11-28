@@ -46,23 +46,43 @@
 
 ### 수동 게이트 실행
 
-PR head를 체크아웃해서 돌린다. 다른 부하가 없는 베어메탈 Linux(ns0270 또는 이를 대체한 장비)에서 한다.
+먼저 PR head를 기준 장비 `ns0270.nanoit.kr`에서 체크아웃하고 새 게이트를 실행한다. 작업 디렉터리와 결과 저장소는 로컬 XFS에 둔다.
+
+```bash
+./smoke-harness/run-release-gate.sh  # 48개 새 하네스 표본 누락·회귀 검사
+```
+
+게이트는 깨끗한 checkout과 현재 코드 revision을 확인하고, 두 내구성 수준·네 큐 설정·빈 큐/100만 건 깊이·각 3회 표본을 별도 JVM과 SQLite 파일로 실행한다. 보고서에 지정 호스트/XFS 정보가 없거나 표본이 누락되거나 기준을 위반하면 실패한다. 결과는 `build/release-benchmark/<revision>/backlog-report.json`과 같은 디렉터리의 개별 표본에 남는다. 릴리스 PR에는 revision, PASS 요약과 보고서 위치를 적는다.
+
+같은 결과를 릴리스 워크플로가 확인하도록 보고서를 저장소에 추가한다. 보고서는 측정 revision 기준 14일 이내여야 하고, 보고서 생성 뒤 릴리스 코드 변경이 없어야 한다. 결과 파일만 추가한 commit을 릴리스 PR에 포함한다.
+
+```bash
+revision=$(git rev-parse HEAD)
+cp "build/release-benchmark/$revision/backlog-report.json" benchmark-results/release-report.json
+git add benchmark-results/release-report.json
+git commit -m "record designated-host release benchmark"
+```
+
+`Release` 워크플로는 이 파일이 없거나 오래됐거나, 필수 표본·기준을 만족하지 못하거나, 측정 뒤 소스가 바뀌면 `benchmark-gate`에서 실패한다. 이 단계가 통과해야 Portal 업로드 작업을 시작한다.
+
+이전 하네스는 전환 검증이 끝날 때까지 구 결과와 새 게이트를 비교하는 용도로 유지한다. #267에서 삭제하기 전까지 같은 checkout에서 기존 검증도 실행하고 결과를 PR에 기록한다.
 
 ```bash
 ./gradlew benchmark      # ns0270 기준선과 비교. FAIL이 하나라도 있으면 비정상 종료한다. 비율 검사는 3회 측정의 중앙값으로 판정한다
 ./gradlew randomBench    # 전체 무작위 테스트. 첫 위반에서 멈추고 비정상 종료한다
 ```
 
-`benchmark`는 비율 검사(scaling, depth)의 S1 조건 약 20개를 기본 3회 재서 하네스가 중앙값으로 판정하므로, 비율 항목이 FAIL이면 손으로 다시 재지 말고 그대로 막는다. 소요 시간은 단발일 때의 약 1.5~2배다(조건 38개에 비율 조건 20개가 두 번 더 돈다). PR 본문에는 `scaling`, `depth` 줄의 바퀴별 값과 중앙값을 그대로 옮긴다. 시간이 부족한 개발 환경에서는 `./gradlew benchmark --repeat 1`(또는 `-Pbenchmark.args="--repeat 1"`)로 줄일 수 있지만 게이트에서는 기본값을 쓴다.
+`benchmark`는 기존 비교 확인용이다. 새 릴리스 판정은 위 새 게이트 결과로 한다. 기존 `benchmark` 비율 항목은 하네스가 세 바퀴 값의 중앙값으로 판정한다. PR 본문에는 새 게이트 보고서와 전환 중인 기존 검사 결과를 함께 적는다.
 
 벤치 절차와 비교 기준은 [docs/benchmark.md](benchmark.md), 기준선은 [benchmark/README.md](../benchmark/README.md)를 본다. `randomBench`의 옵션(`--seed`, `--budget` 등)과 결과 위치도 docs/benchmark.md에 있다. 위반이 나오면 실패한 실행의 시드로 재현해 고치고, 공개는 미룬다.
 
 ### PR 본문 양식
 
 ```markdown
-## 수동 게이트 결과 (PR head <커밋 SHA>)
+## 릴리스 게이트 결과 (PR head <커밋 SHA>)
 
 - 장비: <호스트, OS, 파일시스템, 컨트롤러 캐시 상태>
+- 새 smq 기준선: PASS (`./smoke-harness/run-release-gate.sh`, 통과 <n>, 실패 0, 보고서 <경로>)
 - ns0270 기준선 벤치: PASS (`./gradlew benchmark`, 합계: 통과 <n>, 실패 0, 건너뜀 <n>)
 - 전체 `randomBench`: 불변식 위반 0 (마스터 시드 <값>, 실행 <n>회, 예산 <시간>)
 

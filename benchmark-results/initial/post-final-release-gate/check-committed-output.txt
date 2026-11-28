@@ -42,7 +42,8 @@ PASS delivery p99 latency POWER_LOSS/LEASED_HEAD/EMPTY: 5941379844.000
 PASS publish throughput POWER_LOSS/LEASED_HEAD/BACKLOG: 16340.000
 PASS settle throughput POWER_LOSS/LEASED_HEAD/BACKLOG: 5100.000
 PASS median settle depth ratio POWER_LOSS/LEASED_HEAD: 92.7%
-committed release gate: 44 passed, 4 failed
+PASS current release tree contains only benchmark evidence changes after the measured source
+committed release gate: 45 passed, 4 failed
 FAIL publish throughput regressed for PROCESS_CRASH/DEFAULT/EMPTY: median 14760.000, minimum 16936.000
 FAIL median settle depth ratio below 70% for PROCESS_CRASH/DEFAULT: 65.0%
 FAIL publish throughput regressed for PROCESS_CRASH/MAX_DELIVERIES/EMPTY: median 14250.000, minimum 16360.000

@@ -106,6 +106,125 @@ class SmokeCliTest {
     }
 
     @Test
+    void recoveryCommandVerifiesCrashRecoveryForBothDurabilityModes() throws Exception {
+        final Path report = this.directory.resolve("recovery.json");
+        final Process process = new ProcessBuilder(this.javaCommand(
+                        "recovery",
+                        "--durability",
+                        "BOTH",
+                        "--message-count",
+                        "3",
+                        "--lease-ms",
+                        "100",
+                        "--output",
+                        report.toString(),
+                        "--work-dir",
+                        this.directory.resolve("recovery-work").toString()))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(0, process.waitFor(), diagnostics);
+        final String json = Files.readString(report);
+        assertTrue(json.contains("\"status\":\"SUCCESS\""), json);
+        assertTrue(json.contains("\"durability\":\"PROCESS_CRASH\""), json);
+        assertTrue(json.contains("\"durability\":\"POWER_LOSS\""), json);
+        assertTrue(json.contains("\"classification\":\"CONFIRMED\""), json);
+        assertTrue(json.contains("\"correlationId\":"), json);
+        assertTrue(json.contains("\"recoveryObservation\":"), json);
+        assertTrue(json.contains("\"shutdownAt\":"), json);
+        assertTrue(json.contains("\"reproduction\":{\"command\":"), json);
+    }
+
+    @Test
+    void recoveryCommandKeepsAcknowledgedMessagesDeletedAndRedeliversExpiredLeases() throws Exception {
+        final Path report = this.directory.resolve("recovery-settlement.json");
+        final Process process = new ProcessBuilder(this.javaCommand(
+                        "recovery",
+                        "--durability",
+                        "BOTH",
+                        "--message-count",
+                        "3",
+                        "--lease-ms",
+                        "100",
+                        "--output",
+                        report.toString(),
+                        "--work-dir",
+                        this.directory.resolve("recovery-settlement-work").toString()))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(0, process.waitFor(), diagnostics);
+        final String json = Files.readString(report);
+        assertTrue(json.contains("\"scenario\":\"confirmed-settle\""), json);
+        assertTrue(json.contains("\"recoveryObservation\":\"no redelivery after successful ACK\""), json);
+        assertTrue(json.contains("\"scenario\":\"unacked-delivery\""), json);
+        assertTrue(json.contains("redelivered correlation"), json);
+        assertTrue(json.contains("\"durability\":\"PROCESS_CRASH\""), json);
+        assertTrue(json.contains("\"durability\":\"POWER_LOSS\""), json);
+    }
+
+    @Test
+    void recoveryNegativeControlReturnsFailureWhenConfirmedPublishIsRemoved() throws Exception {
+        final Path report = this.directory.resolve("recovery-negative.json");
+        final Process process = new ProcessBuilder(this.javaCommand(
+                        "recovery",
+                        "--durability",
+                        "PROCESS_CRASH",
+                        "--negative-control",
+                        "drop-confirmed-publish",
+                        "--output",
+                        report.toString(),
+                        "--work-dir",
+                        this.directory.resolve("recovery-negative-work").toString()))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(1, process.waitFor(), diagnostics);
+        final String json = Files.readString(report);
+        assertTrue(json.contains("\"status\":\"FAILURE\""), json);
+        assertTrue(json.contains("confirmed publish was not recovered"), json);
+    }
+
+    @Test
+    void recoveryCommandClassifiesInterruptedBatchesAsUnknownAndChecksAtomicity() throws Exception {
+        final Path report = this.directory.resolve("recovery-atomicity.json");
+        final Process process = new ProcessBuilder(this.javaCommand(
+                        "recovery",
+                        "--durability",
+                        "BOTH",
+                        "--message-count",
+                        "8",
+                        "--lease-ms",
+                        "100",
+                        "--output",
+                        report.toString(),
+                        "--work-dir",
+                        this.directory.resolve("recovery-atomicity-work").toString()))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(0, process.waitFor(), diagnostics);
+        final String json = Files.readString(report);
+        assertTrue(json.contains("\"scenario\":\"ambiguous-publish-batch\""), json);
+        assertTrue(json.contains("\"scenario\":\"ambiguous-settle-batch\""), json);
+        assertTrue(json.contains("\"classification\":\"UNKNOWN\""), json);
+        assertTrue(json.contains("\"requestStarted\":\"START|"), json);
+        assertTrue(
+                json.contains("publish batch absent; no messages committed")
+                        || json.contains("publish batch recovered all 8 messages"),
+                json);
+        assertTrue(
+                json.contains("settlement batch applied; no messages redelivered")
+                        || json.contains("settlement batch unapplied; all 8 messages redelivered"),
+                json);
+        assertTrue(json.contains("\"status\":\"SUCCESS\""), json);
+    }
+
+    @Test
     void operationFailureReturnsNonzeroAndWritesDiagnostics() throws Exception {
         final Path report = this.directory.resolve("failure.json");
         final Path work = this.directory.resolve("failure-work");
@@ -188,6 +307,7 @@ class SmokeCliTest {
                         List.of(
                                 java,
                                 "-Dsmq.version=" + System.getProperty("smoke.smqVersion"),
+                                "-Dsmoke.modulePath=" + modulePath,
                                 "--enable-native-access=org.xerial.sqlitejdbc",
                                 "--module-path",
                                 modulePath,

@@ -15,6 +15,13 @@ public final class Main {
     }
 
     private static int execute(final String[] args) {
+        if (args.length > 0 && "--worker".equals(args[0])) {
+            return RecoveryWorker.execute(args);
+        }
+        if (args.length > 0 && "recovery".equals(args[0])) {
+            return RecoveryCommand.execute(args);
+        }
+
         Options options = null;
         final List<SmokeRunner.Sample> results = new ArrayList<>();
         try {

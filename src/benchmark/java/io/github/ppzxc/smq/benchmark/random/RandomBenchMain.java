@@ -28,9 +28,10 @@ public final class RandomBenchMain {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
-    public static void main(String[] args) throws IOException {
+    public static void main(final String[] args) throws IOException {
+        final Options o;
         ModuleGuard.requireSmqModule("부모 JVM");
-        Options o;
+
         try {
             o = Options.parse(args, System.currentTimeMillis());
         } catch (IllegalArgumentException e) {
@@ -41,8 +42,9 @@ public final class RandomBenchMain {
         System.exit(run(o));
     }
 
-    private static Limits soakLimits(Options o) {
-        Limits limits = Limits.full(o.load().toMillis())
+    private static Limits soakLimits(final Options o) {
+        Limits limits;
+        limits = Limits.full(o.load().toMillis())
                 .withRate(o.rate())
                 .withStandingQueue(o.standingQueue())
                 .withMinAchieved(o.minAchieved());
@@ -70,24 +72,39 @@ public final class RandomBenchMain {
             reason = "JFR is optional; startup failures are reported and the benchmark continues.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
-    @SuppressWarnings({"PMD.SystemPrintln", "PMD.UseTryWithResources", "PMD.AvoidCatchingGenericException"})
-    static int run(Options o) throws IOException {
+    @PolicyException(
+            rule = "PMD.CloseResource",
+            reason = "The optional JFR recording is closed in the existing cleanup path.",
+            approvedBy = "ppzxc",
+            reviewBy = "2027-11-26")
+    @SuppressWarnings({
+        "PMD.SystemPrintln",
+        "PMD.UseTryWithResources",
+        "PMD.AvoidCatchingGenericException",
+        "PMD.CloseResource"
+    })
+    static int run(final Options o) throws IOException {
+        final Path workRoot;
+        final Map<String, String> env;
+        Limits limits;
+        final Path jsonLines;
+        final Iterator<Long> seeds;
+        final long budget;
+        Recording jfrRecording;
         Files.createDirectories(o.outDir());
-        Path workRoot = o.outDir().resolve("work");
+        workRoot = o.outDir().resolve("work");
         Files.createDirectories(workRoot);
-        Map<String, String> env = Environment.capture(o.smoke() ? "smoke" : "random", "sqlite", workRoot);
-        Limits limits = o.smoke() ? Limits.smoke(o.load().toMillis()) : soakLimits(o);
+        env = Environment.capture(o.smoke() ? "smoke" : "random", "sqlite", workRoot);
+        limits = o.smoke() ? Limits.smoke(o.load().toMillis()) : soakLimits(o);
         if (o.durability().isPresent()) {
             limits = limits.withDurability(o.durability().get());
         }
-        Path jsonLines = o.outDir()
+        jsonLines = o.outDir()
                 .resolve("runs-"
                         + LocalDateTime.now(ZoneId.systemDefault())
                                 .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT))
                         + ".jsonl");
 
-        Iterator<Long> seeds;
-        long budget;
         if (o.smoke()) {
             seeds = Options.SMOKE_SEEDS.iterator();
             budget = Long.MAX_VALUE;
@@ -95,7 +112,8 @@ public final class RandomBenchMain {
             seeds = List.of(o.seed().getAsLong()).iterator();
             budget = Long.MAX_VALUE;
         } else {
-            SplittableRandom master = new SplittableRandom(o.masterSeed());
+            final SplittableRandom master;
+            master = new SplittableRandom(o.masterSeed());
             seeds = new Iterator<>() {
                 @Override
                 public boolean hasNext() {
@@ -113,12 +131,14 @@ public final class RandomBenchMain {
         System.out.println("환경: " + env);
         System.out.println("기록: " + jsonLines);
 
-        Recording jfrRecording = null;
+        jfrRecording = null;
         if (o.jfr()) {
             try {
-                Configuration config = Configuration.getConfiguration("profile");
+                final Configuration config;
+                final Path jfrFile;
+                config = Configuration.getConfiguration("profile");
                 jfrRecording = new Recording(config);
-                Path jfrFile = o.outDir().resolve("parent.jfr");
+                jfrFile = o.outDir().resolve("parent.jfr");
                 jfrRecording.setDestination(jfrFile);
                 jfrRecording.setDumpOnExit(true);
                 jfrRecording.start();
@@ -129,12 +149,13 @@ public final class RandomBenchMain {
         }
 
         try {
-            Session session = new Session(
+            final Session session;
+            session = new Session(
                     o.outDir(),
                     jsonLines,
                     env,
                     limits,
-                    (params, dir) -> RandomRun.execute(params, dir, InvariantChecker::check),
+                    (params, dir) -> RandomRun.execute(params, dir, InvariantChecker::findViolations),
                     System.out);
             return session.run(seeds, budget);
         } finally {

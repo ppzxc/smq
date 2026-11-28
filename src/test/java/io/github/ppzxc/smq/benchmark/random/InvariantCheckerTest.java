@@ -18,34 +18,42 @@ class InvariantCheckerTest {
     private static final Config MAX3 = new Config(false, 3);
     private static final Config SINGLE = new Config(true, 0);
 
-    private static Tag tag(long n) {
+    private static Tag tag(final long n) {
         return new Tag(7, n);
     }
 
-    private static Content content(long n) {
+    private static Content content(final long n) {
         return new Content(1000 + n, Map.of("tag", tag(n).toString()));
     }
 
-    private static Published pub(long n) {
+    private static Published pub(final long n) {
         return new Published(tag(n), content(n), T0, 0);
     }
 
-    private static Published pubDelayed(long n, long delay) {
+    private static Published pubDelayed(final long n, final long delay) {
         return new Published(tag(n), content(n), T0, delay);
     }
 
-    private static Delivery target(long n, long id, int count, long at, Settle settle) {
+    private static Delivery target(final long n, final long id, final int count, final long at, final Settle settle) {
         return new Delivery(
                 QueueKind.TARGET, tag(n), id, count, content(n), new Pull(n * 100 + count, 0, at, at + LEASE), settle);
     }
 
     private static Delivery targetIn(
-            long n, long id, int count, long chunk, int position, long at, long lease, Settle settle) {
+            final long n,
+            final long id,
+            final int count,
+            final long chunk,
+            final int position,
+            final long at,
+            final long lease,
+            final Settle settle) {
         return new Delivery(
                 QueueKind.TARGET, tag(n), id, count, content(n), new Pull(chunk, position, at, lease), settle);
     }
 
-    private static Map<String, String> dlHeaders(long n, String reason, long originalId, int lastCount) {
+    private static Map<String, String> dlHeaders(
+            final long n, final String reason, final long originalId, final int lastCount) {
         return Map.of(
                 "tag",
                 tag(n).toString(),
@@ -61,7 +69,8 @@ class InvariantCheckerTest {
                 "x");
     }
 
-    private static Delivery deadLetter(long n, long id, Map<String, String> headers, long at, Settle settle) {
+    private static Delivery deadLetter(
+            final long n, final long id, final Map<String, String> headers, final long at, final Settle settle) {
         return new Delivery(
                 QueueKind.DEAD_LETTER,
                 tag(n),
@@ -78,27 +87,26 @@ class InvariantCheckerTest {
                 new CountsSample(QueueKind.DEAD_LETTER, true, 0, 0, 0));
     }
 
-    private static List<Violation> check(Config cfg, List<Published> p, List<Delivery> d) {
-        return InvariantChecker.check(cfg, p, d, drained());
+    private static List<Violation> violations(final Config cfg, final List<Published> p, final List<Delivery> d) {
+        return InvariantChecker.findViolations(cfg, p, d, drained());
     }
 
-    private static List<Violation> only(Invariant kind, List<Violation> all) {
-        List<Violation> out = all.stream().filter(v -> v.invariant() == kind).toList();
-        assertEquals(all, out, "다른 불변식 위반이 섞였다");
-        return out;
-    }
-
-    private static void assertSingle(List<Violation> all, Invariant kind, List<Tag> tags, List<Long> ids) {
-        List<Violation> v = only(kind, all);
-        assertEquals(1, v.size(), v.toString());
-        assertEquals(tags, v.getFirst().tags());
-        assertEquals(ids, v.getFirst().messageIds());
+    private static void assertSingle(
+            final List<Violation> all, final Invariant kind, final List<Tag> tags, final List<Long> ids) {
+        assertEquals(
+                List.of(List.of(kind, tags, ids)),
+                all.stream()
+                        .map(v -> List.of(v.invariant(), v.tags(), v.messageIds()))
+                        .toList(),
+                "A single violation should contain the expected invariant, tags, and IDs.");
     }
 
     @Test
     void cleanRunWithRedeliveryDeadLetterAndDelaysPasses() {
-        List<Published> p = List.of(pub(1), pub(2), pub(3), pub(4), pubDelayed(5, 1_000));
-        List<Delivery> d = new ArrayList<>();
+        final List<Published> p;
+        final List<Delivery> d;
+        p = List.of(pub(1), pub(2), pub(3), pub(4), pubDelayed(5, 1_000));
+        d = new ArrayList<>();
         d.add(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)));
 
         d.add(target(2, 12, 1, T0 + 10, Settle.nack(T0 + 20, 500)));
@@ -115,58 +123,79 @@ class InvariantCheckerTest {
 
         d.add(target(5, 15, 1, T0 + 1_010, Settle.ack(T0 + 1_020)));
 
-        assertEquals(List.of(), check(MAX3, p, d));
+        assertEquals(List.of(), violations(MAX3, p, d), "Check should match the expected value.");
     }
 
     @Test
     void publishedTagNeverDeliveredIsLoss() {
-        List<Violation> v =
-                check(PLAIN, List.of(pub(1), pub(2)), List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20))));
+        final List<Violation> v;
+        v = violations(PLAIN, List.of(pub(1), pub(2)), List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20))));
         assertSingle(v, Invariant.LOSS, List.of(tag(2)), List.of());
     }
 
     @Test
     void deliveredButNeverAckedIsLoss() {
-        List<Violation> v = check(PLAIN, List.of(pub(1)), List.of(target(1, 11, 1, T0 + 10, Settle.NONE)));
+        final List<Violation> v;
+        v = violations(PLAIN, List.of(pub(1)), List.of(target(1, 11, 1, T0 + 10, Settle.NONE)));
         assertSingle(v, Invariant.LOSS, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void staleAckDoesNotCountAsAck() {
-        Settle stale = new Settle(Delivery.Action.ACK, false, T0 + 20, 0);
-        List<Violation> v = check(PLAIN, List.of(pub(1)), List.of(target(1, 11, 1, T0 + 10, stale)));
+        final Settle stale;
+        final List<Violation> v;
+        stale = new Settle(Delivery.Action.ACK, false, T0 + 20, 0);
+        v = violations(PLAIN, List.of(pub(1)), List.of(target(1, 11, 1, T0 + 10, stale)));
         assertSingle(v, Invariant.LOSS, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void deadLetteredButNeverAckedThereIsLoss() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)),
                 deadLetter(1, 1, dlHeaders(1, "rejected", 11, 1), T0 + 30, Settle.NONE));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.LOSS, List.of(tag(1)), List.of(1L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.LOSS, List.of(tag(1)), List.of(1L));
     }
 
     @Test
-    void ackedTwiceIsReportedAsDuplicate() {
-
-        List<Delivery> d =
-                List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(1, 12, 1, T0 + 10, Settle.ack(T0 + 20)));
-        List<Violation> v = check(PLAIN, List.of(pub(1)), d);
+    void duplicateAcksProduceOnlyDuplicateViolations() {
+        final List<Delivery> d;
+        final List<Violation> v;
+        d = List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(1, 12, 1, T0 + 10, Settle.ack(T0 + 20)));
+        v = violations(PLAIN, List.of(pub(1)), d);
         assertTrue(v.stream().allMatch(x -> x.invariant() == Invariant.DUPLICATE), v.toString());
-        assertFalse(v.isEmpty());
-        assertEquals(List.of(tag(1)), v.getFirst().tags());
+    }
+
+    @Test
+    void duplicateAcksProduceViolations() {
+        final List<Delivery> d;
+        final List<Violation> v;
+        d = List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(1, 12, 1, T0 + 10, Settle.ack(T0 + 20)));
+        v = violations(PLAIN, List.of(pub(1)), d);
+        assertFalse(v.isEmpty(), "V should not be empty.");
+    }
+
+    @Test
+    void duplicateAcksIdentifyTheTag() {
+        final List<Delivery> d;
+        final List<Violation> v;
+        d = List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(1, 12, 1, T0 + 10, Settle.ack(T0 + 20)));
+        v = violations(PLAIN, List.of(pub(1)), d);
+        assertEquals(List.of(tag(1)), v.getFirst().tags(), "Tags should match the expected value.");
     }
 
     @Test
     void unpublishedTagIsGhost() {
-        List<Delivery> d =
-                List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(9, 19, 1, T0 + 10, Settle.ack(T0 + 20)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.GHOST, List.of(tag(9)), List.of(19L));
+        final List<Delivery> d;
+        d = List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(9, 19, 1, T0 + 10, Settle.ack(T0 + 20)));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.GHOST, List.of(tag(9)), List.of(19L));
     }
 
     @Test
     void payloadChecksumMismatchIsGhost() {
-        Delivery d = new Delivery(
+        final Delivery d;
+        d = new Delivery(
                 QueueKind.TARGET,
                 tag(1),
                 11,
@@ -174,12 +203,13 @@ class InvariantCheckerTest {
                 new Content(5, content(1).headers()),
                 new Pull(1, 0, T0 + 10, T0 + 10 + LEASE),
                 Settle.ack(T0 + 20));
-        assertSingle(check(PLAIN, List.of(pub(1)), List.of(d)), Invariant.GHOST, List.of(tag(1)), List.of(11L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), List.of(d)), Invariant.GHOST, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void userHeaderMismatchIsGhost() {
-        Delivery d = new Delivery(
+        final Delivery d;
+        d = new Delivery(
                 QueueKind.TARGET,
                 tag(1),
                 11,
@@ -187,187 +217,224 @@ class InvariantCheckerTest {
                 new Content(1001, Map.of("tag", tag(1).toString(), "extra", "x")),
                 new Pull(1, 0, T0 + 10, T0 + 10 + LEASE),
                 Settle.ack(T0 + 20));
-        assertSingle(check(PLAIN, List.of(pub(1)), List.of(d)), Invariant.GHOST, List.of(tag(1)), List.of(11L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), List.of(d)), Invariant.GHOST, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void redeliveryAfterOkAckIsDuplicate() {
-        List<Delivery> d =
-                List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(1, 11, 2, T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
+        final List<Delivery> d;
+        d = List.of(target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)), target(1, 11, 2, T0 + 30, Settle.ack(T0 + 40)));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void redeliveryAfterStaleAckWithoutLeaseExpiryIsDuplicate() {
-        Settle stale = new Settle(Delivery.Action.ACK, false, T0 + 20, 0);
-        List<Delivery> d = List.of(target(1, 11, 1, T0 + 10, stale), target(1, 11, 2, T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
+        final Settle stale;
+        final List<Delivery> d;
+        stale = new Settle(Delivery.Action.ACK, false, T0 + 20, 0);
+        d = List.of(target(1, 11, 1, T0 + 10, stale), target(1, 11, 2, T0 + 30, Settle.ack(T0 + 40)));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void redeliveryBeforeLeaseExpiryWithoutSettlementIsDuplicate() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.NONE), target(1, 11, 2, T0 + 10 + LEASE - 51, Settle.ack(T0 + LEASE)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void redeliveryJustInsideLeaseToleranceIsAccepted() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.NONE), target(1, 11, 2, T0 + 10 + LEASE - 50, Settle.ack(T0 + LEASE)));
-        assertEquals(List.of(), check(PLAIN, List.of(pub(1)), d));
+        assertEquals(List.of(), violations(PLAIN, List.of(pub(1)), d), "Check should match the expected value.");
     }
 
     @Test
     void deliveryCountGapIsDuplicate() {
-        List<Delivery> d = List.of(
-                target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 0)), target(1, 11, 3, T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
+        final List<Delivery> d;
+        d = List.of(target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 0)), target(1, 11, 3, T0 + 30, Settle.ack(T0 + 40)));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void deliveryCountRepeatedIsDuplicate() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 0)),
                 targetIn(1, 11, 1, 2, 0, T0 + 30, T0 + 5_030, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void deliveryCountNotStartingAtOneIsDuplicate() {
-        List<Delivery> d = List.of(target(1, 11, 2, T0 + 10, Settle.ack(T0 + 20)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
+        final List<Delivery> d;
+        d = List.of(target(1, 11, 2, T0 + 10, Settle.ack(T0 + 20)));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void deliveryBeyondMaxDeliveriesIsDuplicate() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 0)),
                 target(1, 11, 2, T0 + 30, Settle.nack(T0 + 40, 0)),
                 target(1, 11, 3, T0 + 50, Settle.nack(T0 + 60, 0)),
                 target(1, 11, 4, T0 + 70, Settle.ack(T0 + 80)));
-        assertSingle(check(MAX3, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
+        assertSingle(violations(MAX3, List.of(pub(1)), d), Invariant.DUPLICATE, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void rejectWithoutMoveIsDeadLetterViolation() {
-        List<Delivery> d = List.of(target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L));
+        final List<Delivery> d;
+        d = List.of(target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void exhaustionWithoutMoveIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 0)),
                 target(1, 11, 2, T0 + 30, Settle.nack(T0 + 40, 0)),
                 target(1, 11, 3, T0 + 50, Settle.nack(T0 + 60, 0)));
-        assertSingle(check(MAX3, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L));
+        assertSingle(violations(MAX3, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void moveWithoutRejectOrExhaustionIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 0)),
                 deadLetter(1, 1, dlHeaders(1, "rejected", 11, 1), T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
     }
 
     @Test
     void maxDeliveriesReasonBeforeExhaustionIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 0)),
                 deadLetter(1, 1, dlHeaders(1, "max-deliveries", 11, 1), T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(MAX3, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
+        assertSingle(violations(MAX3, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
     }
 
     @Test
     void wrongReasonHeaderIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)),
                 deadLetter(1, 1, dlHeaders(1, "max-deliveries", 11, 1), T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(MAX3, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
+        assertSingle(violations(MAX3, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
     }
 
     @Test
     void wrongOriginalMessageIdHeaderIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)),
                 deadLetter(1, 1, dlHeaders(1, "rejected", 99, 1), T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
     }
 
     @Test
     void wrongLastDeliveryCountHeaderIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)),
                 deadLetter(1, 1, dlHeaders(1, "rejected", 11, 2), T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
     }
 
     @Test
     void missingDeadLetterHeaderIsDeadLetterViolation() {
-        Map<String, String> h = Map.of("tag", tag(1).toString(), "smq-reason", "rejected");
-        List<Delivery> d = List.of(
+        final Map<String, String> h;
+        final List<Delivery> d;
+        h = Map.of("tag", tag(1).toString(), "smq-reason", "rejected");
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)), deadLetter(1, 1, h, T0 + 30, Settle.ack(T0 + 40)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DEAD_LETTER, List.of(tag(1)), List.of(11L, 1L));
     }
 
     @Test
     void movedTwiceIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        final List<Violation> v;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.reject(T0 + 20)),
                 deadLetter(1, 1, dlHeaders(1, "rejected", 11, 1), T0 + 30, Settle.ack(T0 + 40)),
                 deadLetter(1, 2, dlHeaders(1, "rejected", 11, 1), T0 + 30, Settle.ack(T0 + 40)));
-        List<Violation> v = only(Invariant.DEAD_LETTER, check(PLAIN, List.of(pub(1)), d));
-        assertEquals(List.of(tag(1)), v.getFirst().tags());
+        v = violations(PLAIN, List.of(pub(1)), d);
+        assertTrue(
+                !v.isEmpty()
+                        && v.stream().allMatch(violation -> violation.invariant() == Invariant.DEAD_LETTER)
+                        && v.getFirst().tags().equals(List.of(tag(1))),
+                "All violations should be dead-letter violations and the first should identify the moved tag.");
     }
 
     @Test
     void ackedAndMovedIsDeadLetterViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        final List<Violation> v;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.ack(T0 + 20)),
                 deadLetter(1, 1, dlHeaders(1, "rejected", 11, 1), T0 + 30, Settle.ack(T0 + 40)));
-        List<Violation> v = only(Invariant.DEAD_LETTER, check(PLAIN, List.of(pub(1)), d));
-        assertEquals(List.of(tag(1)), v.getFirst().tags());
+        v = violations(PLAIN, List.of(pub(1)), d);
+        assertTrue(
+                !v.isEmpty()
+                        && v.stream().allMatch(violation -> violation.invariant() == Invariant.DEAD_LETTER)
+                        && v.getFirst().tags().equals(List.of(tag(1))),
+                "All violations should be dead-letter violations and the first should identify the moved tag.");
     }
 
     @Test
     void publishDelayShortOfToleranceIsViolation() {
-        List<Delivery> d = List.of(target(1, 11, 1, T0 + 1_000 - 51, Settle.ack(T0 + 1_000)));
-        assertSingle(check(PLAIN, List.of(pubDelayed(1, 1_000)), d), Invariant.DELAY, List.of(tag(1)), List.of(11L));
+        final List<Delivery> d;
+        d = List.of(target(1, 11, 1, T0 + 1_000 - 51, Settle.ack(T0 + 1_000)));
+        assertSingle(
+                violations(PLAIN, List.of(pubDelayed(1, 1_000)), d), Invariant.DELAY, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void publishDelayWithinToleranceIsAccepted() {
-        List<Delivery> d = List.of(target(1, 11, 1, T0 + 1_000 - 50, Settle.ack(T0 + 1_000)));
-        assertEquals(List.of(), check(PLAIN, List.of(pubDelayed(1, 1_000)), d));
+        final List<Delivery> d;
+        d = List.of(target(1, 11, 1, T0 + 1_000 - 50, Settle.ack(T0 + 1_000)));
+        assertEquals(
+                List.of(),
+                violations(PLAIN, List.of(pubDelayed(1, 1_000)), d),
+                "Check should match the expected value.");
     }
 
     @Test
     void nackDelayShortOfToleranceIsViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 1_000)),
                 target(1, 11, 2, T0 + 20 + 1_000 - 51, Settle.ack(T0 + 1_100)));
-        assertSingle(check(PLAIN, List.of(pub(1)), d), Invariant.DELAY, List.of(tag(1)), List.of(11L));
+        assertSingle(violations(PLAIN, List.of(pub(1)), d), Invariant.DELAY, List.of(tag(1)), List.of(11L));
     }
 
     @Test
     void nackDelayWithinToleranceIsAccepted() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 target(1, 11, 1, T0 + 10, Settle.nack(T0 + 20, 1_000)),
                 target(1, 11, 2, T0 + 20 + 1_000 - 50, Settle.ack(T0 + 1_100)));
-        assertEquals(List.of(), check(PLAIN, List.of(pub(1)), d));
+        assertEquals(List.of(), violations(PLAIN, List.of(pub(1)), d), "Check should match the expected value.");
     }
 
     @Test
     void overlappingChunksOnSingleActiveQueueIsViolation() {
 
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 11, 1, 1, 0, T0 + 10, T0 + 5_010, Settle.NONE),
                 targetIn(2, 12, 1, 2, 0, T0 + 1_000, T0 + 6_000, Settle.ack(T0 + 1_100)),
                 target(1, 11, 2, T0 + 5_010, Settle.ack(T0 + 5_020)));
         assertSingle(
-                check(SINGLE, List.of(pub(1), pub(2)), d),
+                violations(SINGLE, List.of(pub(1), pub(2)), d),
                 Invariant.SINGLE_ACTIVE,
                 List.of(tag(1), tag(2)),
                 List.of(11L, 12L));
@@ -375,46 +442,55 @@ class InvariantCheckerTest {
 
     @Test
     void sameOverlapOnPlainQueueIsAccepted() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 11, 1, 1, 0, T0 + 10, T0 + 5_010, Settle.ack(T0 + 20)),
                 targetIn(2, 12, 1, 2, 0, T0 + 1_000, T0 + 6_000, Settle.ack(T0 + 1_100)));
-        assertEquals(List.of(), check(PLAIN, List.of(pub(1), pub(2)), d));
+        assertEquals(
+                List.of(), violations(PLAIN, List.of(pub(1), pub(2)), d), "Check should match the expected value.");
     }
 
     @Test
     void nextChunkAfterFullSettlementIsAccepted() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 11, 1, 1, 0, T0 + 10, T0 + 5_010, Settle.ack(T0 + 100)),
                 targetIn(2, 12, 1, 2, 0, T0 + 200, T0 + 5_200, Settle.ack(T0 + 300)));
-        assertEquals(List.of(), check(SINGLE, List.of(pub(1), pub(2)), d));
+        assertEquals(
+                List.of(), violations(SINGLE, List.of(pub(1), pub(2)), d), "Check should match the expected value.");
     }
 
     @Test
     void nextChunkAtLeaseExpiryWithoutSettlementIsAccepted() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 11, 1, 1, 0, T0 + 10, T0 + 5_010, Settle.NONE),
                 targetIn(2, 12, 1, 2, 0, T0 + 5_010, T0 + 10_010, Settle.ack(T0 + 5_100)),
                 target(1, 11, 2, T0 + 10_100, Settle.ack(T0 + 10_200)));
-        assertEquals(List.of(), check(SINGLE, List.of(pub(1), pub(2)), d));
+        assertEquals(
+                List.of(), violations(SINGLE, List.of(pub(1), pub(2)), d), "Check should match the expected value.");
     }
 
     @Test
     void nextChunkJustInsideToleranceBeforeLeaseExpiryIsAccepted() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 11, 1, 1, 0, T0 + 10, T0 + 5_010, Settle.NONE),
                 targetIn(2, 12, 1, 2, 0, T0 + 5_010 - 50, T0 + 10_010, Settle.ack(T0 + 5_100)),
                 target(1, 11, 2, T0 + 10_100, Settle.ack(T0 + 10_200)));
-        assertEquals(List.of(), check(SINGLE, List.of(pub(1), pub(2)), d));
+        assertEquals(
+                List.of(), violations(SINGLE, List.of(pub(1), pub(2)), d), "Check should match the expected value.");
     }
 
     @Test
     void nextChunkBeyondToleranceBeforeLeaseExpiryIsViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 11, 1, 1, 0, T0 + 10, T0 + 5_010, Settle.NONE),
                 targetIn(2, 12, 1, 2, 0, T0 + 5_010 - 51, T0 + 10_010, Settle.ack(T0 + 5_100)),
                 target(1, 11, 2, T0 + 10_100, Settle.ack(T0 + 10_200)));
         assertSingle(
-                check(SINGLE, List.of(pub(1), pub(2)), d),
+                violations(SINGLE, List.of(pub(1), pub(2)), d),
                 Invariant.SINGLE_ACTIVE,
                 List.of(tag(1), tag(2)),
                 List.of(11L, 12L));
@@ -422,45 +498,71 @@ class InvariantCheckerTest {
 
     @Test
     void nonZeroCountsAfterDrainIsViolation() {
-        List<CountsSample> s = List.of(
+        final List<CountsSample> s;
+        final List<Violation> v;
+        s = List.of(
                 new CountsSample(QueueKind.TARGET, true, 0, 1, 0),
                 new CountsSample(QueueKind.DEAD_LETTER, true, 0, 0, 0));
-        List<Violation> v = only(Invariant.COUNTS, InvariantChecker.check(PLAIN, List.of(), List.of(), s));
-        assertEquals(1, v.size());
-        assertTrue(v.getFirst().detail().contains("TARGET"), v.getFirst().detail());
+        v = InvariantChecker.findViolations(PLAIN, List.of(), List.of(), s);
+        assertEquals(
+                List.of(List.of(Invariant.COUNTS, true)),
+                v.stream()
+                        .map(violation -> List.of(
+                                violation.invariant(), violation.detail().contains("TARGET")))
+                        .toList(),
+                "A single counts violation should identify the target queue.");
     }
 
     @Test
     void negativeSampleDuringLoadIsViolation() {
-        List<CountsSample> s = new ArrayList<>(drained());
+        final List<CountsSample> s;
+        final List<Violation> v;
+        s = new ArrayList<>(drained());
         s.add(new CountsSample(QueueKind.DEAD_LETTER, false, 3, -1, 0));
-        List<Violation> v = only(Invariant.COUNTS, InvariantChecker.check(PLAIN, List.of(), List.of(), s));
-        assertEquals(1, v.size());
-        assertTrue(v.getFirst().detail().contains("DEAD_LETTER"), v.getFirst().detail());
+        v = InvariantChecker.findViolations(PLAIN, List.of(), List.of(), s);
+        assertEquals(
+                List.of(List.of(Invariant.COUNTS, true)),
+                v.stream()
+                        .map(violation -> List.of(
+                                violation.invariant(), violation.detail().contains("DEAD_LETTER")))
+                        .toList(),
+                "A single counts violation should identify the dead-letter queue.");
     }
 
     @Test
     void nonZeroSampleDuringLoadIsAccepted() {
-        List<CountsSample> s = new ArrayList<>(drained());
+        final List<CountsSample> s;
+        s = new ArrayList<>(drained());
         s.add(new CountsSample(QueueKind.TARGET, false, 10, 5, 2));
-        assertEquals(List.of(), InvariantChecker.check(PLAIN, List.of(), List.of(), s));
+        assertEquals(
+                List.of(),
+                InvariantChecker.findViolations(PLAIN, List.of(), List.of(), s),
+                "Check should match the expected value.");
     }
 
     @Test
     void missingDrainedSampleIsViolation() {
-        List<CountsSample> s = List.of(new CountsSample(QueueKind.TARGET, true, 0, 0, 0));
-        List<Violation> v = only(Invariant.COUNTS, InvariantChecker.check(PLAIN, List.of(), List.of(), s));
-        assertEquals(1, v.size());
-        assertTrue(v.getFirst().detail().contains("DEAD_LETTER"), v.getFirst().detail());
+        final List<CountsSample> s;
+        final List<Violation> v;
+        s = List.of(new CountsSample(QueueKind.TARGET, true, 0, 0, 0));
+        v = InvariantChecker.findViolations(PLAIN, List.of(), List.of(), s);
+        assertEquals(
+                List.of(List.of(Invariant.COUNTS, true)),
+                v.stream()
+                        .map(violation -> List.of(
+                                violation.invariant(), violation.detail().contains("DEAD_LETTER")))
+                        .toList(),
+                "A single counts violation should identify the dead-letter queue.");
     }
 
     @Test
     void descendingIdsInsideChunkIsViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 12, 1, 5, 0, T0 + 10, T0 + 5_010, Settle.ack(T0 + 20)),
                 targetIn(2, 11, 1, 5, 1, T0 + 10, T0 + 5_010, Settle.ack(T0 + 20)));
         assertSingle(
-                check(PLAIN, List.of(pub(1), pub(2)), d),
+                violations(PLAIN, List.of(pub(1), pub(2)), d),
                 Invariant.CHUNK_ORDER,
                 List.of(tag(1), tag(2)),
                 List.of(12L, 11L));
@@ -468,17 +570,22 @@ class InvariantCheckerTest {
 
     @Test
     void positionDecidesOrderNotRecordOrder() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(2, 12, 1, 5, 1, T0 + 10, T0 + 5_010, Settle.ack(T0 + 20)),
                 targetIn(1, 11, 1, 5, 0, T0 + 10, T0 + 5_010, Settle.ack(T0 + 20)));
-        assertEquals(List.of(), check(PLAIN, List.of(pub(1), pub(2)), d));
+        assertEquals(
+                List.of(), violations(PLAIN, List.of(pub(1), pub(2)), d), "Check should match the expected value.");
     }
 
     @Test
     void sameIdTwiceInsideChunkIsViolation() {
-        List<Delivery> d = List.of(
+        final List<Delivery> d;
+        d = List.of(
                 targetIn(1, 11, 1, 5, 0, T0 + 10, T0 + 5_010, Settle.ack(T0 + 20)),
                 targetIn(1, 11, 1, 5, 1, T0 + 10, T0 + 5_010, Settle.ack(T0 + 20)));
-        assertTrue(check(PLAIN, List.of(pub(1)), d).stream().anyMatch(v -> v.invariant() == Invariant.CHUNK_ORDER));
+        assertTrue(
+                violations(PLAIN, List.of(pub(1)), d).stream().anyMatch(v -> v.invariant() == Invariant.CHUNK_ORDER),
+                "A chunk order violation should be reported.");
     }
 }

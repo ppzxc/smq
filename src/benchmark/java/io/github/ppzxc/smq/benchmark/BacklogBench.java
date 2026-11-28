@@ -30,7 +30,7 @@ public final class BacklogBench {
             }
         }
 
-        double publishAt(double elapsedSeconds) {
+        double publishAt(final double elapsedSeconds) {
             return initial - (initial - end) * Math.min(1, elapsedSeconds / rampSeconds);
         }
     }
@@ -43,18 +43,22 @@ public final class BacklogBench {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
-    public static void main(String[] args) throws Exception {
+    public static void main(final String[] args) throws Exception {
+        final long target;
+        final Rates rates;
+        final Path dir;
+        final Duration timeout;
         ModuleGuard.requireSmqModule("backlog benchmark");
         if (args.length != 7) {
             throw new IllegalArgumentException("Expected work directory and six workload arguments");
         }
-        long target = Long.parseLong(args[1]);
+        target = Long.parseLong(args[1]);
         if (target < BATCH) throw new IllegalArgumentException("Depth must be at least one batch");
-        Rates rates = new Rates(
+        rates = new Rates(
                 Long.parseLong(args[2]), Long.parseLong(args[3]), Long.parseLong(args[4]), Long.parseLong(args[5]));
-        Path dir = Files.createTempDirectory(Files.createDirectories(Path.of(args[0])), "backlog-");
+        dir = Files.createTempDirectory(Files.createDirectories(Path.of(args[0])), "backlog-");
         System.out.println("workDir=" + dir.toAbsolutePath() + " target=" + target + " rates=" + rates);
-        Duration timeout = Duration.ofSeconds(Long.parseLong(args[6]));
+        timeout = Duration.ofSeconds(Long.parseLong(args[6]));
         if (timeout.isNegative() || timeout.isZero()) throw new IllegalArgumentException("Timeout must be positive");
         try (Smq smq = Smq.sqlite(dir.resolve("smq.db"))
                 .durability(Durability.PROCESS_CRASH)
@@ -79,35 +83,48 @@ public final class BacklogBench {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.SystemPrintln", "PMD.CognitiveComplexity", "PMD.CyclomaticComplexity"})
-    private static void run(Queue queue, Rates rates, long target, Duration timeout)
+    private static void run(final Queue queue, final Rates rates, final long target, final Duration timeout)
             throws ExecutionException, InterruptedException {
-        AtomicLong acked = new AtomicLong();
-        AtomicBoolean finish = new AtomicBoolean();
-        long started = System.nanoTime();
-        long deadline = started + timeout.toNanos();
+        final AtomicLong acked;
+        final AtomicBoolean finish;
+        final long started;
+        final long deadline;
+        acked = new AtomicLong();
+        finish = new AtomicBoolean();
+        started = System.nanoTime();
+        deadline = started + timeout.toNanos();
         try (var executor = Executors.newSingleThreadExecutor()) {
-            var consumer = executor.submit(() -> {
+            long published;
+            long ramp;
+            long recoveredSince;
+            long lastReport;
+            long peak;
+            final var consumer = executor.submit(() -> {
                 consume(queue, rates.ack(), acked, finish, deadline);
                 return null;
             });
-            long published = 0;
-            long ramp = 0;
-            long recoveredSince = 0;
-            long lastReport = started;
-            long peak = 0;
+            published = 0;
+            ramp = 0;
+            recoveredSince = 0;
+            lastReport = started;
+            peak = 0;
             try {
                 while (true) {
+                    final long now;
+                    final long acknowledged;
+                    final long depth;
+                    final double rampElapsed;
                     if (consumer.isDone()) consumer.get();
-                    long now = System.nanoTime();
+                    now = System.nanoTime();
                     if (now >= deadline) throw new IllegalStateException("Overload or recovery timed out");
-                    long acknowledged = acked.get();
-                    long depth = published - acknowledged;
+                    acknowledged = acked.get();
+                    depth = published - acknowledged;
                     peak = Math.max(peak, depth);
                     if (ramp == 0 && depth >= target) {
                         ramp = now;
                         System.out.println("ramp started at depth=" + depth);
                     }
-                    double rampElapsed = ramp == 0 ? 0 : (now - ramp) / (double) SECOND;
+                    rampElapsed = ramp == 0 ? 0 : (now - ramp) / (double) SECOND;
                     if (rampElapsed >= rates.rampSeconds() && depth <= 2 * BATCH) {
                         if (recoveredSince == 0) recoveredSince = now;
                         if (now - recoveredSince >= 5 * SECOND) break;
@@ -125,7 +142,7 @@ public final class BacklogBench {
                                 rates.publishAt(rampElapsed));
                         lastReport = now;
                     }
-                    var batch = new ArrayList<OutgoingMessage>(BATCH);
+                    final var batch = new ArrayList<OutgoingMessage>(BATCH);
                     for (int i = 0; i < BATCH; i++) {
                         batch.add(OutgoingMessage.of(
                                 ByteBuffer.allocate(256).putLong(published + i).array()));
@@ -136,7 +153,7 @@ public final class BacklogBench {
                 }
                 finish.set(true);
                 consumer.get();
-                var counts = queue.counts();
+                final var counts = queue.counts();
                 if (acked.get() != published || counts.ready() != 0 || counts.leased() != 0 || counts.delayed() != 0) {
                     throw new IllegalStateException("Final counts do not match: " + counts);
                 }
@@ -158,26 +175,32 @@ public final class BacklogBench {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CyclomaticComplexity")
-    private static void consume(Queue queue, long rate, AtomicLong acked, AtomicBoolean finish, long deadline)
+    private static void consume(
+            final Queue queue, final long rate, final AtomicLong acked, final AtomicBoolean finish, final long deadline)
             throws InterruptedException {
         while (System.nanoTime() < deadline) {
-            long now = System.nanoTime();
-            boolean draining = finish.get();
-            var chunk = queue.pull(BATCH, Duration.ofMillis(20));
+            final long now;
+            final boolean draining;
+            long expected;
+            now = System.nanoTime();
+            draining = finish.get();
+            final var chunk = queue.pull(BATCH, Duration.ofMillis(20));
             if (chunk.isEmpty()) {
                 if (draining) return;
                 continue;
             }
-            long expected = acked.get();
-            for (var message : chunk.messages()) {
-                long actual = ByteBuffer.wrap(message.payload()).getLong();
-                long sequence = expected;
+            expected = acked.get();
+            for (final var message : chunk.messages()) {
+                final long actual;
+                final long sequence;
+                actual = ByteBuffer.wrap(message.payload()).getLong();
+                sequence = expected;
                 expected++;
                 if (actual != sequence) {
                     throw new IllegalStateException("Unexpected message sequence");
                 }
             }
-            var outcomes = queue.settle(chunk.ackAll());
+            final var outcomes = queue.settle(chunk.ackAll());
             if (!outcomes.allOk()
                     || outcomes.byMessage().size() != chunk.messages().size()) {
                 throw new IllegalStateException("Incomplete ACK");
@@ -188,8 +211,9 @@ public final class BacklogBench {
         throw new IllegalStateException("Consumer timed out");
     }
 
-    private static void pace(long started, int size, double rate) throws InterruptedException {
-        long remaining = (long) (size * (double) SECOND / rate) - (System.nanoTime() - started);
+    private static void pace(final long started, final int size, final double rate) throws InterruptedException {
+        final long remaining;
+        remaining = (long) (size * (double) SECOND / rate) - (System.nanoTime() - started);
         if (remaining > 0) TimeUnit.NANOSECONDS.sleep(remaining);
     }
 }

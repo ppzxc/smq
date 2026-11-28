@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="All PMD Java categories" xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>Full Java diagnostics, independent of the adopted project rules.</description>
+    <rule ref="category/java/bestpractices.xml" />
+    <rule ref="category/java/codestyle.xml">
+        <exclude name="CommentDefaultAccessModifier" />
+        <exclude name="PrematureDeclaration" />
+    </rule>
+    <rule ref="category/java/design.xml">
+        <!-- Requires a project-specific list of restricted packages or types. -->
+        <exclude name="LoosePackageCoupling" />
+    </rule>
+    <rule ref="category/java/documentation.xml">
+        <exclude name="CommentRequired" />
+    </rule>
+    <rule ref="category/java/errorprone.xml" />
+    <rule ref="category/java/multithreading.xml" />
+    <rule ref="category/java/performance.xml" />
+    <rule ref="category/java/security.xml" />
+</ruleset>

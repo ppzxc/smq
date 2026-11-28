@@ -7,16 +7,9 @@ import java.time.Duration;
 import java.time.InstantSource;
 import java.util.Objects;
 
-/**
- * smq 진입점. 스레드 안전하고, 닫을 때 정산하지 않은 리스는 그대로 둔다.
- * 닫은 뒤 선언, 조회, 삭제, 스냅샷과 큐의 발행, 정산, 연장, 개수 조회는
- * {@link IllegalStateException}을 던진다. 꺼내기는 빈 청크를 돌려주며, 기다리던 꺼내기도 빈 청크로 끝난다.
- * 꺼내기의 인자 검증은 닫힌 뒤에도 먼저 한다. 닫는 도중 이미 저장소에 들어간 연산의 결과는 보장하지 않는다.
- * {@link #close()}는 여러 번 호출해도 된다.
- */
 public interface Smq extends AutoCloseable {
 
-    static SqliteBuilder sqlite(Path path) {
+    static SqliteBuilder sqlite(final Path path) {
         Objects.requireNonNull(path, "path");
         return new SqliteBuilder(path);
     }
@@ -25,59 +18,29 @@ public interface Smq extends AutoCloseable {
         return new Builder();
     }
 
-    /**
-     * 큐를 선언하고 돌려준다. 같은 옵션으로 다시 선언하면 그대로 돌려주고, 다른 옵션이면
-     * {@link QueueDeclarationConflictException}을 던진다. 지정한 dead letter 큐는 이미 있어야 한다.
-     */
     Queue declare(String name, QueueOptions options);
 
-    /** 선언된 큐를 돌려준다. 없으면 {@link QueueNotFoundException}. */
     Queue queue(String name);
 
-    /** 큐를 메시지째 지운다. 지웠으면 true, 없었으면 false. */
     boolean delete(String name);
 
-    /**
-     * 실행 중인 SQLite 저장소의 일관된 사본을 {@code target}에 만든다. 끝날 때까지 기다리고, 외부 SQLite 도구로 열 수 있는
-     * 파일을 남긴다.
-     *
-     * <ul>
-     *   <li>SQLite 전용이다. 인메모리 저장소는 {@link UnsupportedOperationException}을 던진다.
-     *   <li>{@code VACUUM INTO}가 도는 동안 저장소의 lock을 쥐므로 {@code publish}, {@code pull}, {@code settle},
-     *       {@code extend} 같은 다른 연산이 DB 크기에 비례해 멈춘다.
-     *   <li>같은 디렉터리에 임시 파일을 만들었다가 하드 링크로 연결하므로, {@code target}의 디렉터리에 DB 크기만큼의 여유
-     *       공간이 있어야 한다. 사전 검사는 하지 않는다.
-     *   <li>{@code target}의 파일시스템이 하드 링크를 지원해야 한다. 지원하지 않으면 예외로 실패하고 대체 경로는 없다.
-     *   <li>스냅샷 파일의 권한은 임시 파일을 만들 때의 기본인 소유자 전용(POSIX에서 0600)이다. 메시지에 민감한 데이터가 있을 수 있어
-     *       의도한 동작이며, 다른 사용자의 도구가 읽어야 하면 만든 뒤에 권한을 바꾼다.
-     *   <li>{@code target}이 이미 있으면 덮어쓰지 않고 예외를 던진다. 부모 디렉터리가 없어도 예외이며 만들지 않는다.
-     *   <li>실패하면 임시 파일을 지우고 {@code target}을 만들지 않는다. 성공하면 {@code target}은 완전한 파일이다. 임시
-     *       파일은 지우지만 지우지 못해도 실패로 보지 않는다.
-     * </ul>
-     *
-     * @throws IllegalArgumentException {@code target}이 실행 중인 DB, 그 {@code -wal} 파일, 락 파일과 같은 파일일 때
-     * @throws SmqStorageException 대상이 이미 있거나 부모 디렉터리가 없거나, 복사나 연결에 실패했을 때
-     * @throws UnsupportedOperationException 저장소가 스냅샷을 지원하지 않을 때
-     */
     void snapshot(Path target);
 
     @Override
     void close();
 
-    /** 인메모리 저장소용 빌더. */
     final class Builder {
 
         private final BuilderSettings settings = new BuilderSettings();
 
         Builder() {}
 
-        public Builder clock(InstantSource clock) {
+        public Builder clock(final InstantSource clock) {
             settings.clock(clock);
             return this;
         }
 
-        /** 기본 리스 기간을 정한다. 양수이며 최대 36,500일(100년)이다. */
-        public Builder leaseDuration(Duration leaseDuration) {
+        public Builder leaseDuration(final Duration leaseDuration) {
             settings.leaseDuration(leaseDuration);
             return this;
         }
@@ -87,10 +50,6 @@ public interface Smq extends AutoCloseable {
         }
     }
 
-    /**
-     * SQLite 저장소용 빌더. 내구성 수준은 여기에만 있다. SQLite 파일은 한 JVM만 열 수 있다. 같은 파일을 이미 다른 곳이 쥐고
-     * 있으면 {@link #open()}이 기다리지 않고 {@link StorageLockedException}을 던진다.
-     */
     final class SqliteBuilder {
 
         private final BuilderSettings settings = new BuilderSettings();
@@ -99,25 +58,16 @@ public interface Smq extends AutoCloseable {
         private boolean autoVacuum = true;
         private Duration lockWaitFloor = Duration.ofMillis(100);
 
-        SqliteBuilder(Path path) {
+        SqliteBuilder(final Path path) {
             this.path = path;
         }
 
-        /**
-         * 내구성 수준. 기본은 {@link Durability#PROCESS_CRASH}로, 애플리케이션 크래시까지 견딘다. 전원 장애나 OS 크래시까지 견뎌야 하면
-         * {@link Durability#POWER_LOSS}를 고른다(ADR-0014).
-         */
-        public SqliteBuilder durability(Durability durability) {
+        public SqliteBuilder durability(final Durability durability) {
             this.durability = Objects.requireNonNull(durability, "durability");
             return this;
         }
 
-        /**
-         * 새 SQLite DB에서 빈 페이지를 자동 회수할지 정한다. 기본은 {@code true}(FULL)다.
-         * {@code false}면 NONE을 사용해 빈 페이지를 재사용한다. 기존 DB는 저장된 설정을 유지한다.
-         * FULL은 삭제 시 파일을 줄이지만 쓰기 비용이 늘 수 있다.
-         */
-        public SqliteBuilder autoVacuum(boolean enabled) {
+        public SqliteBuilder autoVacuum(final boolean enabled) {
             this.autoVacuum = enabled;
             return this;
         }
@@ -126,7 +76,7 @@ public interface Smq extends AutoCloseable {
             return durability;
         }
 
-        SqliteBuilder lockWaitFloor(Duration lockWaitFloor) {
+        SqliteBuilder lockWaitFloor(final Duration lockWaitFloor) {
             Objects.requireNonNull(lockWaitFloor, "lockWaitFloor");
             if (lockWaitFloor.isNegative()) {
                 throw new IllegalArgumentException("lockWaitFloor must not be negative: " + lockWaitFloor);
@@ -135,22 +85,16 @@ public interface Smq extends AutoCloseable {
             return this;
         }
 
-        public SqliteBuilder clock(InstantSource clock) {
+        public SqliteBuilder clock(final InstantSource clock) {
             settings.clock(clock);
             return this;
         }
 
-        /** 기본 리스 기간을 정한다. 양수이며 최대 36,500일(100년)이다. */
-        public SqliteBuilder leaseDuration(Duration leaseDuration) {
+        public SqliteBuilder leaseDuration(final Duration leaseDuration) {
             settings.leaseDuration(leaseDuration);
             return this;
         }
 
-        /**
-         * 저장소를 연다.
-         *
-         * @throws StorageLockedException 파일을 다른 프로세스, 같은 JVM의 다른 인스턴스, 외부 SQLite 도구가 쥐고 있을 때
-         */
         public Smq open() {
             return settings.open(SqliteStorage.open(path, durability, lockWaitFloor, autoVacuum));
         }

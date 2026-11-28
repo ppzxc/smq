@@ -45,12 +45,12 @@ final class Session {
     private final PrintStream out;
 
     Session(
-            Path outDir,
-            Path jsonLines,
-            Map<String, String> environment,
-            Limits limits,
-            Executor executor,
-            PrintStream out) {
+            final Path outDir,
+            final Path jsonLines,
+            final Map<String, String> environment,
+            final Limits limits,
+            final Executor executor,
+            final PrintStream out) {
         this.outDir = outDir;
         this.jsonLines = jsonLines;
         this.environment = environment;
@@ -59,7 +59,7 @@ final class Session {
         this.out = out;
     }
 
-    Path failureDir(long seed) {
+    Path failureDir(final long seed) {
         return outDir.resolve("failures").resolve(Long.toString(seed));
     }
 
@@ -73,21 +73,29 @@ final class Session {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CognitiveComplexity")
-    int run(Iterator<Long> seeds, long budgetMillis) {
-        long start = System.nanoTime();
-        List<RunResult> results = new ArrayList<>();
-        int exit = EXIT_OK;
-        int n = 0;
-        int consecutiveErrors = 0;
+    int run(final Iterator<Long> seeds, final long budgetMillis) {
+        final long start;
+        final List<RunResult> results;
+        int exit;
+        int n;
+        int consecutiveErrors;
+        start = System.nanoTime();
+        results = new ArrayList<>();
+        exit = EXIT_OK;
+        n = 0;
+        consecutiveErrors = 0;
         while (seeds.hasNext()) {
+            final long seed;
+            final RunParams params;
+            final RunResult result;
             if (n > 0 && (System.nanoTime() - start) / 1_000_000L >= budgetMillis) {
                 break;
             }
-            long seed = seeds.next();
-            RunParams params = RunParams.fromSeed(seed, limits);
+            seed = seeds.next();
+            params = RunParams.fromSeed(seed, limits);
             n++;
             out.printf(Locale.getDefault(Locale.Category.FORMAT), "[%d] seed=%d %s 실행%n", n, seed, params.durability());
-            RunResult result = runOne(params);
+            result = runOne(params);
             results.add(result);
             if (!result.passed()) {
                 reportFailure(result);
@@ -124,7 +132,7 @@ final class Session {
      * SmqStorageException)는 기록하고 계속 가되, 예외가 연속 {@link #MAX_CONSECUTIVE_ERRORS}번이면 하네스 문제로 보고 멈춘다. 불변식
      * 위반과 소진 실패는 데이터가 틀렸다는 뜻이라 바로 멈춘다. 무작위 모드는 첫 실패에서 멈춘다.
      */
-    private static boolean continuesAfter(RunResult failed, int consecutiveErrors) {
+    private static boolean continuesAfter(final RunResult failed, final int consecutiveErrors) {
         if (!failed.params().isSoak()) {
             return false;
         }
@@ -144,9 +152,11 @@ final class Session {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CyclomaticComplexity"})
-    private RunResult runOne(RunParams params) {
-        Path dir = outDir.resolve("work").resolve(Long.toString(params.seed()));
+    private RunResult runOne(final RunParams params) {
         RunResult result;
+        final Path dir;
+        dir = outDir.resolve("work").resolve(Long.toString(params.seed()));
+
         try {
             deleteTree(dir);
             Files.createDirectories(dir);
@@ -179,8 +189,9 @@ final class Session {
         return result;
     }
 
-    private void append(RunResult r) throws IOException {
-        Map<String, Object> m = new LinkedHashMap<>();
+    private void append(final RunResult r) throws IOException {
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("seed", r.params().seed());
         m.put("params", r.params().toMap());
         m.put("msgPerSec", r.msgPerSec());
@@ -206,8 +217,11 @@ final class Session {
     }
 
     /** 실행 디렉터리(SQLite 파일 포함)에 기록을 더해 {@code failures/<seed>/}로 옮긴다. */
-    private void preserve(RunResult r, Path dir) throws IOException {
-        RunResult.Records rec = r.records();
+    private void preserve(final RunResult r, final Path dir) throws IOException {
+        final RunResult.Records rec;
+        final Path first;
+        Path target;
+        rec = r.records();
         // 기록을 디스크에 쌓은 실행(고정 속도 모드)은 p<n>-*.bin이 기록이다. 힙에는 없으므로 빈 파일을 만들지 않는다.
         if (!r.params().isSoak()) {
             writeLines(dir.resolve("published.jsonl"), rec.published().stream().map(RecordsJson::line));
@@ -224,8 +238,8 @@ final class Session {
                                 "error=" + r.error(),
                                 r.params().describe()),
                         Stream.concat(r.violations().stream().map(RecordsJson::describe), diagnostics(r))));
-        Path first = failureDir(r.params().seed());
-        Path target = first;
+        first = failureDir(r.params().seed());
+        target = first;
         for (int attempt = 2; Files.exists(target); attempt++) {
             target = first.resolve("reruns").resolve(Integer.toString(attempt));
         }
@@ -238,25 +252,30 @@ final class Session {
     }
 
     /** {@code violations.txt} 끝에 덧붙이는 진단 줄. */
-    private static Stream<String> diagnostics(RunResult r) {
-        Stream<String> detail = r.errorDetail() == null
+    private static Stream<String> diagnostics(final RunResult r) {
+        final Stream<String> detail;
+        final Stream<String> wal;
+        final Stream<String> jvm;
+        detail = r.errorDetail() == null
                 ? Stream.empty()
                 : r.errorDetail().describe().lines();
-        Stream<String> wal = r.walMaxBytes() == null ? Stream.empty() : Stream.of("walMaxBytes=" + r.walMaxBytes());
-        Stream<String> jvm = r.jvmMetrics() == null ? Stream.empty() : Stream.of("jvmMetrics=" + r.jvmMetrics());
+        wal = r.walMaxBytes() == null ? Stream.empty() : Stream.of("walMaxBytes=" + r.walMaxBytes());
+        jvm = r.jvmMetrics() == null ? Stream.empty() : Stream.of("jvmMetrics=" + r.jvmMetrics());
         return Stream.of(detail, wal, jvm).flatMap(s -> s);
     }
 
-    private static void writeLines(Path file, Stream<String> lines) throws IOException {
+    private static void writeLines(final Path file, final Stream<String> lines) throws IOException {
         try (lines) {
             Files.write(file, (Iterable<String>) lines::iterator);
         }
     }
 
-    private void reportFailure(RunResult r) {
+    private void reportFailure(final RunResult r) {
+        final String durabilityOption;
+        final List<Violation> vs;
         out.println();
         out.println("실패: " + r.verdict() + " seed=" + r.params().seed());
-        String durabilityOption =
+        durabilityOption =
                 limits.durability().map(d -> " --durability " + d.name()).orElse("");
         out.println("다시 돌리려면: ./gradlew randomBench --seed " + r.params().seed() + durabilityOption);
         out.println("매개변수:");
@@ -276,7 +295,7 @@ final class Session {
         if (r.soak() != null) {
             out.println(soakLine(r.soak()));
         }
-        List<Violation> vs = r.violations();
+        vs = r.violations();
         out.println("어긴 불변식 " + vs.size() + "개:");
         for (int i = 0; i < Math.min(vs.size(), MAX_VIOLATIONS_PRINTED); i++) {
             out.println("  - " + RecordsJson.describe(vs.get(i)));
@@ -287,7 +306,7 @@ final class Session {
         out.println("보존한 파일: " + failureDir(r.params().seed()));
     }
 
-    private static String soakLine(SoakJudge.Report r) {
+    private static String soakLine(final SoakJudge.Report r) {
         return String.format(
                 Locale.getDefault(Locale.Category.FORMAT),
                 "목표 %d msg/s, 달성률 %.0f%%, ACK %.0f msg/s, 백로그 기울기 %.1f개/초, 최대 깊이 %d%s",
@@ -299,34 +318,34 @@ final class Session {
                 r.backlogGrowing() ? " (백로그 증가)" : "");
     }
 
-    private static String ms(Double d) {
+    private static String ms(final Double d) {
         return d == null ? "-" : String.format(Locale.getDefault(Locale.Category.FORMAT), "%.0fms", d);
     }
 
     /** SQLite 파일(본체, WAL, 공유 메모리)과 발행·전달 기록만 지운다. 긴 실행에서는 둘 다 크다. */
-    private static void deleteBulkyFiles(Path dir) throws IOException {
-        for (String name : List.of("smq.db", "smq.db-wal", "smq.db-shm")) {
+    private static void deleteBulkyFiles(final Path dir) throws IOException {
+        for (final String name : List.of("smq.db", "smq.db-wal", "smq.db-shm")) {
             Files.deleteIfExists(dir.resolve(name));
         }
         deleteSpoolFiles(dir);
     }
 
     /** 발행·전달 기록(jsonl)과 디스크에 쌓은 기록(bin). */
-    private static void deleteSpoolFiles(Path dir) throws IOException {
+    private static void deleteSpoolFiles(final Path dir) throws IOException {
         try (Stream<Path> s = Files.list(dir)) {
-            for (Path p : (Iterable<Path>) s.filter(
+            for (final Path p : (Iterable<Path>) s.filter(
                     f -> f.getFileName().toString().matches("(published|deliveries)\\.(jsonl|bin)"))::iterator) {
                 Files.delete(p);
             }
         }
     }
 
-    private static void deleteTree(Path dir) throws IOException {
+    private static void deleteTree(final Path dir) throws IOException {
         if (!Files.exists(dir)) {
             return;
         }
         try (Stream<Path> s = Files.walk(dir)) {
-            for (Path p : (Iterable<Path>) s.sorted(Comparator.reverseOrder())::iterator) {
+            for (final Path p : (Iterable<Path>) s.sorted(Comparator.reverseOrder())::iterator) {
                 Files.delete(p);
             }
         }

@@ -1,6 +1,6 @@
 # Potato Pyramid 검증 증거 리뷰
 
-대표 PR [#219](https://github.com/ppzxc/smq/pull/219)의 커밋 `ec5715d`에서 확인한 결과다.
+대표 PR [#219](https://github.com/ppzxc/smq/pull/219)의 커밋 `ec5715d`에서 동작을 확인했다. 표에는 현재 영문 메서드명과 그 커밋 당시의 한국어 메서드명을 함께 적었다.
 
 ## 리스·정산 상태와 대표 테스트
 
@@ -23,14 +23,14 @@ stateDiagram-v2
 
 | 전이·불변식 | 대표 테스트 |
 | --- | --- |
-| 리스 만료 뒤 재전달과 전달 횟수 증가 | `SmqConformanceTest.리스가_만료된_메시지는_원래_id_자리로_돌아가_다시_꺼내지고_전달_횟수가_늘어난다` |
-| 만료 직후 재꺼내기 전까지 이전 리스의 정산이 허용됨 | `SmqConformanceTest.기한이_지났어도_아무도_다시_꺼내지_않았다면_원래_리스의_정산과_연장은_OK다` |
-| 지연 없는 NACK은 준비 상태로 복귀 | `SmqConformanceTest.지연_없이_NACK한_메시지는_자기_id_자리로_돌아가_다음_꺼내기에서_먼저_나온다` |
-| 혼합 ACK/NACK 정산은 원자적 | `SmqConformanceTest.섞인_정산은_원자적이라_중간_상태가_다른_꺼내기에_보이지_않는다` |
-| 이전 청크의 반복 정산은 STALE | `SmqConformanceTest.정산된_메시지에_같은_리스로_다시_정산하면_NACK도_STALE이다` |
-| reject의 dead-letter 이동과 원본 메타데이터 보존 | `SmqConformanceTest.reject한_메시지는_dead_letter_큐로_옮겨지고_payload와_헤더를_유지하며_smq_헤더를_갖는다` |
-| 실제 동시 만료·연장 경합의 허용 결과 | `SmqConformanceTest.만료된_리스를_연장하는_쪽과_다시_꺼내는_쪽이_동시에_겨루면_한_쪽만_성공한다` |
-| 독립 모델 대조와 최소 만료 반례 | `LeaseCounterexampleTest.만료_정각_변이는_원본과_축소_명령열에서_같은_차이를_낸다` |
+| 리스 만료 뒤 재전달과 전달 횟수 증가 | 현재 `SmqConformanceTest.messagesWithExpiredLeasesReturnToTheirOriginalIDPositionsAreDequeuedAgainAndTheirDeliveryCountIncreases` (ec5715d: `리스가_만료된_메시지는_원래_id_자리로_돌아가_다시_꺼내지고_전달_횟수가_늘어난다`) |
+| 만료 직후 재꺼내기 전까지 이전 리스의 정산이 허용됨 | 현재 `SmqConformanceTest.evenIfTheDeadlineHasPassedIfNoOneHasTakenItOutAgainTheSettlementAndExtensionOfTheOriginalLeaseAreOK` (ec5715d: `기한이_지났어도_아무도_다시_꺼내지_않았다면_원래_리스의_정산과_연장은_OK다`) |
+| 지연 없는 NACK은 준비 상태로 복귀 | 현재 `SmqConformanceTest.messagesThatAreNACKedWithoutDelayReturnToTheirIDPositionsAndAppearFirstInTheNextRetrieval` (ec5715d: `지연_없이_NACK한_메시지는_자기_id_자리로_돌아가_다음_꺼내기에서_먼저_나온다`) |
+| 혼합 ACK/NACK 정산은 원자적 | 현재 `SmqConformanceTest.mixedSettlementsAreAtomicSoTheIntermediateStateIsNotVisibleToOtherRetrievals` (ec5715d: `섞인_정산은_원자적이라_중간_상태가_다른_꺼내기에_보이지_않는다`) |
+| 이전 청크의 반복 정산은 STALE | 현재 `SmqConformanceTest.ifASettledMessageIsSettledAgainWithTheSameLeaseNACKIsAlsoSTALE` (ec5715d: `정산된_메시지에_같은_리스로_다시_정산하면_NACK도_STALE이다`) |
+| reject의 dead-letter 이동과 원본 메타데이터 보존 | 현재 `SmqConformanceTest.rejectedMessagesAreMovedToTheDeadLetterQueueRetainTheirPayloadAndHeaderAndHaveAnSMQHeader` (ec5715d: `reject한_메시지는_dead_letter_큐로_옮겨지고_payload와_헤더를_유지하며_smq_헤더를_갖는다`) |
+| 실제 동시 만료·연장 경합의 허용 결과 | 현재 `SmqConformanceTest.ifThePartyExtendingAnExpiredLeaseAndThePartyRetrievingItCompeteSimultaneouslyOnlyOnePartyWillSucceed` (ec5715d: `만료된_리스를_연장하는_쪽과_다시_꺼내는_쪽이_동시에_겨루면_한_쪽만_성공한다`) |
+| 독립 모델 대조와 최소 만료 반례 | 현재 `LeaseCounterexampleTest.theExpirationExactTimeVariationProducesTheSameDifferenceInTheOriginalAndTheReducedCommandQueue` (ec5715d: `만료_정각_변이는_원본과_축소_명령열에서_같은_차이를_낸다`) |
 
 ## 대표 PR 증거
 

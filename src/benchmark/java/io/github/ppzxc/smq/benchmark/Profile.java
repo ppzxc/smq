@@ -17,7 +17,7 @@ enum Profile {
     private final int payloadBytes;
     private final int chunk;
 
-    Profile(int payloadBytes, int chunk) {
+    Profile(final int payloadBytes, final int chunk) {
         this.payloadBytes = payloadBytes;
         this.chunk = chunk;
     }

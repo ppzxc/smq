@@ -56,11 +56,12 @@ record RunResult(
     }
 
     /** 하네스 JVM에서 난 예외. */
-    static RunResult error(RunParams params, Throwable t) {
+    static RunResult error(final RunParams params, final Throwable t) {
         return error(params, ErrorDetail.of(ErrorDetail.HARNESS, t), String.valueOf(t), null);
     }
 
-    static RunResult error(RunParams params, ErrorDetail detail, String summary, Long walMaxBytes) {
+    static RunResult error(
+            final RunParams params, final ErrorDetail detail, final String summary, final Long walMaxBytes) {
         return new RunResult(
                 params,
                 Verdict.ERROR,

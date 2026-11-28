@@ -34,7 +34,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import org.jspecify.annotations.Nullable;
 
-/** 프로세스가 끝나면 사라지는 인메모리 저장소. */
 public final class MemoryStorage implements Storage {
 
     private static final class Entry {
@@ -53,7 +52,7 @@ public final class MemoryStorage implements Storage {
         @Nullable
         Instant availableAt;
 
-        Entry(MessageId id, NewMessage m, Instant publishedAt) {
+        Entry(final MessageId id, final NewMessage m, final Instant publishedAt) {
             this.id = id;
             this.payload = m.payload().clone();
             this.headers = Map.copyOf(m.headers());
@@ -61,8 +60,10 @@ public final class MemoryStorage implements Storage {
             this.availableAt = m.availableAt(publishedAt);
         }
 
-        Entry deadLettered(MessageId newId, String originalQueue, DeadLetters.Reason reason, Instant now) {
-            DeadLetters.Origin origin = new DeadLetters.Origin(originalQueue, id, headers, deliveryCount);
+        Entry deadLettered(
+                final MessageId newId, final String originalQueue, final DeadLetters.Reason reason, final Instant now) {
+            final DeadLetters.Origin origin;
+            origin = new DeadLetters.Origin(originalQueue, id, headers, deliveryCount);
             return new Entry(newId, new NewMessage(payload, DeadLetters.headers(origin, reason, now)), now);
         }
     }
@@ -75,10 +76,11 @@ public final class MemoryStorage implements Storage {
     private long nextLeaseToken = 1;
 
     @Override
-    public void declare(String queue, QueueOptions options) {
+    public void declare(final String queue, final QueueOptions options) {
         lock.lock();
         try {
-            QueueOptions existing = optionsByQueue.get(queue);
+            final QueueOptions existing;
+            existing = optionsByQueue.get(queue);
             if (existing != null) {
                 if (!existing.equals(options)) {
                     throw new QueueDeclarationConflictException(queue, existing, options);
@@ -98,13 +100,13 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public boolean delete(String queue) {
+    public boolean delete(final String queue) {
         lock.lock();
         try {
             if (!queues.containsKey(queue)) {
                 return false;
             }
-            for (Map.Entry<String, QueueOptions> e : optionsByQueue.entrySet()) {
+            for (final Map.Entry<String, QueueOptions> e : optionsByQueue.entrySet()) {
                 if (e.getValue().deadLetterQueue().filter(queue::equals).isPresent()) {
                     throw new QueueInUseException(queue, e.getKey());
                 }
@@ -118,7 +120,7 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public boolean exists(String queue) {
+    public boolean exists(final String queue) {
         lock.lock();
         try {
             return queues.containsKey(queue);
@@ -128,7 +130,7 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public Optional<QueueOptions> options(String queue) {
+    public Optional<QueueOptions> options(final String queue) {
         lock.lock();
         try {
             return Optional.ofNullable(optionsByQueue.get(queue));
@@ -138,14 +140,17 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public QueueCounts counts(String queue) {
+    public QueueCounts counts(final String queue) {
         lock.lock();
         try {
 
-            long ready = 0;
-            long leased = 0;
-            long delayed = 0;
-            for (Entry e : require(queue).values()) {
+            long ready;
+            long leased;
+            long delayed;
+            ready = 0;
+            leased = 0;
+            delayed = 0;
+            for (final Entry e : require(queue).values()) {
                 if (e.leaseToken != null) {
                     leased++;
                 } else if (e.availableAt != null) {
@@ -161,21 +166,26 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public List<MessageId> publish(String queue, List<NewMessage> batch, InstantSource clock) {
+    public List<MessageId> publish(final String queue, final List<NewMessage> batch, final InstantSource clock) {
         lock.lock();
         try {
-            Instant now = clock.instant();
-            TreeMap<Long, Entry> messages = require(queue);
+            final Instant now;
+            final TreeMap<Long, Entry> messages;
+            final List<Entry> entries;
+            long next;
+            final List<MessageId> ids;
+            now = clock.instant();
+            messages = require(queue);
 
-            List<Entry> entries = new ArrayList<>(batch.size());
-            long next = nextMessageId;
-            for (NewMessage m : batch) {
+            entries = new ArrayList<>(batch.size());
+            next = nextMessageId;
+            for (final NewMessage m : batch) {
                 entries.add(new Entry(new MessageId(next), m, now));
                 next++;
             }
             nextMessageId = next;
-            List<MessageId> ids = new ArrayList<>(entries.size());
-            for (Entry e : entries) {
+            ids = new ArrayList<>(entries.size());
+            for (final Entry e : entries) {
                 messages.put(e.id.value(), e);
                 ids.add(e.id);
             }
@@ -186,30 +196,39 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public PullResult pull(String queue, int max, Duration lease, InstantSource clock) {
+    public PullResult pull(final String queue, final int max, final Duration lease, final InstantSource clock) {
         lock.lock();
         try {
-            Instant now = clock.instant();
-            TreeMap<Long, Entry> entries = require(queue);
-            QueueOptions options = requireOptions(queue);
+            final Instant now;
+            final TreeMap<Long, Entry> entries;
+            final QueueOptions options;
+            final List<Entry> picked;
+            final List<Entry> exhausted;
+            final boolean deadLettersRemain;
+            final long token;
+            final Instant deadline;
+            final List<Message> messages;
+            now = clock.instant();
+            entries = require(queue);
+            options = requireOptions(queue);
 
             if (options.singleActiveConsumer() && entries.values().stream().anyMatch(e -> isLeased(e, now))) {
                 return PullResult.empty();
             }
-            List<Entry> picked = new ArrayList<>();
-            List<Entry> exhausted = new ArrayList<>();
-            boolean deadLettersRemain = Selection.selectEntries(entries, options, now, max, picked, exhausted);
+            picked = new ArrayList<>();
+            exhausted = new ArrayList<>();
+            deadLettersRemain = Selection.selectEntries(entries, options, now, max, picked, exhausted);
             moveExhausted(entries, options, queue, now, exhausted);
             if (picked.isEmpty()) {
                 return deadLettersRemain
                         ? PullResult.emptyDeadLettersRemain(!exhausted.isEmpty())
                         : PullResult.empty(!exhausted.isEmpty());
             }
-            long token = nextLeaseToken;
+            token = nextLeaseToken;
             nextLeaseToken++;
-            Instant deadline = now.plus(lease);
-            List<Message> messages = new ArrayList<>(picked.size());
-            for (Entry e : picked) {
+            deadline = now.plus(lease);
+            messages = new ArrayList<>(picked.size());
+            for (final Entry e : picked) {
                 e.leaseToken = token;
                 e.leaseDeadline = deadline;
                 e.deliveryCount++;
@@ -223,17 +242,20 @@ public final class MemoryStorage implements Storage {
 
     private static final class Selection {
         private static boolean selectEntries(
-                Map<Long, Entry> entries,
-                QueueOptions options,
-                Instant now,
-                int max,
-                List<Entry> picked,
-                List<Entry> exhausted) {
-            boolean deadLettersRemain = false;
-            boolean blocked = false;
-            boolean moves = options.maxDeliveries().isPresent();
+                final Map<Long, Entry> entries,
+                final QueueOptions options,
+                final Instant now,
+                final int max,
+                final List<Entry> picked,
+                final List<Entry> exhausted) {
+            boolean deadLettersRemain;
+            boolean blocked;
+            final boolean moves;
+            deadLettersRemain = false;
+            blocked = false;
+            moves = options.maxDeliveries().isPresent();
             clearReadyDelays(entries, now);
-            for (Entry e : entries.values()) {
+            for (final Entry e : entries.values()) {
                 if (selectionComplete(picked, max, moves)) {
                     break;
                 }
@@ -252,15 +274,15 @@ public final class MemoryStorage implements Storage {
             return deadLettersRemain;
         }
 
-        private static boolean selectionComplete(List<Entry> picked, int max, boolean moves) {
+        private static boolean selectionComplete(final List<Entry> picked, final int max, final boolean moves) {
             return picked.size() == max && !moves;
         }
 
-        private static boolean isExhausted(Entry entry, QueueOptions options, boolean moves) {
+        private static boolean isExhausted(final Entry entry, final QueueOptions options, final boolean moves) {
             return moves && entry.deliveryCount >= options.maxDeliveries().getAsInt();
         }
 
-        private static boolean addExhausted(List<Entry> exhausted, Entry entry) {
+        private static boolean addExhausted(final List<Entry> exhausted, final Entry entry) {
             if (exhausted.size() >= DeadLetters.MAX_MOVES_PER_PULL) {
                 return false;
             }
@@ -268,8 +290,8 @@ public final class MemoryStorage implements Storage {
             return true;
         }
 
-        private static void clearReadyDelays(Map<Long, Entry> entries, Instant now) {
-            for (Entry e : entries.values()) {
+        private static void clearReadyDelays(final Map<Long, Entry> entries, final Instant now) {
+            for (final Entry e : entries.values()) {
                 if (e.availableAt != null && !e.availableAt.isAfter(now)) {
                     e.availableAt = null;
                 }
@@ -278,22 +300,30 @@ public final class MemoryStorage implements Storage {
     }
 
     private void moveExhausted(
-            Map<Long, Entry> entries, QueueOptions options, String queue, Instant now, List<Entry> exhausted) {
+            final Map<Long, Entry> entries,
+            final QueueOptions options,
+            final String queue,
+            final Instant now,
+            final List<Entry> exhausted) {
+        final TreeMap<Long, Entry> dlq;
         if (exhausted.isEmpty()) {
             return;
         }
-        TreeMap<Long, Entry> dlq = require(options.deadLetterQueue().orElseThrow());
-        for (Entry e : exhausted) {
+        dlq = require(options.deadLetterQueue().orElseThrow());
+        for (final Entry e : exhausted) {
+            final long id;
+            final Entry moved;
             entries.remove(e.id.value());
-            long id = nextMessageId;
+            id = nextMessageId;
             nextMessageId++;
-            Entry moved = e.deadLettered(new MessageId(id), queue, DeadLetters.Reason.MAX_DELIVERIES, now);
+            moved = e.deadLettered(new MessageId(id), queue, DeadLetters.Reason.MAX_DELIVERIES, now);
             dlq.put(moved.id.value(), moved);
         }
     }
 
     @Override
-    public PullResult pull(String queue, int max, Duration lease, InstantSource clock, Duration wait)
+    public PullResult pull(
+            final String queue, final int max, final Duration lease, final InstantSource clock, final Duration wait)
             throws InterruptedException {
         long nanos;
         try {
@@ -312,16 +342,19 @@ public final class MemoryStorage implements Storage {
     }
 
     @Override
-    public List<Result> settle(LeaseToken token, List<Disposition> items, InstantSource clock) {
+    public List<Result> settle(final LeaseToken token, final List<Disposition> items, final InstantSource clock) {
         lock.lock();
         try {
-            Instant now = clock.instant();
+            final Instant now;
+            final List<@Nullable Instant> availableAt;
+            final List<Result> results;
+            now = clock.instant();
             requireDeadLetterQueues(token, items);
-            List<@Nullable Instant> availableAt = new ArrayList<>(items.size());
-            for (Disposition d : items) {
+            availableAt = new ArrayList<>(items.size());
+            for (final Disposition d : items) {
                 availableAt.add(d.kind() == Disposition.Kind.NACK ? d.availableAt(now) : null);
             }
-            List<Result> results = new ArrayList<>(items.size());
+            results = new ArrayList<>(items.size());
             for (int i = 0; i < items.size(); i++) {
                 results.add(new Result(items.get(i).id(), settleOne(token, items.get(i), now, availableAt.get(i))));
             }
@@ -331,12 +364,13 @@ public final class MemoryStorage implements Storage {
         }
     }
 
-    private void requireDeadLetterQueues(LeaseToken token, List<Disposition> items) {
-        for (Disposition d : items) {
+    private void requireDeadLetterQueues(final LeaseToken token, final List<Disposition> items) {
+        for (final Disposition d : items) {
+            final Located found;
             if (d.kind() != Disposition.Kind.REJECT) {
                 continue;
             }
-            Located found = locate(d.id());
+            found = locate(d.id());
             if (found != null
                     && holds(found.entry, token)
                     && deadLetterQueueOf(found.queue).isEmpty()) {
@@ -345,20 +379,24 @@ public final class MemoryStorage implements Storage {
         }
     }
 
-    private Outcome settleOne(LeaseToken token, Disposition d, Instant now, @Nullable Instant availableAt) {
-        Located found = locate(d.id());
+    private Outcome settleOne(
+            final LeaseToken token, final Disposition d, final Instant now, final @Nullable Instant availableAt) {
+        final Located found;
+        found = locate(d.id());
         if (found == null || !holds(found.entry, token)) {
             return Outcome.STALE;
         }
         switch (d.kind()) {
             case ACK -> found.messages.remove(d.id().value());
             case REJECT -> {
+                final String dlq;
+                final long id;
+                final Entry moved;
                 found.messages.remove(d.id().value());
-                String dlq = deadLetterQueueOf(found.queue).orElseThrow();
-                long id = nextMessageId;
+                dlq = deadLetterQueueOf(found.queue).orElseThrow();
+                id = nextMessageId;
                 nextMessageId++;
-                Entry moved =
-                        found.entry.deadLettered(new MessageId(id), found.queue, DeadLetters.Reason.REJECTED, now);
+                moved = found.entry.deadLettered(new MessageId(id), found.queue, DeadLetters.Reason.REJECTED, now);
                 require(dlq).put(moved.id.value(), moved);
             }
             case NACK -> {
@@ -372,9 +410,10 @@ public final class MemoryStorage implements Storage {
 
     private record Located(String queue, TreeMap<Long, Entry> messages, Entry entry) {}
 
-    private @Nullable Located locate(MessageId id) {
-        for (Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
-            Entry e = q.getValue().get(id.value());
+    private @Nullable Located locate(final MessageId id) {
+        for (final Map.Entry<String, TreeMap<Long, Entry>> q : queues.entrySet()) {
+            final Entry e;
+            e = q.getValue().get(id.value());
             if (e != null) {
                 return new Located(q.getKey(), q.getValue(), e);
             }
@@ -382,29 +421,36 @@ public final class MemoryStorage implements Storage {
         return null;
     }
 
-    private Optional<String> deadLetterQueueOf(String queue) {
+    private Optional<String> deadLetterQueueOf(final String queue) {
         return requireOptions(queue).deadLetterQueue();
     }
 
-    private static boolean holds(Entry e, LeaseToken token) {
+    private static boolean holds(final Entry e, final LeaseToken token) {
         return e.leaseToken != null && e.leaseToken == token.value();
     }
 
     @Override
-    public Extended extend(LeaseToken token, List<MessageId> ids, Duration d, InstantSource clock) {
+    public Extended extend(
+            final LeaseToken token, final List<MessageId> ids, final Duration d, final InstantSource clock) {
         lock.lock();
         try {
 
-            Instant now = clock.instant();
-            Instant deadline = now.plus(d);
-            List<Result> results = new ArrayList<>(ids.size());
-            for (MessageId id : ids) {
-                Outcome outcome = Outcome.STALE;
-                for (Map.Entry<String, TreeMap<Long, Entry>> queue : queues.entrySet()) {
-                    Entry e = queue.getValue().get(id.value());
+            final Instant now;
+            final Instant deadline;
+            final List<Result> results;
+            now = clock.instant();
+            deadline = now.plus(d);
+            results = new ArrayList<>(ids.size());
+            for (final MessageId id : ids) {
+                Outcome outcome;
+                outcome = Outcome.STALE;
+                for (final Map.Entry<String, TreeMap<Long, Entry>> queue : queues.entrySet()) {
+                    final Entry e;
+                    e = queue.getValue().get(id.value());
                     if (e != null) {
 
-                        boolean expiredInSingleActiveQueue = !isLeased(e, now)
+                        final boolean expiredInSingleActiveQueue;
+                        expiredInSingleActiveQueue = !isLeased(e, now)
                                 && requireOptions(queue.getKey()).singleActiveConsumer();
                         if (holds(e, token) && !expiredInSingleActiveQueue) {
                             e.leaseDeadline = deadline;
@@ -421,29 +467,31 @@ public final class MemoryStorage implements Storage {
         }
     }
 
-    private static boolean isReady(Entry e, Instant now) {
+    private static boolean isReady(final Entry e, final Instant now) {
         return !isDelayed(e, now) && (e.leaseToken == null || e.leaseDeadline == null || !e.leaseDeadline.isAfter(now));
     }
 
-    private static boolean isLeased(Entry e, Instant now) {
+    private static boolean isLeased(final Entry e, final Instant now) {
         return e.leaseToken != null && e.leaseDeadline != null && e.leaseDeadline.isAfter(now);
     }
 
-    private static boolean isDelayed(Entry e, Instant now) {
+    private static boolean isDelayed(final Entry e, final Instant now) {
         return e.availableAt != null && e.availableAt.isAfter(now);
     }
 
     @SuppressWarnings("NonApiType") // TreeMap keeps messages in FIFO order for pulls.
-    private TreeMap<Long, Entry> require(String queue) {
-        TreeMap<Long, Entry> messages = queues.get(queue);
+    private TreeMap<Long, Entry> require(final String queue) {
+        final TreeMap<Long, Entry> messages;
+        messages = queues.get(queue);
         if (messages == null) {
             throw new QueueNotFoundException(queue);
         }
         return messages;
     }
 
-    private QueueOptions requireOptions(String queue) {
-        QueueOptions options = optionsByQueue.get(queue);
+    private QueueOptions requireOptions(final String queue) {
+        final QueueOptions options;
+        options = optionsByQueue.get(queue);
         if (options == null) {
             throw new QueueNotFoundException(queue);
         }

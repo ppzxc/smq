@@ -37,7 +37,8 @@ final class SoakJudge {
             boolean backlogGrowing) {
 
         Map<String, Object> toMap() {
-            Map<String, Object> m = new LinkedHashMap<>();
+            final Map<String, Object> m;
+            m = new LinkedHashMap<>();
             m.put("targetRate", targetRate);
             m.put("achievedRatio", achievedRatio);
             m.put("ackRate", ackRate);
@@ -58,35 +59,49 @@ final class SoakJudge {
      * @param saturationDepth 프로듀서가 쉬기 시작하는 큐 깊이. 소비가 못 따라가면 깊이가 여기서 멈춘다
      */
     static Report judge(
-            long targetRate,
-            double loadSeconds,
-            long publishedInLoad,
-            long ackedInLoad,
-            List<Long> depths,
-            long sampleIntervalMillis,
-            long saturationDepth) {
-        double achieved = publishedInLoad / (targetRate * loadSeconds);
-        double ackRate = ackedInLoad / loadSeconds;
-        long max = depths.stream().mapToLong(Long::longValue).max().orElse(0);
-        double slope = depths.size() < MIN_SAMPLES ? 0 : slope(depths, sampleIntervalMillis / 1000.0);
-        double span = (depths.size() - 1) * (sampleIntervalMillis / 1000.0);
-        boolean trending = depths.size() >= MIN_SAMPLES
+            final long targetRate,
+            final double loadSeconds,
+            final long publishedInLoad,
+            final long ackedInLoad,
+            final List<Long> depths,
+            final long sampleIntervalMillis,
+            final long saturationDepth) {
+        final double achieved;
+        final double ackRate;
+        final long max;
+        final double slope;
+        final double span;
+        final boolean trending;
+        final boolean saturated;
+        final boolean growing;
+        achieved = publishedInLoad / (targetRate * loadSeconds);
+        ackRate = ackedInLoad / loadSeconds;
+        max = depths.stream().mapToLong(Long::longValue).max().orElse(0);
+        slope = depths.size() < MIN_SAMPLES ? 0 : slope(depths, sampleIntervalMillis / 1000.0);
+        span = (depths.size() - 1) * (sampleIntervalMillis / 1000.0);
+        trending = depths.size() >= MIN_SAMPLES
                 && slope > GROWTH_SLOPE_FRACTION * targetRate
                 && slope * span > GROWTH_SECONDS_OF_BACKLOG * targetRate;
-        boolean saturated = max >= SATURATION_FRACTION * saturationDepth;
-        boolean growing = trending || saturated;
+        saturated = max >= SATURATION_FRACTION * saturationDepth;
+        growing = trending || saturated;
         return new Report(targetRate, achieved, ackRate, slope, max, growing);
     }
 
     /** 최소제곱 기울기. x는 표본 번호 * 간격(초). */
-    private static double slope(List<Long> ys, double intervalSeconds) {
-        int n = ys.size();
-        double meanX = (n - 1) / 2.0 * intervalSeconds;
-        double meanY = ys.stream().mapToLong(Long::longValue).average().orElse(0);
-        double num = 0;
-        double den = 0;
+    private static double slope(final List<Long> ys, final double intervalSeconds) {
+        final int n;
+        final double meanX;
+        final double meanY;
+        double num;
+        double den;
+        n = ys.size();
+        meanX = (n - 1) / 2.0 * intervalSeconds;
+        meanY = ys.stream().mapToLong(Long::longValue).average().orElse(0);
+        num = 0;
+        den = 0;
         for (int i = 0; i < n; i++) {
-            double dx = i * intervalSeconds - meanX;
+            final double dx;
+            dx = i * intervalSeconds - meanX;
             num += dx * (ys.get(i) - meanY);
             den += dx * dx;
         }

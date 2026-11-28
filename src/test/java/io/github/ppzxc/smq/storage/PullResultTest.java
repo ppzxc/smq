@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class PullResultTest {
@@ -15,32 +16,85 @@ class PullResultTest {
     private static final Message MESSAGE = new Message(new MessageId(1), new byte[] {1}, Map.of(), 1, Instant.EPOCH);
 
     @Test
-    void requires_token_and_deadline_exactly_when_messages_are_present() {
-        assertThrows(
-                IllegalArgumentException.class, () -> new PullResult(null, DEADLINE, List.of(MESSAGE), false, false));
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new PullResult(new LeaseToken(1), null, List.of(MESSAGE), false, false));
+    @DisplayName("requires token and deadline exactly when messages are present — messagesRequireLeaseToken")
+    void messagesRequireLeaseToken() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new PullResult(new LeaseToken(1), DEADLINE, List.of(), false, false));
-        assertThrows(IllegalArgumentException.class, () -> new PullResult(null, null, List.of(MESSAGE), false, false));
+                () -> new PullResult(null, DEADLINE, List.of(MESSAGE), false, false),
+                "Construction should throw IllegalArgumentException.");
     }
 
     @Test
-    void copies_messages_and_keeps_empty_dead_letter_flags() {
-        List<Message> messages = new ArrayList<>(List.of(MESSAGE));
-        PullResult result = PullResult.of(new LeaseToken(1), DEADLINE, messages);
-        messages.clear();
-        assertEquals(List.of(MESSAGE), result.messages());
+    @DisplayName("requires token and deadline exactly when messages are present — messagesRequireLeaseDeadline")
+    void messagesRequireLeaseDeadline() {
         assertThrows(
-                UnsupportedOperationException.class, () -> result.messages().clear());
+                IllegalArgumentException.class,
+                () -> new PullResult(new LeaseToken(1), null, List.of(MESSAGE), false, false),
+                "Construction should throw IllegalArgumentException.");
+    }
 
-        PullResult empty = PullResult.emptyDeadLettersRemain(true);
-        assertTrue(empty.deadLettersRemain());
-        assertTrue(empty.deadLettersMoved());
-        assertTrue(empty.messages().isEmpty());
-        assertNull(empty.token());
-        assertNull(empty.leaseDeadline());
+    @Test
+    @DisplayName("requires token and deadline exactly when messages are present — emptyMessagesRejectLease")
+    void emptyMessagesRejectLease() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new PullResult(new LeaseToken(1), DEADLINE, List.of(), false, false),
+                "Construction should throw IllegalArgumentException.");
+    }
+
+    @Test
+    @DisplayName("requires token and deadline exactly when messages are present — messagesRejectMissingLease")
+    void messagesRejectMissingLease() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new PullResult(null, null, List.of(MESSAGE), false, false),
+                "Construction should throw IllegalArgumentException.");
+    }
+
+    @Test
+    @DisplayName("copies messages")
+    void copiesMessages() {
+        final List<Message> messages;
+        final PullResult result;
+        messages = new ArrayList<>(List.of(MESSAGE));
+        result = PullResult.of(new LeaseToken(1), DEADLINE, messages);
+        messages.clear();
+        assertEquals(List.of(MESSAGE), result.messages(), "Messages should match the expected value.");
+    }
+
+    @Test
+    @DisplayName("copied messages are immutable")
+    void copiedMessagesAreImmutable() {
+        final PullResult result;
+        result = PullResult.of(new LeaseToken(1), DEADLINE, List.of(MESSAGE));
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> result.messages().clear(),
+                "Clear should throw UnsupportedOperationException.");
+    }
+
+    @Test
+    void emptyResultReportsRemainingDeadLetters() {
+        assertTrue(PullResult.emptyDeadLettersRemain(true).deadLettersRemain(), "Dead letters should remain.");
+    }
+
+    @Test
+    void emptyResultReportsMovedDeadLetters() {
+        assertTrue(PullResult.emptyDeadLettersRemain(true).deadLettersMoved(), "Dead letters should be moved.");
+    }
+
+    @Test
+    void emptyResultHasNoMessages() {
+        assertTrue(PullResult.emptyDeadLettersRemain(true).messages().isEmpty(), "Messages should be empty.");
+    }
+
+    @Test
+    void emptyResultHasNoToken() {
+        assertNull(PullResult.emptyDeadLettersRemain(true).token(), "Token should be null.");
+    }
+
+    @Test
+    void emptyResultHasNoLeaseDeadline() {
+        assertNull(PullResult.emptyDeadLettersRemain(true).leaseDeadline(), "Lease deadline should be null.");
     }
 }

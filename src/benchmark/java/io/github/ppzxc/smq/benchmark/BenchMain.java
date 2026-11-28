@@ -39,31 +39,48 @@ public final class BenchMain {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings({"PMD.SystemPrintln", "PMD.CyclomaticComplexity"})
-    public static void main(String[] args) throws Exception {
+    public static void main(final String[] args) throws Exception {
+        final Map<String, String> opts;
+        final boolean full;
+        final Storage storage;
+        final Path workDir;
+        final String filter;
+        final List<RunSpec> plan;
+        final int repeat;
+        final List<List<RunSpec>> rounds;
+        final int total;
+        final Runner runner;
+        final List<Map<String, Double>> measured;
+        int n;
+        final Map<String, List<Double>> samples;
+        final Map<String, Double> results;
+        final Report report;
+        final Map<String, Double> baseline;
+        final List<Comparator.Check> checks;
         ModuleGuard.requireSmqModule("부모 JVM");
-        Map<String, String> opts = parse(args);
-        boolean full = opts.getOrDefault("mode", "smoke").equals("full");
+        opts = parse(args);
+        full = opts.getOrDefault("mode", "smoke").equals("full");
         if (!full && !opts.getOrDefault("mode", "smoke").equals("smoke"))
             throw new IllegalArgumentException("--mode는 smoke 또는 full");
-        Storage storage = Storage.valueOf(opts.getOrDefault("storage", "sqlite").toUpperCase(Locale.ROOT));
-        Path workDir =
-                Path.of(opts.getOrDefault("work-dir", "build/benchmark/work")).toAbsolutePath();
+        storage = Storage.valueOf(opts.getOrDefault("storage", "sqlite").toUpperCase(Locale.ROOT));
+        workDir = Path.of(opts.getOrDefault("work-dir", "build/benchmark/work")).toAbsolutePath();
         Files.createDirectories(workDir);
-        String filter = opts.getOrDefault("filter", "");
+        filter = opts.getOrDefault("filter", "");
 
-        List<RunSpec> plan = (full ? Plan.full(storage) : Plan.smoke(storage))
+        plan = (full ? Plan.full(storage) : Plan.smoke(storage))
                 .stream().filter(s -> s.key().contains(filter)).toList();
         if (plan.isEmpty()) throw new IllegalArgumentException("조건이 하나도 남지 않았다: filter=" + filter);
 
-        int repeat = Integer.parseInt(opts.getOrDefault("repeat", String.valueOf(Plan.DEFAULT_REPEATS)));
-        List<List<RunSpec>> rounds = Plan.rounds(plan, full ? repeat : 1);
-        int total = rounds.stream().mapToInt(List::size).sum();
+        repeat = Integer.parseInt(opts.getOrDefault("repeat", String.valueOf(Plan.DEFAULT_REPEATS)));
+        rounds = Plan.rounds(plan, full ? repeat : 1);
+        total = rounds.stream().mapToInt(List::size).sum();
 
-        Runner runner = new Runner(workDir);
-        List<Map<String, Double>> measured = new ArrayList<>();
-        int n = 0;
+        runner = new Runner(workDir);
+        measured = new ArrayList<>();
+        n = 0;
         for (int round = 0; round < rounds.size(); round++) {
-            for (RunSpec spec : rounds.get(round)) {
+            for (final RunSpec spec : rounds.get(round)) {
+                final Map<String, Double> m;
                 n++;
                 System.out.printf(
                         Locale.getDefault(Locale.Category.FORMAT),
@@ -73,20 +90,21 @@ public final class BenchMain {
                         round + 1,
                         rounds.size(),
                         spec.key());
-                Map<String, Double> m = runner.run(spec);
+                m = runner.run(spec);
                 m.forEach((k, v) ->
                         System.out.printf(Locale.getDefault(Locale.Category.FORMAT), "        %s = %.2f%n", k, v));
                 measured.add(m);
             }
         }
         // 항목 키 → 바퀴별 표본. 바퀴 순서는 실행 순서와 같고, 한 바퀴에 한 번씩 재므로 같은 바퀴끼리 짝이 맞는다.
-        Map<String, List<Double>> samples = Aggregator.samples(measured);
-        Map<String, Double> results = new LinkedHashMap<>();
+        samples = Aggregator.samples(measured);
+        results = new LinkedHashMap<>();
         samples.forEach((k, v) -> results.put(k, Aggregator.median(v)));
 
-        Report report = Aggregator.report(Environment.capture(full ? "full" : "smoke", storage.id(), workDir), samples);
+        report = Aggregator.report(Environment.capture(full ? "full" : "smoke", storage.id(), workDir), samples);
         if (opts.containsKey("output")) {
-            Path out = Path.of(opts.get("output")).toAbsolutePath();
+            final Path out;
+            out = Path.of(opts.get("output")).toAbsolutePath();
             Files.createDirectories(out.getParent());
             Files.writeString(out, report.toPrettyJson());
             System.out.println("결과 파일: " + out);
@@ -96,8 +114,8 @@ public final class BenchMain {
             System.out.println(full ? "인메모리 결과는 진단값이다. 임계값을 적용하지 않는다." : "스모크 실행이 끝났다. 임계값은 적용하지 않는다.");
             return;
         }
-        Map<String, Double> baseline = loadBaseline(opts.get("baseline"));
-        List<Comparator.Check> checks = Comparator.compare(samples, baseline);
+        baseline = loadBaseline(opts.get("baseline"));
+        checks = Comparator.compare(samples, baseline);
         System.out.println();
         System.out.print(Comparator.render(checks));
         System.out.println();
@@ -111,7 +129,7 @@ public final class BenchMain {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
-    private static Map<String, Double> loadBaseline(String path) throws IOException {
+    private static Map<String, Double> loadBaseline(final String path) throws IOException {
         if (path == null || !Files.exists(Path.of(path))) {
             System.out.println("기준선 파일이 없어 하한만 검사한다: " + path);
             return Map.of();
@@ -119,12 +137,14 @@ public final class BenchMain {
         return Report.fromJson(Files.readString(Path.of(path))).entries();
     }
 
-    private static Map<String, String> parse(String[] args) {
-        Map<String, String> m = new LinkedHashMap<>();
+    private static Map<String, String> parse(final String[] args) {
+        final Map<String, String> m;
+        m = new LinkedHashMap<>();
         for (int i = 0; i < args.length; i++) {
+            final String name;
             if (!args[i].startsWith("--") || i + 1 >= args.length)
                 throw new IllegalArgumentException("잘못된 인자: " + args[i]);
-            String name = args[i].substring(2);
+            name = args[i].substring(2);
             i++;
             m.put(name, args[i]);
         }

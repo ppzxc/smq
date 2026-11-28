@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,41 +22,56 @@ class StorageFactoryTest {
     @TempDir
     Path dir;
 
-    private static void publishOne(Storage s) {
+    private static void publishOne(final Storage s) {
         s.declare("extra", QueueOptions.defaults());
         s.publish("extra", List.of(new NewMessage(new byte[] {1}, Map.of())), InstantSource.fixed(T0));
     }
 
     @Test
-    void v1_견본_factory로_같은_디렉터리를_다시_열어도_데이터가_유지된다() {
+    @DisplayName("v1 견본 factory로 같은 디렉터리를 다시 열어도 데이터가 유지된다")
+    void dataIsRetainedEvenIfTheSameDirectoryIsReopenedWithTheV1SampleFactory() {
         try (Storage first =
                 StorageFactory.sqliteV1Sample(Durability.PROCESS_CRASH).open(dir)) {
             publishOne(first);
         }
         try (Storage second =
                 StorageFactory.sqliteV1Sample(Durability.PROCESS_CRASH).open(dir)) {
-            assertEquals(1, second.counts("extra").ready());
+            assertEquals(1, second.counts("extra").ready(), "Ready should match the expected value.");
         }
     }
 
     @Test
-    void 새_SQLite_factory로_같은_디렉터리를_다시_열어도_데이터가_유지된다() {
+    @DisplayName("새 SQLite factory로 같은 디렉터리를 다시 열어도 데이터가 유지된다")
+    void evenIfYouReopenTheSameDirectoryWithANewSQLiteFactoryTheDataIsRetained() {
         try (Storage first = StorageFactory.sqliteNew(Durability.PROCESS_CRASH).open(dir)) {
             publishOne(first);
         }
         try (Storage second = StorageFactory.sqliteNew(Durability.PROCESS_CRASH).open(dir)) {
-            assertEquals(1, second.counts("extra").ready());
+            assertEquals(1, second.counts("extra").ready(), "Ready should match the expected value.");
         }
     }
 
     @Test
-    void copyV1Sample은_이미_있는_파일을_견본으로_덮어쓴다() throws Exception {
-        Path target = dir.resolve("smq.db");
+    @DisplayName("copyV1Sample은 이미 있는 파일을 견본으로 덮어쓴다")
+    void copyv1sampleOverwritesAnExistingFileWithASample() throws Exception {
+        final Path target;
+        final long sampleSize;
+        target = dir.resolve("smq.db");
         Files.writeString(target, "not a database");
         StorageFactory.copyV1Sample(target);
-        long sampleSize = Files.size(target);
-        assertNotEquals("not a database".length(), sampleSize);
+        sampleSize = Files.size(target);
+        assertNotEquals("not a database".length(), sampleSize, "Sample size should differ from the unexpected value.");
+    }
+
+    @Test
+    @DisplayName("copyV1Sample은 견본을 다시 복사해도 크기가 같다")
+    void copyingV1SampleAgainPreservesItsSize() throws Exception {
+        final Path target;
+        final long sampleSize;
+        target = dir.resolve("smq.db");
         StorageFactory.copyV1Sample(target);
-        assertEquals(sampleSize, Files.size(target));
+        sampleSize = Files.size(target);
+        StorageFactory.copyV1Sample(target);
+        assertEquals(sampleSize, Files.size(target), "Size should match the expected value.");
     }
 }

@@ -10,15 +10,15 @@ final class BuilderSettings {
     private InstantSource clock = InstantSource.system();
     private Duration leaseDuration = Duration.ofSeconds(30);
 
-    void clock(InstantSource clock) {
+    void clock(final InstantSource clock) {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    void leaseDuration(Duration leaseDuration) {
+    void leaseDuration(final Duration leaseDuration) {
         this.leaseDuration = Validation.positive(leaseDuration, "leaseDuration");
     }
 
-    Smq open(Storage storage) {
+    Smq open(final Storage storage) {
         return new DefaultSmq(storage, clock, leaseDuration);
     }
 }

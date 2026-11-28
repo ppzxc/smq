@@ -13,13 +13,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class ModuleDescriptorTest {
 
     private static ModuleDescriptor descriptor() throws IOException, URISyntaxException {
 
-        Path root = Path.of(
+        final Path root;
+        root = Path.of(
                 Smq.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         if (Files.isDirectory(root)) {
             try (InputStream in = Files.newInputStream(root.resolve("module-info.class"))) {
@@ -33,36 +35,65 @@ class ModuleDescriptorTest {
     }
 
     @Test
-    void 공개_패키지_하나만_export한다() throws IOException, URISyntaxException {
-        ModuleDescriptor d = descriptor();
-
-        assertEquals("io.github.ppzxc.smq", d.name());
-        Set<String> exported =
-                d.exports().stream().map(ModuleDescriptor.Exports::source).collect(Collectors.toSet());
-        assertEquals(Set.of("io.github.ppzxc.smq"), exported);
-        assertTrue(d.exports().stream().noneMatch(ModuleDescriptor.Exports::isQualified), "한정 export는 두지 않는다");
+    @DisplayName("모듈 이름은 io.github.ppzxc.smq다")
+    void moduleNameIsSmq() throws IOException, URISyntaxException {
+        assertEquals("io.github.ppzxc.smq", descriptor().name(), "The module name should identify smq.");
     }
 
     @Test
-    void 필요한_module은_sql과_sqlite_jdbc와_정적_전이_jspecify다() throws IOException, URISyntaxException {
-        Set<ModuleDescriptor.Requires> declared = descriptor().requires().stream()
+    @DisplayName("공개 패키지 하나만 export한다")
+    void onlyOnePublicPackageIsExported() throws IOException, URISyntaxException {
+        final Set<String> exported;
+        exported = descriptor().exports().stream()
+                .map(ModuleDescriptor.Exports::source)
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("io.github.ppzxc.smq"), exported, "Only the public package should be exported.");
+    }
+
+    @Test
+    @DisplayName("한정 export는 두지 않는다")
+    void exportsAreNotQualified() throws IOException, URISyntaxException {
+        assertTrue(
+                descriptor().exports().stream().noneMatch(ModuleDescriptor.Exports::isQualified),
+                "Exports should be available to all modules.");
+    }
+
+    @Test
+    @DisplayName("필요한 module은 sql과 sqlite jdbc와 정적 전이 jspecify다")
+    void requiredModulesIncludeSqlSqliteJdbcAndStaticTransitiveJspecify() throws IOException, URISyntaxException {
+        final Set<ModuleDescriptor.Requires> declared;
+        declared = descriptor().requires().stream()
                 .filter(r -> !r.modifiers().contains(ModuleDescriptor.Requires.Modifier.MANDATED))
                 .collect(Collectors.toSet());
 
         assertEquals(
                 Set.of("java.sql", "org.xerial.sqlitejdbc", "org.jspecify"),
-                declared.stream().map(ModuleDescriptor.Requires::name).collect(Collectors.toSet()));
+                declared.stream().map(ModuleDescriptor.Requires::name).collect(Collectors.toSet()),
+                "Declared should match the expected value.");
+    }
 
-        ModuleDescriptor.Requires jspecify = declared.stream()
+    @Test
+    @DisplayName("jspecify는 정적 전이 의존성이다")
+    void jspecifyIsStaticAndTransitive() throws IOException, URISyntaxException {
+        final ModuleDescriptor.Requires jspecify;
+        jspecify = descriptor().requires().stream()
                 .filter(r -> r.name().equals("org.jspecify"))
                 .findFirst()
                 .orElseThrow();
         assertEquals(
                 Set.of(ModuleDescriptor.Requires.Modifier.STATIC, ModuleDescriptor.Requires.Modifier.TRANSITIVE),
-                jspecify.modifiers());
+                jspecify.modifiers(),
+                "Modifiers should match the expected value.");
+    }
 
-        Set<ModuleDescriptor.Requires> runtimeRequires =
-                declared.stream().filter(r -> !r.name().equals("org.jspecify")).collect(Collectors.toSet());
+    @Test
+    @DisplayName("런타임 의존성은 전이되지 않는다")
+    void runtimeRequirementsAreNotTransitive() throws IOException, URISyntaxException {
+        final Set<ModuleDescriptor.Requires> runtimeRequires;
+        runtimeRequires = descriptor().requires().stream()
+                .filter(r -> !r.modifiers().contains(ModuleDescriptor.Requires.Modifier.MANDATED))
+                .filter(r -> !r.name().equals("org.jspecify"))
+                .collect(Collectors.toSet());
         assertTrue(
                 runtimeRequires.stream()
                         .noneMatch(r -> r.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE)),

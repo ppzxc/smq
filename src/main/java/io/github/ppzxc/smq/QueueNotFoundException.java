@@ -4,7 +4,7 @@ public class QueueNotFoundException extends SmqException {
 
     private final String queue;
 
-    public QueueNotFoundException(String queue) {
+    public QueueNotFoundException(final String queue) {
         super("queue not found: " + queue);
         this.queue = queue;
     }

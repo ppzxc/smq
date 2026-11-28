@@ -20,15 +20,18 @@ final class SqliteSchema {
 
     private final Map<Integer, UpgradeStep> upgrades;
 
-    SqliteSchema(int targetVersion, Map<Integer, UpgradeStep> upgrades) {
+    SqliteSchema(final int targetVersion, final Map<Integer, UpgradeStep> upgrades) {
         this.targetVersion = targetVersion;
         this.upgrades = Map.copyOf(upgrades);
     }
 
-    int establish(Connection c) throws SQLException {
-        int applicationId = pragmaInt(c, "application_id");
-        int version = pragmaInt(c, "user_version");
-        boolean empty = schemaIsEmpty(c);
+    int establish(final Connection c) throws SQLException {
+        final int applicationId;
+        final int version;
+        final boolean empty;
+        applicationId = pragmaInt(c, "PRAGMA application_id", "application_id");
+        version = pragmaInt(c, "PRAGMA user_version", "user_version");
+        empty = schemaIsEmpty(c);
         if (empty && applicationId == 0) {
             createV1(c);
             upgrade(c, 1);
@@ -46,7 +49,7 @@ final class SqliteSchema {
         return targetVersion;
     }
 
-    private static boolean schemaIsEmpty(Connection c) throws SQLException {
+    private static boolean schemaIsEmpty(final Connection c) throws SQLException {
         try (Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("SELECT count(*) FROM sqlite_schema")) {
             if (!rs.next()) {
@@ -56,8 +59,8 @@ final class SqliteSchema {
         }
     }
 
-    static void configureNewDatabase(Connection c, boolean autoVacuum) throws SQLException {
-        if (pragmaInt(c, "application_id") != 0) {
+    static void configureNewDatabase(final Connection c, final boolean autoVacuum) throws SQLException {
+        if (pragmaInt(c, "PRAGMA application_id", "application_id") != 0) {
             return;
         }
         try (Statement s = c.createStatement();
@@ -74,7 +77,7 @@ final class SqliteSchema {
         }
     }
 
-    private static void createV1(Connection c) throws SQLException {
+    private static void createV1(final Connection c) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute("""
                     CREATE TABLE queue (
@@ -104,7 +107,7 @@ final class SqliteSchema {
         }
     }
 
-    static void upgradeV1ToV2(Connection c) throws SQLException {
+    static void upgradeV1ToV2(final Connection c) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute("""
                     CREATE INDEX message_stored_ready ON message(queue_id, id)
@@ -124,7 +127,7 @@ final class SqliteSchema {
         }
     }
 
-    static void ensureDelayedIdIndex(Connection c) throws SQLException {
+    static void ensureDelayedIdIndex(final Connection c) throws SQLException {
         try (Statement s = c.createStatement()) {
             s.execute("""
                     CREATE INDEX IF NOT EXISTS message_delayed_id ON message(queue_id, id)
@@ -136,9 +139,10 @@ final class SqliteSchema {
         }
     }
 
-    private void upgrade(Connection c, int from) throws SQLException {
+    private void upgrade(final Connection c, final int from) throws SQLException {
         for (int version = from; version < targetVersion; version++) {
-            UpgradeStep step = upgrades.get(version);
+            final UpgradeStep step;
+            step = upgrades.get(version);
             if (step == null) {
                 throw unsupported(from);
             }
@@ -149,21 +153,21 @@ final class SqliteSchema {
         }
     }
 
-    private IncompatibleStorageException unsupported(int found) {
+    private IncompatibleStorageException unsupported(final int found) {
         return versionMismatch("unsupported schema version", found, targetVersion);
     }
 
-    static IncompatibleStorageException versionMismatch(String what, int found, int supported) {
+    static IncompatibleStorageException versionMismatch(final String what, final int found, final int supported) {
         return new IncompatibleStorageException(what + ": found " + found + ", supported " + supported);
     }
 
-    IncompatibleStorageException notSmq(String reason) {
+    IncompatibleStorageException notSmq(final String reason) {
         return new IncompatibleStorageException("not an smq database (" + reason + "), supported " + targetVersion);
     }
 
-    static int pragmaInt(Connection c, String name) throws SQLException {
+    static int pragmaInt(final Connection c, final String sql, final String name) throws SQLException {
         try (Statement s = c.createStatement();
-                ResultSet rs = s.executeQuery("PRAGMA " + name)) {
+                ResultSet rs = s.executeQuery(sql)) {
             if (!rs.next()) {
                 throw new SQLException("pragma row missing: " + name);
             }

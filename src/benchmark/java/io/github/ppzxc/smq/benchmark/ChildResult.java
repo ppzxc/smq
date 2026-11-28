@@ -11,7 +11,8 @@ import java.util.Map;
 record ChildResult(String role, long messages, long elapsedNanos, long[] latenciesMicros) {
 
     String toJson() {
-        Map<String, Object> m = new LinkedHashMap<>();
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("role", role);
         m.put("messages", messages);
         m.put("elapsedNanos", elapsedNanos);
@@ -19,10 +20,13 @@ record ChildResult(String role, long messages, long elapsedNanos, long[] latenci
         return Json.write(m);
     }
 
-    static ChildResult fromJson(String json) {
-        Map<?, ?> m = (Map<?, ?>) Json.parse(json);
-        List<?> l = (List<?>) m.get("latenciesMicros");
-        long[] lat = new long[l.size()];
+    static ChildResult fromJson(final String json) {
+        final Map<?, ?> m;
+        final List<?> l;
+        final long[] lat;
+        m = (Map<?, ?>) Json.parse(json);
+        l = (List<?>) m.get("latenciesMicros");
+        lat = new long[l.size()];
         for (int i = 0; i < lat.length; i++) lat[i] = ((Double) l.get(i)).longValue();
         return new ChildResult(
                 (String) m.get("role"),

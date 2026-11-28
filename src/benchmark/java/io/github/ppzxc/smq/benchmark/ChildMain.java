@@ -17,17 +17,22 @@ public final class ChildMain {
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.SystemPrintln")
-    public static void main(String[] args) throws Exception {
+    public static void main(final String[] args) throws Exception {
+        final RunSpec spec;
+        final Role role;
+        final Path db;
+        final long startAt;
+        final ChildResult result;
         if (args.length != 4) {
             System.err.println("사용법: ChildMain <specArg> <role> <dbPath> <startAtEpochMs>");
             System.exit(2);
         }
         ModuleGuard.requireSmqModule("자식 JVM");
-        RunSpec spec = RunSpec.fromArg(args[0]);
-        Role role = Role.valueOf(args[1]);
-        Path db = Path.of(args[2]);
-        long startAt = Long.parseLong(args[3]);
-        ChildResult result;
+        spec = RunSpec.fromArg(args[0]);
+        role = Role.valueOf(args[1]);
+        db = Path.of(args[2]);
+        startAt = Long.parseLong(args[3]);
+
         try (Smq smq = Workload.open(spec, db)) {
             // 인메모리는 JVM끼리 공유되지 않으므로 이 JVM이 직접 채운다. SQLite는 부모가 미리 채웠다.
             if (spec.storage() == Storage.MEMORY) Workload.prepare(smq, spec);

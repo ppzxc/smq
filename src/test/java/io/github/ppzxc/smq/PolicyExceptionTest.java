@@ -11,14 +11,26 @@ import org.junit.jupiter.api.Test;
 
 class PolicyExceptionTest {
     @Test
-    void policyExceptionHasClassRetentionAndCanRepeatOnDeclarations() {
+    void policyExceptionHasClassRetention() {
         assertEquals(
                 RetentionPolicy.CLASS,
-                PolicyException.class.getAnnotation(Retention.class).value());
+                PolicyException.class.getAnnotation(Retention.class).value(),
+                "Annotation should match the expected value.");
+    }
+
+    @Test
+    void policyExceptionAppliesToDeclarations() {
         assertEquals(
                 java.util.Set.of(ElementType.TYPE, ElementType.METHOD, ElementType.CONSTRUCTOR, ElementType.FIELD),
                 java.util.Set.of(
-                        PolicyException.class.getAnnotation(Target.class).value()));
-        assertNotNull(PolicyException.class.getAnnotation(java.lang.annotation.Repeatable.class));
+                        PolicyException.class.getAnnotation(Target.class).value()),
+                "The annotation targets should match the expected declarations.");
+    }
+
+    @Test
+    void policyExceptionCanBeRepeated() {
+        assertNotNull(
+                PolicyException.class.getAnnotation(java.lang.annotation.Repeatable.class),
+                "Annotation should be present.");
     }
 }

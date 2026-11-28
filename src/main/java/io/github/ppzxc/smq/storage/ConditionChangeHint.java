@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** 락과 {@link Condition}으로 구현한 변경 힌트. */
 public final class ConditionChangeHint implements ChangeHint {
 
     private final ReentrantLock lock = new ReentrantLock();
@@ -22,8 +21,9 @@ public final class ConditionChangeHint implements ChangeHint {
     }
 
     @Override
-    public void await(long seen, Duration timeout) throws InterruptedException {
-        long nanos = timeout.toNanos();
+    public void await(final long seen, final Duration timeout) throws InterruptedException {
+        long nanos;
+        nanos = timeout.toNanos();
         lock.lockInterruptibly();
         try {
             while (version == seen && nanos > 0) {

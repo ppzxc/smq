@@ -32,7 +32,7 @@ record Delivery(
 
         private final int spoolCode;
 
-        Action(int spoolCode) {
+        Action(final int spoolCode) {
             this.spoolCode = spoolCode;
         }
 
@@ -40,7 +40,7 @@ record Delivery(
             return spoolCode;
         }
 
-        static Action fromSpoolCode(int code) throws IOException {
+        static Action fromSpoolCode(final int code) throws IOException {
             return switch (code) {
                 case 0 -> ACK;
                 case 1 -> NACK;
@@ -62,19 +62,19 @@ record Delivery(
 
         static final Settle NONE = new Settle(Action.NONE, false, 0, 0);
 
-        static Settle ack(long atMillis) {
+        static Settle ack(final long atMillis) {
             return new Settle(Action.ACK, true, atMillis, 0);
         }
 
-        static Settle nack(long atMillis, long delayMillis) {
+        static Settle nack(final long atMillis, final long delayMillis) {
             return new Settle(Action.NACK, true, atMillis, delayMillis);
         }
 
-        static Settle reject(long atMillis) {
+        static Settle reject(final long atMillis) {
             return new Settle(Action.REJECT, true, atMillis, 0);
         }
 
-        boolean applied(Action a) {
+        boolean applied(final Action a) {
             return applied && action == a;
         }
     }

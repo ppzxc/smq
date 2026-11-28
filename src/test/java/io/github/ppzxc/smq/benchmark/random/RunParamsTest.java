@@ -3,213 +3,400 @@ package io.github.ppzxc.smq.benchmark.random;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.github.ppzxc.smq.Durability;
-import io.github.ppzxc.smq.PolicyException;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class RunParamsTest {
 
     private static final Limits FULL = Limits.full(10_000);
 
     @Test
-    void sameSeedGivesSameParams() {
-        assertEquals(RunParams.fromSeed(42, FULL), RunParams.fromSeed(42, FULL));
-        assertNotEquals(RunParams.fromSeed(42, FULL), RunParams.fromSeed(43, FULL));
+    void sameSeedProducesSameParameters() {
+        assertEquals(
+                RunParams.fromSeed(42, FULL),
+                RunParams.fromSeed(42, FULL),
+                "From seed should match the expected value.");
     }
 
     @Test
-    @PolicyException(
-            rule = "PMD.CognitiveComplexity",
-            reason = "This seed loop checks independent specification ranges and aggregate distributions.",
-            approvedBy = "ppzxc",
-            reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.CognitiveComplexity")
-    void everySeedStaysInsideTheSpecTable() {
-        int single = 0;
-        int withMax = 0;
-        int withPrefill = 0;
-        Set<Durability> durabilities = EnumSet.noneOf(Durability.class);
+    void differentSeedsProduceDifferentParameters() {
+        assertNotEquals(
+                RunParams.fromSeed(42, FULL),
+                RunParams.fromSeed(43, FULL),
+                "From seed should differ from the unexpected value.");
+    }
+
+    private static Arguments parameterRange(final String name, final Predicate<RunParams> valid) {
+        return Arguments.of(name, valid);
+    }
+
+    private static Stream<Arguments> parameterRanges() {
+        return Stream.of(
+                parameterRange("message bytes", p -> p.maxMessageBytes() >= 0 && p.maxMessageBytes() <= 65_536),
+                parameterRange("publish batch", p -> p.publishBatch() >= 1 && p.publishBatch() <= 500),
+                parameterRange("chunk size", p -> p.chunkSize() >= 1 && p.chunkSize() <= 500),
+                parameterRange("producers", p -> p.producers() >= 1 && p.producers() <= 4),
+                parameterRange("consumers", p -> p.consumers() >= 1 && p.consumers() <= 4),
+                parameterRange(
+                        "prefill depth",
+                        p -> p.prefillDepth() == 0 || (p.prefillDepth() >= 1 && p.prefillDepth() <= 100_000)),
+                parameterRange("ACK ratio", p -> p.ackRatio() > 0.5),
+                parameterRange(
+                        "settlement ratios",
+                        p -> Math.abs(1.0 - (p.ackRatio() + p.nackRatio() + p.rejectRatio() + p.noneRatio())) <= 1e-9),
+                parameterRange("lease duration", p -> p.leaseMillis() >= 200 && p.leaseMillis() <= 10_000),
+                parameterRange("publish delay ratio", p -> p.publishDelayRatio() >= 0 && p.publishDelayRatio() <= 0.3),
+                parameterRange("NACK delay ratio", p -> p.nackDelayRatio() >= 0 && p.nackDelayRatio() <= 0.3),
+                parameterRange(
+                        "delay limits", p -> p.publishDelayMaxMillis() <= 2_000 && p.nackDelayMaxMillis() <= 2_000),
+                parameterRange("max deliveries", p -> p.maxDeliveries() >= 0 && p.maxDeliveries() <= 5),
+                parameterRange("pull wait", p -> p.pullWaitMillis() >= 0 && p.pullWaitMillis() <= 500),
+                parameterRange("slow chunk ratio", p -> p.slowChunkRatio() <= 0.3));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("parameterRanges")
+    void everySeedStaysWithinParameterRange(final String name, final Predicate<RunParams> valid) {
         for (long seed = 0; seed < 3_000; seed++) {
-            RunParams p = RunParams.fromSeed(seed, FULL);
-            assertTrue(p.maxMessageBytes() >= 0 && p.maxMessageBytes() <= 65_536, "size " + seed);
-            assertTrue(p.publishBatch() >= 1 && p.publishBatch() <= 500);
-            assertTrue(p.chunkSize() >= 1 && p.chunkSize() <= 500);
-            assertTrue(p.producers() >= 1 && p.producers() <= 4);
-            assertTrue(p.consumers() >= 1 && p.consumers() <= 4);
-            assertTrue(p.prefillDepth() == 0 || p.prefillDepth() >= 1 && p.prefillDepth() <= 100_000);
-            assertTrue(p.ackRatio() > 0.5, "ACK가 다수");
-            assertEquals(1.0, p.ackRatio() + p.nackRatio() + p.rejectRatio() + p.noneRatio(), 1e-9);
-            assertTrue(p.leaseMillis() >= 200 && p.leaseMillis() <= 10_000);
-            assertTrue(p.publishDelayRatio() >= 0 && p.publishDelayRatio() <= 0.3);
-            assertTrue(p.nackDelayRatio() >= 0 && p.nackDelayRatio() <= 0.3);
-            assertTrue(p.publishDelayMaxMillis() <= 2_000 && p.nackDelayMaxMillis() <= 2_000);
-            assertTrue(p.maxDeliveries() >= 0 && p.maxDeliveries() <= 5);
-            assertTrue(p.pullWaitMillis() >= 0 && p.pullWaitMillis() <= 500);
-            assertTrue(p.slowChunkRatio() <= 0.3);
-            durabilities.add(p.durability());
-            single += p.singleActiveConsumer() ? 1 : 0;
-            withMax += p.maxDeliveries() > 0 ? 1 : 0;
-            withPrefill += p.prefillDepth() > 0 ? 1 : 0;
+            assertTrue(valid.test(RunParams.fromSeed(seed, FULL)), name + " should be valid for seed " + seed);
         }
-        assertEquals(EnumSet.allOf(Durability.class), durabilities);
-        assertTrue(single > 450 && single < 750, "단일 활성 컨슈머는 약 20%: " + single);
-        assertTrue(withMax > 1_200 && withMax < 1_800, "최대 전달 횟수는 약 절반: " + withMax);
-        assertTrue(withPrefill > 0 && withPrefill < 3_000);
+    }
+
+    private record SeedCoverage(Set<Durability> durabilities, int single, int withMax, int withPrefill) {}
+
+    private static SeedCoverage seedCoverage() {
+        int single;
+        int withMax;
+        int withPrefill;
+        final Set<Durability> durabilities;
+        single = 0;
+        withMax = 0;
+        withPrefill = 0;
+        durabilities = EnumSet.noneOf(Durability.class);
+        for (long seed = 0; seed < 3_000; seed++) {
+            final RunParams params;
+            params = RunParams.fromSeed(seed, FULL);
+            durabilities.add(params.durability());
+            single += params.singleActiveConsumer() ? 1 : 0;
+            withMax += params.maxDeliveries() > 0 ? 1 : 0;
+            withPrefill += params.prefillDepth() > 0 ? 1 : 0;
+        }
+        return new SeedCoverage(durabilities, single, withMax, withPrefill);
     }
 
     @Test
-    void 고정_속도_모드는_목표_속도를_싣고_운영에_가까운_매개변수로_바꾼다() {
-        Limits soak = FULL.withRate(500);
+    void seedsCoverAllDurabilities() {
+        assertEquals(
+                EnumSet.allOf(Durability.class),
+                seedCoverage().durabilities(),
+                "Seeds should cover all durability levels.");
+    }
+
+    @Test
+    void seedsSelectSingleActiveConsumerAtExpectedFrequency() {
+        final int single;
+        single = seedCoverage().single();
+        assertTrue(single > 450 && single < 750, "Single-active selection should be close to 20%: " + single);
+    }
+
+    @Test
+    void seedsSelectMaximumDeliveriesAtExpectedFrequency() {
+        final int withMax;
+        withMax = seedCoverage().withMax();
+        assertTrue(
+                withMax > 1_200 && withMax < 1_800,
+                "Maximum deliveries should be selected about half the time: " + withMax);
+    }
+
+    @Test
+    void seedsCoverPrefilledAndEmptyQueues() {
+        final int withPrefill;
+        withPrefill = seedCoverage().withPrefill();
+        assertTrue(withPrefill > 0 && withPrefill < 3_000, "Seeds should include both prefilled and empty queues.");
+    }
+
+    private static long fixedRateThreadShare(final RunParams params) {
+        return Math.max(1, (500 + params.producers() - 1) / params.producers());
+    }
+
+    private static long fixedRateMinimumBatch(final RunParams params) {
+        return Math.min(RunParams.SOAK_MIN_PUBLISH_BATCH, fixedRateThreadShare(params));
+    }
+
+    private static Stream<Arguments> fixedRateParameterRanges() {
+        return Stream.of(
+                parameterRange("target rate", p -> p.targetRate() == 500),
+                parameterRange("publish delay", p -> p.publishDelayRatio() == 0),
+                parameterRange("slow chunks", p -> p.slowChunkRatio() == 0),
+                parameterRange("NACK delay", p -> p.nackDelayRatio() == 0),
+                parameterRange("single consumer", p -> !p.singleActiveConsumer()),
+                parameterRange("chunk size", p -> p.chunkSize() >= RunParams.SOAK_MIN_CHUNK_SIZE),
+                parameterRange("prefill depth", p -> p.prefillDepth() == FULL.maxDepth()),
+                parameterRange("message bytes", p -> p.maxMessageBytes() <= 1024),
+                parameterRange("minimum batch", p -> p.publishBatch() >= fixedRateMinimumBatch(p)),
+                parameterRange(
+                        "maximum batch",
+                        p -> p.publishBatch()
+                                <= Math.max(
+                                        fixedRateMinimumBatch(p),
+                                        fixedRateThreadShare(p) / RunParams.SOAK_BATCH_WINDOW_DIVISOR)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("fixedRateParameterRanges")
+    @DisplayName("고정 속도 모드는 운영에 가까운 매개변수를 사용한다")
+    void fixedRateParametersMatchSpec(final String name, final Predicate<RunParams> valid) {
+        final Limits soak;
+        soak = FULL.withRate(500);
         for (long seed = 0; seed < 300; seed++) {
-            RunParams p = RunParams.fromSeed(seed, soak);
-            assertEquals(500, p.targetRate(), "seed " + seed);
-            assertEquals(0, p.publishDelayRatio(), 0, "지연 발행 없음");
-            assertEquals(0, p.slowChunkRatio(), 0, "느린 청크 없음");
-            assertEquals(0, p.nackDelayRatio(), 0, "NACK 지연 없음");
-            assertFalse(p.singleActiveConsumer(), "단일 활성 큐는 청크 하나가 리스 만료까지 큐를 막아 초당 수십 건이 한계다");
-            assertTrue(
-                    p.chunkSize() >= RunParams.SOAK_MIN_CHUNK_SIZE, "컨슈머 스레드 하나가 500/s를 받을 만큼의 청크: " + p.chunkSize());
-            assertEquals(FULL.maxDepth(), p.prefillDepth(), "한도의 깊이 상한까지 미리 채워 쌓인 큐에서 시작한다");
-            assertTrue(p.maxMessageBytes() <= 1024, "메시지 크기 상한 1KB");
-            long perThread = Math.max(1, (500 + p.producers() - 1) / p.producers());
-            long lowest = Math.min(RunParams.SOAK_MIN_PUBLISH_BATCH, perThread);
-            assertTrue(p.publishBatch() >= lowest, "배치는 건당에 가깝지 않게 20 이상(스레드 몫이 작으면 그 몫): " + p.publishBatch());
-            assertTrue(
-                    p.publishBatch() <= Math.max(lowest, perThread / RunParams.SOAK_BATCH_WINDOW_DIVISOR),
-                    "배치는 스레드 몫의 0.25초 분량 이하: " + p.publishBatch());
+            assertTrue(valid.test(RunParams.fromSeed(seed, soak)), name + " should be valid for seed " + seed);
         }
     }
 
     @Test
-    void 속도가_없으면_기존_매개변수와_같고_목표_속도는_0이다() {
+    @DisplayName("속도가 없으면 기존 매개변수와 같고 목표 속도는 0이다")
+    void ifThereIsNoSpeedItIsTheSameAsTheExistingParametersAndTheTargetSpeedIs0() {
         for (long seed = 0; seed < 50; seed++) {
-            assertEquals(0, RunParams.fromSeed(seed, FULL).targetRate());
+            assertEquals(
+                    0, RunParams.fromSeed(seed, FULL).targetRate(), "Target rate should match the expected value.");
         }
     }
 
     @Test
-    void 같은_시드와_속도는_같은_매개변수다() {
-        assertEquals(RunParams.fromSeed(7, FULL.withRate(500)), RunParams.fromSeed(7, FULL.withRate(500)));
+    @DisplayName("같은 시드와 속도는 같은 매개변수다")
+    void theSameSeedAndSpeedAreTheSameParameters() {
+        assertEquals(
+                RunParams.fromSeed(7, FULL.withRate(500)),
+                RunParams.fromSeed(7, FULL.withRate(500)),
+                "From seed should match the expected value.");
     }
 
-    @Test
-    void smokeLimitsCapDepthAndLease() {
+    private static Stream<Arguments> smokeParameterRanges() {
+        return Stream.of(
+                parameterRange("prefill depth", p -> p.prefillDepth() <= 2_000),
+                parameterRange("lease duration", p -> p.leaseMillis() <= 1_000),
+                parameterRange("load duration", p -> p.loadMillis() == 2_000));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("smokeParameterRanges")
+    void smokeLimitsBoundParameters(final String name, final Predicate<RunParams> valid) {
         for (long seed = 0; seed < 500; seed++) {
-            RunParams p = RunParams.fromSeed(seed, Limits.smoke(2_000));
-            assertTrue(p.prefillDepth() <= 2_000);
-            assertTrue(p.leaseMillis() <= 1_000);
-            assertEquals(2_000, p.loadMillis());
+            assertTrue(
+                    valid.test(RunParams.fromSeed(seed, Limits.smoke(2_000))),
+                    name + " should be valid for seed " + seed);
         }
     }
 
     @Test
     void prefillIsBoundedByEstimatedBytes() {
         for (long seed = 0; seed < 3_000; seed++) {
-            RunParams p = RunParams.fromSeed(seed, FULL);
-            assertTrue((long) p.prefillDepth() * (p.maxMessageBytes() / 4 + 64) <= 256L * 1024 * 1024);
+            final RunParams p;
+            p = RunParams.fromSeed(seed, FULL);
+            assertTrue(
+                    (long) p.prefillDepth() * (p.maxMessageBytes() / 4 + 64) <= 256L * 1024 * 1024,
+                    "Prefill depth should stay within the configured limit.");
         }
     }
 
     @Test
-    void describeListsEveryParameterForFailureReports() {
-        String text = RunParams.fromSeed(7, FULL).describe();
-        assertTrue(text.contains("seed = 7"));
-        assertTrue(text.contains("leaseMillis = "));
-        assertTrue(text.contains("singleActiveConsumer = "));
+    void descriptionIncludesSeed() {
+        final String text;
+        text = RunParams.fromSeed(7, FULL).describe();
+        assertTrue(text.contains("seed = 7"), "Text should contain the expected value.");
     }
 
     @Test
-    void smokeSeedsTogetherCoverTheInterestingAxes() {
-        boolean single = false;
-        boolean max = false;
-        boolean reject = false;
-        boolean publishDelay = false;
-        boolean nackDelay = false;
-        boolean prefill = false;
-        Set<Durability> durabilities = EnumSet.noneOf(Durability.class);
-        for (long seed : Options.SMOKE_SEEDS) {
-            RunParams p = RunParams.fromSeed(seed, Limits.smoke(Options.SMOKE_LOAD.toMillis()));
-            single |= p.singleActiveConsumer();
-            max |= p.maxDeliveries() > 0;
-            reject |= p.rejectRatio() > 0;
-            publishDelay |= p.publishDelayRatio() > 0 && p.publishDelayMaxMillis() > 0;
-            nackDelay |= p.nackDelayRatio() > 0 && p.nackDelayMaxMillis() > 0;
-            prefill |= p.prefillDepth() > 0;
-            durabilities.add(p.durability());
+    void descriptionIncludesLeaseDuration() {
+        final String text;
+        text = RunParams.fromSeed(7, FULL).describe();
+        assertTrue(text.contains("leaseMillis = "), "Text should contain the expected value.");
+    }
+
+    @Test
+    void descriptionIncludesSingleConsumerSetting() {
+        final String text;
+        text = RunParams.fromSeed(7, FULL).describe();
+        assertTrue(text.contains("singleActiveConsumer = "), "Text should contain the expected value.");
+    }
+
+    private static Stream<Arguments> smokeSeedAxes() {
+        return Stream.of(
+                parameterRange("single active consumer", RunParams::singleActiveConsumer),
+                parameterRange("max deliveries", p -> p.maxDeliveries() > 0),
+                parameterRange("reject", p -> p.rejectRatio() > 0),
+                parameterRange("publish delay", p -> p.publishDelayRatio() > 0 && p.publishDelayMaxMillis() > 0),
+                parameterRange("NACK delay", p -> p.nackDelayRatio() > 0 && p.nackDelayMaxMillis() > 0),
+                parameterRange("prefill", p -> p.prefillDepth() > 0));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("smokeSeedAxes")
+    void smokeSeedsCoverAxis(final String name, final Predicate<RunParams> matches) {
+        assertTrue(
+                Options.SMOKE_SEEDS.stream()
+                        .map(seed -> RunParams.fromSeed(seed, Limits.smoke(Options.SMOKE_LOAD.toMillis())))
+                        .anyMatch(matches),
+                "Smoke seeds should cover " + name + ".");
+    }
+
+    @Test
+    void smokeSeedsCoverAllDurabilities() {
+        final Set<Durability> durabilities;
+        durabilities = EnumSet.noneOf(Durability.class);
+        for (final long seed : Options.SMOKE_SEEDS) {
+            durabilities.add(RunParams.fromSeed(seed, Limits.smoke(Options.SMOKE_LOAD.toMillis()))
+                    .durability());
         }
-        assertTrue(single && max && reject && publishDelay && nackDelay && prefill);
-        assertEquals(EnumSet.allOf(Durability.class), durabilities);
+        assertEquals(EnumSet.allOf(Durability.class), durabilities, "Smoke seeds should cover all durability levels.");
+    }
+
+    private static Arguments fixedRateCase(final String name, final Limits limits, final Predicate<RunParams> valid) {
+        return Arguments.of(name, limits, valid);
+    }
+
+    private static Stream<Arguments> fixedRateOptionCases() {
+        return Stream.of(
+                fixedRateCase("default maximum bytes", FULL.withRate(500), p -> p.maxMessageBytes() == 1024),
+                fixedRateCase("default minimum bytes", FULL.withRate(500), p -> p.minMessageBytes() == 512),
+                fixedRateCase("default consumer pacing", FULL.withRate(500), p -> !p.consumerPaced()),
+                fixedRateCase(
+                        "configured maximum bytes",
+                        FULL.withRate(500).withMessageBytes(4096),
+                        p -> p.maxMessageBytes() == 4096),
+                fixedRateCase(
+                        "configured minimum bytes",
+                        FULL.withRate(500).withMessageBytes(4096),
+                        p -> p.minMessageBytes() == 2048),
+                fixedRateCase(
+                        "configured depth", FULL.withRate(500).withDepth(300_000), p -> p.prefillDepth() == 300_000),
+                fixedRateCase(
+                        "standing queue pacing", FULL.withRate(500).withStandingQueue(true), RunParams::consumerPaced),
+                fixedRateCase(
+                        "random mode pacing",
+                        FULL.withStandingQueue(true).withMessageBytes(4096),
+                        p -> !p.consumerPaced()),
+                fixedRateCase(
+                        "random mode minimum bytes",
+                        FULL.withStandingQueue(true).withMessageBytes(4096),
+                        p -> p.minMessageBytes() == 0));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("fixedRateOptionCases")
+    @DisplayName("메시지 크기와 깊이와 깊은 큐 옵션은 고정 속도 모드에서만 먹는다")
+    void fixedRateOptionsMatchSpec(final String name, final Limits limits, final Predicate<RunParams> valid) {
+        assertTrue(valid.test(RunParams.fromSeed(7, limits)), name + " should match the specification.");
+    }
+
+    private static RunParams largePrefillParameters() {
+        return RunParams.fromSeed(7, FULL.withRate(500).withMessageBytes(60_000).withDepth(5_000_000));
     }
 
     @Test
-    void 메시지_크기와_깊이와_깊은_큐_옵션은_고정_속도_모드에서만_먹는다() {
-        RunParams def = RunParams.fromSeed(7, FULL.withRate(500));
-        assertEquals(1024, def.maxMessageBytes());
-        assertEquals(512, def.minMessageBytes());
-        assertFalse(def.consumerPaced());
-
-        RunParams big = RunParams.fromSeed(7, FULL.withRate(500).withMessageBytes(4096));
-        assertEquals(4096, big.maxMessageBytes());
-        assertEquals(2048, big.minMessageBytes());
-
-        RunParams deep = RunParams.fromSeed(7, FULL.withRate(500).withDepth(300_000));
-        assertEquals(300_000, deep.prefillDepth(), "256MB 한도 안이면 요청한 깊이 그대로(평균 832바이트)");
-
-        RunParams standing = RunParams.fromSeed(7, FULL.withRate(500).withStandingQueue(true));
-        assertTrue(standing.consumerPaced());
-
-        RunParams random = RunParams.fromSeed(7, FULL.withStandingQueue(true).withMessageBytes(4096));
-        assertFalse(random.consumerPaced(), "목표 속도가 없으면 소비를 조절하지 않는다");
-        assertEquals(0, random.minMessageBytes());
+    @DisplayName("큰 메시지로 깊이를 늘려도 미리 채우기는 데이터 상한을 넘지 않는다")
+    void largePrefillStaysWithinByteLimit() {
+        final RunParams params;
+        final long average;
+        params = largePrefillParameters();
+        average = RunParams.avgMessageBytes(params.minMessageBytes(), params.maxMessageBytes());
+        assertTrue(
+                params.prefillDepth() * average <= 256L * 1024 * 1024,
+                "Estimated prefill bytes should stay within the limit.");
     }
 
     @Test
-    void 큰_메시지로_깊이를_늘려도_미리_채우기는_데이터_상한을_넘지_않는다() {
-        RunParams p = RunParams.fromSeed(
-                7, FULL.withRate(500).withMessageBytes(60_000).withDepth(5_000_000));
-        long avg = RunParams.avgMessageBytes(p.minMessageBytes(), p.maxMessageBytes());
-        assertTrue(p.prefillDepth() * avg <= 256L * 1024 * 1024, "미리 채운 데이터 추정: " + p.prefillDepth() * avg);
-        assertTrue(p.prefillDepth() > 0);
+    @DisplayName("큰 메시지의 미리 채우기 깊이는 양수다")
+    void largePrefillRemainsPositive() {
+        assertTrue(largePrefillParameters().prefillDepth() > 0, "Prefill depth should remain positive.");
+    }
+
+    private static RunParams oneByteParameters() {
+        return RunParams.fromSeed(7, FULL.withRate(500).withMessageBytes(1));
     }
 
     @Test
-    void 메시지_크기_1도_하한이_0이_되지_않아_로그_균등으로_돌아가지_않는다() {
-        RunParams p = RunParams.fromSeed(7, FULL.withRate(500).withMessageBytes(1));
-        assertEquals(1, p.maxMessageBytes());
-        assertEquals(1, p.minMessageBytes(), "0은 '하한 없음'(무작위 모드)이라는 뜻이라 쓰면 안 된다");
-        Script script = new Script(p);
+    @DisplayName("메시지 크기 1은 상한이 1이다")
+    void oneByteMessageHasMaximumSizeOne() {
+        assertEquals(1, oneByteParameters().maxMessageBytes(), "The maximum message size should be one byte.");
+    }
+
+    @Test
+    @DisplayName("메시지 크기 1은 하한이 1이다")
+    void oneByteMessageHasMinimumSizeOne() {
+        assertEquals(1, oneByteParameters().minMessageBytes(), "The minimum message size should be one byte.");
+    }
+
+    @Test
+    @DisplayName("메시지 크기 1은 로그 균등 분포로 돌아가지 않는다")
+    void oneByteMessagesStayOneByteAcrossSequences() {
+        final Script script;
+        script = new Script(oneByteParameters());
         for (long seq = 0; seq < 50; seq++) {
-            assertEquals(1, script.message(new Tag(7, seq)).message().payload().length);
+            assertEquals(
+                    1,
+                    script.message(new Tag(7, seq)).message().payload().length,
+                    "The message should contain one byte.");
         }
     }
 
     @Test
-    void 내구성을_주면_시드의_무작위_선택을_덮어쓰고_나머지_매개변수는_그대로다() {
-        for (Durability forced : Durability.values()) {
+    @DisplayName("지정한 내구성은 시드 선택을 덮어쓴다")
+    void forcedDurabilityOverridesSeedSelection() {
+        for (final Durability forced : Durability.values()) {
             for (long seed = 0; seed < 200; seed++) {
-                RunParams random = RunParams.fromSeed(seed, FULL);
-                RunParams p = RunParams.fromSeed(seed, FULL.withDurability(forced));
-                assertEquals(forced, p.durability(), "seed " + seed);
-                Map<String, Object> expected = new LinkedHashMap<>(random.toMap());
-                Map<String, Object> actual = new LinkedHashMap<>(p.toMap());
-                expected.remove("durability");
-                actual.remove("durability");
-                assertEquals(expected, actual, "내구성 말고는 같은 시드의 매개변수 그대로: " + seed);
+                assertEquals(
+                        forced,
+                        RunParams.fromSeed(seed, FULL.withDurability(forced)).durability(),
+                        "Forced durability should override seed " + seed);
             }
         }
-        RunParams soak = RunParams.fromSeed(7, FULL.withRate(500).withDurability(Durability.POWER_LOSS));
-        assertEquals(Durability.POWER_LOSS, soak.durability());
     }
 
     @Test
-    void 내구성을_주지_않으면_두_수준이_모두_나온다() {
-        Set<Durability> seen = EnumSet.noneOf(Durability.class);
+    @DisplayName("내구성을 지정해도 나머지 매개변수는 그대로다")
+    void forcedDurabilityPreservesOtherSeedParameters() {
+        for (final Durability forced : Durability.values()) {
+            for (long seed = 0; seed < 200; seed++) {
+                final Map<String, Object> expected;
+                final Map<String, Object> actual;
+                expected = new LinkedHashMap<>(RunParams.fromSeed(seed, FULL).toMap());
+                actual = new LinkedHashMap<>(
+                        RunParams.fromSeed(seed, FULL.withDurability(forced)).toMap());
+                expected.remove("durability");
+                actual.remove("durability");
+                assertEquals(expected, actual, "Other parameters should remain unchanged for seed " + seed);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("고정 속도 모드에서도 지정한 내구성을 사용한다")
+    void forcedDurabilityAppliesInFixedRateMode() {
+        assertEquals(
+                Durability.POWER_LOSS,
+                RunParams.fromSeed(7, FULL.withRate(500).withDurability(Durability.POWER_LOSS))
+                        .durability(),
+                "Fixed-rate mode should use the forced durability.");
+    }
+
+    @Test
+    @DisplayName("내구성을 주지 않으면 두 수준이 모두 나온다")
+    void ifDurabilityIsNotProvidedBothLevelsAppear() {
+        final Set<Durability> seen;
+        seen = EnumSet.noneOf(Durability.class);
         for (long seed = 0; seed < 50; seed++) {
             seen.add(RunParams.fromSeed(seed, FULL).durability());
         }
-        assertEquals(EnumSet.allOf(Durability.class), seen);
+        assertEquals(EnumSet.allOf(Durability.class), seen, "Seen should match the expected value.");
     }
 }

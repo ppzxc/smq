@@ -12,7 +12,7 @@ final class LatencyHistogram {
     private final int[] counts = new int[MAX_MILLIS + 1];
     private long total;
 
-    void add(long millis) {
+    void add(final long millis) {
         counts[(int) Math.min(Math.max(0, millis), MAX_MILLIS)]++;
         total++;
     }
@@ -22,12 +22,14 @@ final class LatencyHistogram {
     }
 
     /** nearest-rank 백분위수. 표본이 없으면 {@link IllegalStateException}. */
-    long percentile(int p) {
+    long percentile(final int p) {
+        final long rank;
+        long seen;
         if (total == 0) {
             throw new IllegalStateException("표본이 없다");
         }
-        long rank = Math.max(1, Math.min(total, (long) Math.ceil(p / 100.0 * total)));
-        long seen = 0;
+        rank = Math.max(1, Math.min(total, (long) Math.ceil(p / 100.0 * total)));
+        seen = 0;
         for (int ms = 0; ms <= MAX_MILLIS; ms++) {
             seen += counts[ms];
             if (seen >= rank) {

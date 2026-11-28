@@ -24,8 +24,9 @@ final class ChunkTable {
 
     private ChunkTable() {}
 
-    static String render(Map<String, Double> results) {
-        StringBuilder sb = new StringBuilder("청크 1 대 묶음 (빈 큐, msg/s)\n");
+    static String render(final Map<String, Double> results) {
+        final StringBuilder sb;
+        sb = new StringBuilder("청크 1 대 묶음 (빈 큐, msg/s)\n");
         sb.append(String.format(
                 Locale.getDefault(Locale.Category.FORMAT),
                 "%-18s %-6s %10s %10s %8s%n",
@@ -34,11 +35,14 @@ final class ChunkTable {
                 "청크 1",
                 "묶음",
                 "배수"));
-        for (Row row : ROWS) {
-            for (Pair p : PAIRS) {
-                Double single = results.get(Keys.throughput(key(row, p.single())));
-                Double batch = results.get(Keys.throughput(key(row, p.batch())));
-                String ratio = single == null || batch == null || single <= 0
+        for (final Row row : ROWS) {
+            for (final Pair p : PAIRS) {
+                final Double single;
+                final Double batch;
+                final String ratio;
+                single = results.get(Keys.throughput(key(row, p.single())));
+                batch = results.get(Keys.throughput(key(row, p.batch())));
+                ratio = single == null || batch == null || single <= 0
                         ? "-"
                         : String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1fx", batch / single);
                 sb.append(String.format(
@@ -54,11 +58,11 @@ final class ChunkTable {
         return sb.toString();
     }
 
-    private static String key(Row row, Profile profile) {
+    private static String key(final Row row, final Profile profile) {
         return Storage.SQLITE.id() + "/" + row.scenario() + "/" + profile + "/" + row.durability() + "/empty";
     }
 
-    private static String fmt(Double v) {
+    private static String fmt(final Double v) {
         return v == null ? "-" : String.format(Locale.getDefault(Locale.Category.FORMAT), "%,.0f", v);
     }
 }

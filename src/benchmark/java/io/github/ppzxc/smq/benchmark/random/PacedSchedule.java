@@ -19,7 +19,7 @@ final class PacedSchedule {
      * @param batchSize 배치 하나의 메시지 수
      * @param startNanos 첫 배치의 시각
      */
-    PacedSchedule(long ratePerSecond, int batchSize, long startNanos) {
+    PacedSchedule(final long ratePerSecond, final int batchSize, final long startNanos) {
         if (ratePerSecond <= 0 || batchSize <= 0) {
             throw new IllegalArgumentException("속도와 배치 크기는 양수여야 한다: " + ratePerSecond + ", " + batchSize);
         }
@@ -39,7 +39,7 @@ final class PacedSchedule {
     }
 
     /** {@code nowNanos}부터 다음 배치까지 더 기다려야 하는 시간. 이미 지났으면 0. */
-    long waitNanos(long nowNanos) {
+    long waitNanos(final long nowNanos) {
         return Math.max(0, nextDueNanos() - nowNanos);
     }
 }

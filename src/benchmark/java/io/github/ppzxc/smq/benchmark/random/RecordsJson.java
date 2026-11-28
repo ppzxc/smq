@@ -12,8 +12,9 @@ final class RecordsJson {
 
     private RecordsJson() {}
 
-    static String line(Published p) {
-        Map<String, Object> m = new LinkedHashMap<>();
+    static String line(final Published p) {
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("tag", p.tag().toString());
         m.put("checksum", p.content().payloadChecksum());
         m.put("headers", p.content().headers());
@@ -22,8 +23,9 @@ final class RecordsJson {
         return Json.write(m);
     }
 
-    static String line(Delivery d) {
-        Map<String, Object> m = new LinkedHashMap<>();
+    static String line(final Delivery d) {
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("queue", d.queue().name());
         m.put("tag", d.tag().toString());
         m.put("messageId", d.messageId());
@@ -41,16 +43,20 @@ final class RecordsJson {
         return Json.write(m);
     }
 
-    static Published parsePublished(String line) {
-        Map<?, ?> m = (Map<?, ?>) Json.parse(line);
+    static Published parsePublished(final String line) {
+        final Map<?, ?> m;
+        m = (Map<?, ?>) Json.parse(line);
         return new Published(Tag.parse((String) m.get("tag")), content(m), num(m, "atMillis"), num(m, "delayMillis"));
     }
 
-    static Delivery parseDelivery(String line) {
-        Map<?, ?> m = (Map<?, ?>) Json.parse(line);
-        Pull pull = new Pull(
+    static Delivery parseDelivery(final String line) {
+        final Map<?, ?> m;
+        final Pull pull;
+        final Settle settle;
+        m = (Map<?, ?>) Json.parse(line);
+        pull = new Pull(
                 num(m, "chunk"), (int) num(m, "position"), num(m, "pulledAtMillis"), num(m, "leaseDeadlineMillis"));
-        Settle settle = new Settle(
+        settle = new Settle(
                 Action.valueOf((String) m.get("settle")),
                 (Boolean) m.get("applied"),
                 num(m, "settleAtMillis"),
@@ -65,18 +71,20 @@ final class RecordsJson {
                 settle);
     }
 
-    private static Content content(Map<?, ?> m) {
-        Map<String, String> headers = new LinkedHashMap<>();
+    private static Content content(final Map<?, ?> m) {
+        final Map<String, String> headers;
+        headers = new LinkedHashMap<>();
         ((Map<?, ?>) m.get("headers")).forEach((k, v) -> headers.put((String) k, (String) v));
         return new Content(num(m, "checksum"), headers);
     }
 
-    private static long num(Map<?, ?> m, String key) {
+    private static long num(final Map<?, ?> m, final String key) {
         return ((Double) m.get(key)).longValue();
     }
 
-    static String line(CountsSample s) {
-        Map<String, Object> m = new LinkedHashMap<>();
+    static String line(final CountsSample s) {
+        final Map<String, Object> m;
+        m = new LinkedHashMap<>();
         m.put("queue", s.queue().name());
         m.put("afterDrain", s.afterDrain());
         m.put("ready", s.ready());
@@ -85,7 +93,7 @@ final class RecordsJson {
         return Json.write(m);
     }
 
-    static String describe(Violation v) {
+    static String describe(final Violation v) {
         return v.invariant() + ": " + v.detail() + " [tags=" + v.tags() + ", messageIds=" + v.messageIds() + "]";
     }
 }

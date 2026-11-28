@@ -2,33 +2,54 @@ package io.github.ppzxc.smq.benchmark.random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class LatencyHistogramTest {
 
-    @Test
-    void 백분위수는_nearest_rank다() {
-        LatencyHistogram h = new LatencyHistogram();
+    @ParameterizedTest
+    @CsvSource({"50, 500", "99, 990", "100, 1000"})
+    @DisplayName("백분위수는 nearest rank다")
+    void thePercentileIsTheNearestRank(final int percentile, final long expected) {
+        final LatencyHistogram h;
+        h = new LatencyHistogram();
         for (long v = 1; v <= 100; v++) {
             h.add(v * 10);
         }
-        assertEquals(500, h.percentile(50));
-        assertEquals(990, h.percentile(99));
-        assertEquals(1_000, h.percentile(100));
-        assertEquals(100, h.total());
+        assertEquals(expected, h.percentile(percentile), "Percentile should match the expected value.");
     }
 
     @Test
-    void 한계를_넘는_값은_한계로_세고_음수는_0으로_센다() {
-        LatencyHistogram h = new LatencyHistogram();
+    @DisplayName("표본 수를 센다")
+    void countsSamples() {
+        final LatencyHistogram h;
+        h = new LatencyHistogram();
+        for (long v = 1; v <= 100; v++) {
+            h.add(v * 10);
+        }
+        assertEquals(100, h.total(), "Total should match the expected value.");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"50, 0", "100, " + LatencyHistogram.MAX_MILLIS})
+    @DisplayName("한계를 넘는 값은 한계로 세고 음수는 0으로 센다")
+    void valuesExceedingTheLimitAreCountedAsTheLimitAndNegativeValuesAreCountedAs0(
+            final int percentile, final long expected) {
+        final LatencyHistogram h;
+        h = new LatencyHistogram();
         h.add(-5);
         h.add(Long.MAX_VALUE);
-        assertEquals(0, h.percentile(50));
-        assertEquals(LatencyHistogram.MAX_MILLIS, h.percentile(100));
+        assertEquals(expected, h.percentile(percentile), "Percentile should match the expected value.");
     }
 
     @Test
-    void 표본이_없으면_백분위수를_거부한다() {
-        assertThrows(IllegalStateException.class, () -> new LatencyHistogram().percentile(50));
+    @DisplayName("표본이 없으면 백분위수를 거부한다")
+    void ifThereIsNoSampleThePercentileIsRejected() {
+        assertThrows(
+                IllegalStateException.class,
+                () -> new LatencyHistogram().percentile(50),
+                "Percentile should throw IllegalStateException.");
     }
 }

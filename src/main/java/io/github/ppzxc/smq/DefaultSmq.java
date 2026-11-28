@@ -14,7 +14,7 @@ final class DefaultSmq implements Smq {
     private final PullWaiter waiter;
     private final Object session = new Object();
 
-    DefaultSmq(Storage storage, InstantSource clock, Duration leaseDuration) {
+    DefaultSmq(final Storage storage, final InstantSource clock, final Duration leaseDuration) {
         this.storage = storage;
         this.clock = clock;
         this.leaseDuration = leaseDuration;
@@ -22,7 +22,7 @@ final class DefaultSmq implements Smq {
     }
 
     @Override
-    public Queue declare(String name, QueueOptions options) {
+    public Queue declare(final String name, final QueueOptions options) {
         Validation.queueName(name);
         Objects.requireNonNull(options, "options");
         if (options.deadLetterQueue().filter(name::equals).isPresent()) {
@@ -34,22 +34,23 @@ final class DefaultSmq implements Smq {
     }
 
     @Override
-    public Queue queue(String name) {
+    public Queue queue(final String name) {
+        final QueueOptions options;
         Validation.queueName(name);
         waiter.requireOpen();
-        QueueOptions options = storage.options(name).orElseThrow(() -> new QueueNotFoundException(name));
+        options = storage.options(name).orElseThrow(() -> new QueueNotFoundException(name));
         return new DefaultQueue(storage, clock, leaseDuration, waiter, session, name, options);
     }
 
     @Override
-    public boolean delete(String name) {
+    public boolean delete(final String name) {
         Validation.queueName(name);
         waiter.requireOpen();
         return storage.delete(name);
     }
 
     @Override
-    public void snapshot(Path target) {
+    public void snapshot(final Path target) {
         Objects.requireNonNull(target, "target");
         waiter.requireOpen();
         storage.snapshot(target);

@@ -161,7 +161,7 @@ AI 에이전트는 이 SPEC을 전달받았을 때 다음 순서를 반드시 �
 |---|---|---|---|---|
 | STYLE-001 | PROFILE-SHOULD | 와일드카드 Import 금지 | Error Prone `WildcardImport` (ERROR로 승격) | Google 스타일 |
 | STYLE-002 | PROFILE-SHOULD | 네이밍·들여쓰기·괄호·Import 정렬 통일 | Spotless (포맷·Import 정렬), PMD 내장 `codestyle` 네이밍 규칙 | Google 스타일 |
-| STYLE-003 | PROFILE-SHOULD | 공개 API와 비직관적 설계 근거에 Javadoc 정책 정의 | PMD `CommentRequired` (공개 API 범위로 구성) | Google 스타일 |
+| STYLE-003 | - | 공개 API Javadoc 정책은 추후 논의한다. 그때까지 공개 API Javadoc을 금지한다 | STYLE-011 | 프로젝트 정책 |
 | STYLE-004 | - | *(삭제됨 — `STYLE-011` 일반 주석 금지 정책으로 통합)* | - | - |
 | STYLE-005 | MUST | 검사 억제는 9.4 계약(`@SuppressWarnings` + `@PolicyException` 짝)으로만 허용한다. `// NOPMD`, `//noinspection`(IntelliJ 전용, CI 무효) 등 주석 기반 억제와 빌드 설정을 통한 규칙 비활성화·심각도 하향을 금지한다 | PMD 커스텀(짝 검사), ArchUnit(만료 검사), 빌드 설정 변경 리뷰 | **작성자 강제 정책** |
 | STYLE-006 | SHOULD | 정당한 이유 없이 `@Disabled`로 회귀 테스트를 제외하지 않는다 | PMD/테스트 검사 | 품질 정책 |
@@ -175,9 +175,9 @@ AI 에이전트는 이 SPEC을 전달받았을 때 다음 순서를 반드시 �
 | STYLE-014 | MUST | `record` 컴포넌트에 배열 타입을 사용하지 않는다. 자동 생성 `equals`/`hashCode`/`toString`이 참조 기준으로 동작해 OBJ-001·OBJ-002 위험을 만든다. 바이너리는 불변 VO 또는 `List`로 표현한다 | ArchUnit(record 필드 타입) | **작성자 강제 정책** |
 
 > **주석(`STYLE-011`) 및 DTO(`STYLE-009`) 강제 방법론 보충 설명**
-> - **일반 주석 금지 (`STYLE-011`)**: XPath는 주석을 볼 수 없다. PMD 7에서 주석은 AST 노드가 아니라 컴파일 단위에 부속된 토큰이며 `ASTCompilationUnit#getComments()`가 `List<JavaComment>`로 제공한다(Javadoc은 하위 타입 `JavadocComment`). PMD 6의 `SingleLineComment`·`MultiLineComment`·`FormalComment` 클래스는 PMD 7에 없으므로 사용하지 않는다. 규칙은 `AbstractJavaRule#visit(ASTCompilationUnit, Object)`에서 전체 주석을 순회하고, Javadoc 허용 여부는 `JavadocCommentOwner#getJavadocComment()`로 역조회한 소유 선언의 가시성으로 판정한다. 세부 API는 고정한 PMD 버전(TOOL-007)의 문서로 확인한다.
->   - **허용**: (1) 파일의 첫 선언 이전에 위치한 라이선스·법률 고지 블록 1개, (2) `package-info.java`의 Javadoc, (3) 소유 선언과 그 모든 외곽 타입이 `public`/`protected`인 선언에 부착된 Javadoc, (4) `// spotless:off`·`// spotless:on` 짝(Spotless `toggleOffOn()` 구성 전제, 짝 불일치는 위반).
->   - **금지**: 그 외 모든 주석. `private`·package-private 선언의 Javadoc, 메서드 본문 안의 `/** */`, TODO/FIXME(이슈 트래커로 이관), 주석 기반 억제(`// NOPMD`, `//noinspection` 등, STYLE-005), 테스트의 given/when/then 구분 주석(`@DisplayName`·메서드명·헬퍼 메서드로 표현)을 명시적으로 포함한다.
+> - **일반 주석 금지 (`STYLE-011`)**: XPath는 주석을 볼 수 없다. PMD 7에서 주석은 AST 노드가 아니라 컴파일 단위에 부속된 토큰이며 `ASTCompilationUnit#getComments()`가 `List<JavaComment>`로 제공한다(Javadoc은 하위 타입 `JavadocComment`). PMD 6의 `SingleLineComment`·`MultiLineComment`·`FormalComment` 클래스는 PMD 7에 없으므로 사용하지 않는다. 규칙은 `AbstractJavaRule#visit(ASTCompilationUnit, Object)`에서 전체 주석을 순회하고, `package-info.java`의 패키지 Javadoc만 허용한다. 세부 API는 고정한 PMD 버전(TOOL-007)의 문서로 확인한다.
+>   - **허용**: (1) 파일의 첫 선언 이전에 위치한 라이선스·법률 고지 블록 1개, (2) `package-info.java`의 Javadoc, (3) `// spotless:off`·`// spotless:on` 짝(Spotless `toggleOffOn()` 구성 전제, 짝 불일치는 위반).
+>   - **금지**: 그 외 모든 주석. 공개 API를 포함한 모든 타입·멤버 선언의 Javadoc, 메서드 본문 안의 `/** */`, TODO/FIXME(이슈 트래커로 이관), 주석 기반 억제(`// NOPMD`, `//noinspection` 등, STYLE-005), 테스트의 given/when/then 구분 주석(`@DisplayName`·메서드명·헬퍼 메서드로 표현)을 명시적으로 포함한다.
 > - **DTO 유연 적용 및 강제 방법론 (`STYLE-009`)**: 모든 프로젝트가 별도의 `dto` 하위 패키지를 두는 것은 아니므로 패키지명 `dto`를 일괄 강제하지 않는다. 대신 프로젝트가 채택한 아키텍처·패키지 구조(`..view..`, `..command..`, `..query..`, `..dto..`, `..api..` 등)와 네이밍 규칙(`*Dto`, `*Request`, `*Response`, `*Command`, `*Query` 등)을 기준으로 DTO 대상 범위를 정의하고, 해당 범위의 불변 데이터 모델이 `record`로 작성되도록 프로젝트 맞춤형 ArchUnit 또는 PMD 커스텀 규칙으로 유연하게 강제한다.
 
 ### 2.5 Nullness·결정성·로깅
@@ -351,7 +351,7 @@ AGENTS.md는 **자동화할 수 없는 맥락과 도구 사용법을 전달**하
 | TOOL-007 | MUST | PMD·Error Prone·NullAway·ArchUnit·Instancio 버전을 version catalog 등으로 고정하고, 버전 변경 시 커스텀 규칙 테스트(9.3)를 재실행한다. 커스텀 PMD 규칙은 고정 버전의 API 문서를 기준으로 작성한다 |
 | TOOL-008 | MUST | 위 구성은 단일 Gradle convention plugin(`build-logic`) 또는 Maven parent POM에서 관리한다. 모듈별 빌드 파일에서 검사 비활성화·심각도 하향·대상 제외를 금지한다(STYLE-005) |
 
-smq는 TOOL-003의 프로젝트별 적용 사례로 SpotBugs 기본 검사를 `main` 바이트코드에 실행한다. `check`에 연결하고 탐지 결과가 있으면 빌드를 실패시킨다. Linux·Windows CI는 HTML 보고서를 아티팩트로 제공한다.
+smq는 TOOL-003의 프로젝트별 적용 사례로 SpotBugs 기본 검사를 `main` 바이트코드에 실행한다. `check`에 연결하고 최대 분석 강도와 낮은 신뢰도까지 적용하며 근거 있는 제외를 제외한 탐지 결과가 있으면 빌드를 실패시킨다. Linux·Windows CI는 HTML 보고서를 아티팩트로 제공한다.
 
 ## 9. 커스텀 Lint 작성 및 운영 SPEC
 

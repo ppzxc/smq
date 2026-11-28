@@ -121,7 +121,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 ./gradlew spotlessApply    # Java 소스 포맷 적용
 ```
 
-`check`는 PMD 7.29.0, Error Prone, NullAway/JSpecify, Spotless를 실행한다. PMD의 [MUST 규칙](config/pmd/must.xml)은 예외 처리, 자원 API, Java 정확성, 동시성, JUnit, 보안 등을 검사하며 위반 시 빌드가 실패한다. [SHOULD 규칙](config/pmd/should.xml)은 보고서에 기록한다. Error Prone은 기본 검사와 [프로젝트가 명시적으로 오류로 지정한 검사](docs/agents/java-quality-checks.md)를 실행하고, `main`에서는 경고도 빌드를 실패시킨다. CodeQL은 GitHub Actions에서 별도로 실행한다.
+`check`는 채택한 PMD MUST·SHOULD·주석 정책, SpotBugs, Error Prone, NullAway/JSpecify, Spotless를 실행한다. 전체 PMD 범주와 확장 Error Prone 진단은 별도로 실행할 수 있다. 차단 기준과 실행 방법, 보고서 위치는 [Java 검사 설정](docs/agents/java-quality-checks.md)에 정리되어 있다. CodeQL은 GitHub Actions에서 별도로 실행한다.
 
 벤치마크 절차는 [docs/benchmark.md](docs/benchmark.md), 기준선은 [benchmark/README.md](benchmark/README.md)를 본다.
 

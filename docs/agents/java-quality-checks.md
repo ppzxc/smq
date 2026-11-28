@@ -4,8 +4,8 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 
 | SPEC ID | Check | Applied source sets | Enforcement |
 | --- | --- | --- | --- |
-| TOOL-001, STYLE-008 | javac `-Xlint:unchecked` | main, test, benchmark | warning; `main` also has `-Werror` |
-| TOOL-001, STYLE-008 | javac `-Xlint:rawtypes` | main, test, benchmark | warning; `main` also has `-Werror` |
+| TOOL-001, STYLE-008 | javac `-Xlint:unchecked` | main, test, benchmark | warnings fail main compilation; errors fail test and benchmark |
+| TOOL-001, STYLE-008 | javac `-Xlint:rawtypes` | main, test, benchmark | warnings fail main compilation; errors fail test and benchmark |
 | OBJ-001 | Error Prone `ArrayEquals` | main, test, benchmark | error |
 | OBJ-002 | Error Prone `ArrayToString` | main, test, benchmark | error |
 | OBJ-003 | Error Prone `EqualsIncompatibleType` | main, test, benchmark | error |
@@ -26,24 +26,13 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 | | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test, benchmark | error |
 | Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test, benchmark | any violation fails the build |
 | Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | any violation fails the build |
-| TOOL-003 | SpotBugs 4.10.5 default checks | main | findings fail the build |
+| TOOL-003 | SpotBugs 4.10.5 with maximum effort and low confidence threshold | main | findings fail the build |
 | NUL-001 | NullAway / JSpecify | main | error; only `@NullMarked` code, explicit nullness required |
 | STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, benchmark, deploy-test Java | `spotlessCheck` is part of `check` |
 
-Error Prone's default checks are also active. Warnings fail the main compilation through `-Werror`. Test and benchmark compilations fail on errors, including the explicit overrides above.
+Error Prone 2.51.0 runs its default checks and the explicitly adopted checks. Main compilation treats warnings as errors; test and benchmark compilations retain their existing error levels and Korean test scenario names. `InterruptedExceptionSwallowed` is an error in main and benchmark.
 
-## Error Prone defaults and overrides
-
-Error Prone 2.51.0's [built-in checker defaults](https://github.com/google/error-prone/blob/v2.51.0/core/src/main/java/com/google/errorprone/scanner/BuiltInCheckerSuppliers.java) and the plugin's severity overrides determine the checks that fail compilation. The project explicitly sets these 24 checks to error:
-
-| Default in 2.51.0 | Applied source sets | Check IDs |
-| --- | --- | --- |
-| Error (3) | main, test, benchmark | `ArrayEquals`, `ArrayToString`, `EqualsHashCode` |
-| Warning (18) | main, test, benchmark | `CatchAndPrintStackTrace`, `DefaultCharset`, `EnumOrdinal`, `EqualsIncompatibleType`, `FloatingPointLiteralPrecision`, `FutureReturnValueIgnored`, `IntLongMath`, `JavaTimeDefaultTimeZone`, `LockNotBeforeTry`, `MissingFail`, `ModifyCollectionInEnhancedForLoop`, `ModifySourceCollectionInStream`, `NarrowCalculation`, `NarrowingCompoundAssignment`, `NonAtomicVolatileUpdate`, `SynchronizeOnNonFinalField`, `TimeUnitConversionChecker`, `WaitNotInLoop` |
-| Disabled (2) | main, test, benchmark | `DefaultLocale`, `UnusedException` |
-| Disabled (1) | main, benchmark | `InterruptedExceptionSwallowed` |
-
-The resulting number of built-in checks that can fail compilation is 500 for `main`, 206 for `test`, and 207 for `benchmark`. These counts use the pinned version's enabled defaults and the project severity settings. `main` fails on warnings as well as errors because of `-Werror`; `test` and `benchmark` fail on errors. `UnicodeInCode` remains a warning in `test` and `benchmark` so Korean scenario names do not fail compilation.
+For additional disabled-by-default checks and suggestions, run `./gradlew --rerun-tasks compileJava -PextendedErrorProne`. Diagnostics appear in the console and Gradle problems report (`build/reports/problems/problems-report.html`); this optional compilation can fail on diagnostics. Omit the property for the normal gate.
 
 NullAway 0.14.3 and explicit JSpecify nullness marking are errors for `main` only. Public nullable contracts, runtime null checks, and the non-blocking CodeQL operating policy remain as specified in [ADR 0011](../adr/0011-static-analysis-is-strict-in-main-and-advisory-in-code-scanning.md).
 
@@ -59,6 +48,7 @@ Benchmark code retains narrowly scoped PMD suppressions to preserve its external
 
 - `SystemPrintln` preserves the parent and child CLI output, progress, errors, and module-path diagnostics.
 - `UseTryWithResources` preserves `RandomBenchMain.run`'s optional JFR lifecycle and `RecordSpool.close`'s synchronized close order and exception behavior.
+- `CloseResource` preserves `RandomBenchMain.run`'s optional JFR recording, which its cleanup path closes.
 
 ## PMD enforcement and reports
 
@@ -74,11 +64,15 @@ PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java
 | performance | 5 |
 | security | 2 |
 
-PMD's `errorprone` category is a group of PMD rules; it is separate from Google Error Prone and its built-in checker counts above. MUST violations at priorities 1 through 5 fail their respective tasks. SHOULD violations fail their respective tasks in all three source sets. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect all reports under `build/reports/pmd/`; the XML and HTML reports identify each rule, file, and line. The HTML report also shows the total number of violations. Linux and Windows CI upload the HTML reports as `linux-pmd-report` and `windows-pmd-report`, respectively.
+Both adopted PMD rulesets cover priorities 1 through 5. Violations fail their respective tasks in all three source sets. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect the gate reports.
+
+Run `./gradlew pmdMainAll pmdTestAll pmdBenchmarkAll` for the separate, non-blocking report of all eight Java categories at priorities 1–5. Its ruleset excludes `LoosePackageCoupling`, which requires a project-specific list, and `CommentDefaultAccessModifier` and `CommentRequired`, which conflict with the comment policy, and `PrematureDeclaration`, which conflicts with the adopted block-start declaration rule. The XML and HTML reports are under `build/reports/pmd/`, with task names distinguishing the gate and extended reports. Linux and Windows CI upload gate HTML reports as `linux-pmd-report` and `windows-pmd-report`.
 
 `SqliteStorage` retains narrowly scoped PMD suppressions for these contracts:
 
+- `UnusedAssignment` keeps the initial cleanup flag for exceptions during statement creation or setup; the SHOULD ruleset also runs that MUST rule with findings suppressed so it can validate the suppression, while the MUST tasks enforce the findings.
 - `UseTryWithResources` preserves connection and lock ownership when initialization succeeds, closes them on failure, and releases storage-owned resources in order on close.
+- `CloseResource` preserves the same connection ownership and failure cleanup in `open` after the declaration and initialization are separated.
 - `PreserveStackTrace` retains existing exception translation on open and rethrows the original interruption cause from the two deadline-aware methods.
 - `ExhaustiveSwitchHasDefault` preserves the documented exception for unknown dispositions.
 - `ExceptionAsFlowControl` keeps the established wrapped I/O error for an existing snapshot target and for invalid encoded header lengths.
@@ -87,11 +81,11 @@ PMD MUST tasks also check each PMD suppression for a matching `@PolicyException`
 
 ## SpotBugs report
 
-Run `./gradlew spotbugsMain` to analyze the compiled production classes with SpotBugs 4.10.5. The existing `check` task also runs it. Findings fail the build and appear in `build/reports/spotbugs/main.html`. Linux and Windows CI upload that report as `linux-spotbugs-report` and `windows-spotbugs-report`, respectively.
+Run `./gradlew spotbugsMain` to analyze the compiled production classes with SpotBugs 4.10.5. It uses maximum analysis effort and reports findings down to low confidence. The existing `check` task also runs it. Findings without a documented exclusion fail the build and appear in `build/reports/spotbugs/main.html`. Linux and Windows CI upload that report as `linux-spotbugs-report` and `windows-spotbugs-report`, respectively.
 
 ## STYLE-011 comment policy
 
-`pmdMainComments` and `pmdTestComments` enforce STYLE-011 through the PMD 7 Java rule in `pmd-rules`; both tasks and the rule tests run in `check`. Generated source directories are excluded. PMD 7.29 cannot parse both modifiers on the module descriptor’s `requires static transitive` directive, so the comment task analyzes a copy with one modifier blanked while preserving line and column positions. Parsing errors fail the task. Reports identify STYLE-011 and the file and line. Spotless does not configure `toggleOffOn()`, so neither toggle is currently accepted. If enabled, configure the rule's `spotlessToggles` property together with Spotless and use matched pairs.
+`pmdMainComments` and `pmdTestComments` enforce STYLE-011 through the PMD 7 Java rule in `pmd-rules`; both tasks and the rule tests run in `check`. Generated source directories are excluded. Javadoc on API declarations is forbidden until a public API documentation policy is agreed; package documentation remains permitted. PMD 7.29 cannot parse both modifiers on the module descriptor’s `requires static transitive` directive, so the comment task analyzes a copy with one modifier blanked while preserving line and column positions. Parsing errors fail the task. Reports identify STYLE-011 and the file and line. Spotless does not configure `toggleOffOn()`, so neither toggle is currently accepted. If enabled, configure the rule's `spotlessToggles` property together with Spotless and use matched pairs.
 
 ADR 0011 and AGENTS.md require an adjacent explanation for intentional Error Prone suppressions, while STYLE-011 and STYLE-005 section 9.4 prohibit ordinary comments and comment-based suppression. The repository instructions take precedence for these explanations: only the existing specific Error Prone rationale comments are permitted, alongside their matching annotations; PMD suppression comments remain forbidden. This exception retains the reviewable reason without treating the comment as a suppression mechanism. New exceptions require review and a corresponding rule test. The `ArrayRecordComponent` suppressions keep the public API and the internal payload ownership contracts unchanged.
 

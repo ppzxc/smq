@@ -17,25 +17,28 @@ final class StorageLock implements AutoCloseable {
     private final FileChannel channel;
     private final FileLock lock;
 
-    private StorageLock(FileChannel channel, FileLock lock) {
+    private StorageLock(final FileChannel channel, final FileLock lock) {
         this.channel = channel;
         this.lock = lock;
     }
 
-    static Path lockPathOf(Path db) {
+    static Path lockPathOf(final Path db) {
         return db.resolveSibling(db.getFileName() + ".lock");
     }
 
-    static StorageLock acquire(Path db) {
-        Path lockPath = lockPathOf(db);
-        FileChannel channel;
+    static StorageLock acquire(final Path db) {
+        final FileChannel channel;
+        final Path lockPath;
+        lockPath = lockPathOf(db);
+
         try {
             channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
         } catch (IOException e) {
             throw new SmqStorageException("cannot open lock file " + lockPath, e);
         }
         try {
-            FileLock lock = channel.tryLock();
+            final FileLock lock;
+            lock = channel.tryLock();
             if (lock == null) {
                 closeQuietly(channel);
                 throw locked(db, lockPath, null);
@@ -50,9 +53,10 @@ final class StorageLock implements AutoCloseable {
         }
     }
 
-    static StorageLockedException locked(Path db, Path lockPath, @Nullable Throwable cause) {
-        String message = "storage is already in use by another opener (smq allows a single JVM): db=" + db
-                + ", lock file=" + lockPath;
+    static StorageLockedException locked(final Path db, final Path lockPath, final @Nullable Throwable cause) {
+        final String message;
+        message = "storage is already in use by another opener (smq allows a single JVM): db=" + db + ", lock file="
+                + lockPath;
         return cause == null ? new StorageLockedException(message) : new StorageLockedException(message, cause);
     }
 
@@ -66,7 +70,7 @@ final class StorageLock implements AutoCloseable {
         closeQuietly(channel);
     }
 
-    private static void closeQuietly(FileChannel c) {
+    private static void closeQuietly(final FileChannel c) {
         try {
             c.close();
         } catch (IOException e) {

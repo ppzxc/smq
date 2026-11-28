@@ -15,13 +15,14 @@ public final class Json {
 
     private Json() {}
 
-    public static String write(Object value) {
-        StringBuilder sb = new StringBuilder();
+    public static String write(final Object value) {
+        final StringBuilder sb;
+        sb = new StringBuilder();
         write(sb, value);
         return sb.toString();
     }
 
-    private static void write(StringBuilder sb, Object v) {
+    private static void write(final StringBuilder sb, final Object v) {
         switch (v) {
             case null -> sb.append("null");
             case String s -> string(sb, s);
@@ -36,10 +37,11 @@ public final class Json {
         }
     }
 
-    private static void writeMap(StringBuilder sb, Map<?, ?> map) {
+    private static void writeMap(final StringBuilder sb, final Map<?, ?> map) {
+        boolean first;
         sb.append('{');
-        boolean first = true;
-        for (Map.Entry<?, ?> entry : map.entrySet()) {
+        first = true;
+        for (final Map.Entry<?, ?> entry : map.entrySet()) {
             if (!first) sb.append(',');
             first = false;
             string(sb, String.valueOf(entry.getKey()));
@@ -49,7 +51,7 @@ public final class Json {
         sb.append('}');
     }
 
-    private static void writeList(StringBuilder sb, List<?> values) {
+    private static void writeList(final StringBuilder sb, final List<?> values) {
         sb.append('[');
         for (int i = 0; i < values.size(); i++) {
             if (i > 0) sb.append(',');
@@ -58,7 +60,7 @@ public final class Json {
         sb.append(']');
     }
 
-    private static void writeLongs(StringBuilder sb, long[] values) {
+    private static void writeLongs(final StringBuilder sb, final long[] values) {
         sb.append('[');
         for (int i = 0; i < values.length; i++) {
             if (i > 0) sb.append(',');
@@ -67,16 +69,17 @@ public final class Json {
         sb.append(']');
     }
 
-    private static void number(StringBuilder sb, double d) {
+    private static void number(final StringBuilder sb, final double d) {
         if (Double.isNaN(d) || Double.isInfinite(d)) throw new IllegalArgumentException("유한하지 않은 수: " + d);
         if (d == Math.rint(d) && Math.abs(d) < 1e15) sb.append((long) d);
         else sb.append(d);
     }
 
-    private static void string(StringBuilder sb, String s) {
+    private static void string(final StringBuilder sb, final String s) {
         sb.append('"');
         for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
+            final char c;
+            c = s.charAt(i);
             switch (c) {
                 case '"' -> sb.append("\\\"");
                 case '\\' -> sb.append("\\\\");
@@ -92,10 +95,12 @@ public final class Json {
         sb.append('"');
     }
 
-    public static Object parse(String text) {
-        Parser p = new Parser(text);
+    public static Object parse(final String text) {
+        final Parser p;
+        final Object v;
+        p = new Parser(text);
         p.skip();
-        Object v = p.value();
+        v = p.value();
         p.skip();
         if (p.pos != text.length()) throw p.error("끝에 남은 내용");
         return v;
@@ -105,15 +110,15 @@ public final class Json {
         final String s;
         int pos;
 
-        Parser(String s) {
+        Parser(final String s) {
             this.s = s;
         }
 
-        IllegalArgumentException error(String what) {
+        IllegalArgumentException error(final String what) {
             return error(what, null);
         }
 
-        IllegalArgumentException error(String what, Throwable cause) {
+        IllegalArgumentException error(final String what, final Throwable cause) {
             return new IllegalArgumentException("JSON 오류(" + what + ") 위치 " + pos, cause);
         }
 
@@ -126,14 +131,15 @@ public final class Json {
             return s.charAt(pos);
         }
 
-        void expect(char c) {
+        void expect(final char c) {
             if (peek() != c) throw error("'" + c + "' 필요");
             pos++;
         }
 
         Object value() {
+            final char c;
             skip();
-            char c = peek();
+            c = peek();
             return switch (c) {
                 case '{' -> object();
                 case '[' -> array();
@@ -144,16 +150,18 @@ public final class Json {
         }
 
         Map<String, Object> object() {
+            final Map<String, Object> m;
             expect('{');
-            Map<String, Object> m = new LinkedHashMap<>();
+            m = new LinkedHashMap<>();
             skip();
             if (peek() == '}') {
                 pos++;
                 return m;
             }
             while (true) {
+                final String k;
                 skip();
-                String k = string();
+                k = string();
                 skip();
                 expect(':');
                 m.put(k, value());
@@ -168,8 +176,9 @@ public final class Json {
         }
 
         List<Object> array() {
+            final List<Object> l;
             expect('[');
-            List<Object> l = new ArrayList<>();
+            l = new ArrayList<>();
             skip();
             if (peek() == ']') {
                 pos++;
@@ -188,10 +197,12 @@ public final class Json {
         }
 
         String string() {
+            final StringBuilder sb;
             expect('"');
-            StringBuilder sb = new StringBuilder();
+            sb = new StringBuilder();
             while (true) {
-                char c = peek();
+                final char c;
+                c = peek();
                 pos++;
                 if (c == '"') return sb.toString();
                 if (c != '\\') {
@@ -208,8 +219,9 @@ public final class Json {
                 approvedBy = "ppzxc",
                 reviewBy = "2027-11-26")
         @SuppressWarnings("PMD.CyclomaticComplexity")
-        private void escape(StringBuilder sb) {
-            char e = peek();
+        private void escape(final StringBuilder sb) {
+            final char e;
+            e = peek();
             pos++;
             switch (e) {
                 case '"', '\\', '/' -> sb.append(e);
@@ -244,7 +256,8 @@ public final class Json {
         }
 
         Double number() {
-            int start = pos;
+            final int start;
+            start = pos;
             while (pos < s.length() && "+-0123456789.eE".indexOf(s.charAt(pos)) >= 0) pos++;
             if (start == pos) throw error("값 필요");
             try {

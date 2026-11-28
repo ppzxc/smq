@@ -63,3 +63,34 @@
 이전 하네스의 [깊이 기준과 비교 방식](../docs/benchmark.md#비교-보고)은 S1의 100만 건 처리량이 빈 큐 처리량의 70% 이상인지 본다. 여기서는 `settleThroughput` 비율이 ACK 처리량에 가장 가까운 지표이며, 새 시나리오는 동시 프로듀서·컨슈머를 사용하므로 70%는 참고 기준이지 자동 합격 판정은 아니다. 이전 S3 지연 기준은 POWER_LOSS p99 10ms 이하였고, 새 `deliveryLatencyP99Nanos`는 같은 발행-꺼내기 경로를 보지만 배치 간격과 부하가 달라 직접적인 같은 조건 비교는 아니다. 이전 절대 처리량 floor(P1/P3/P7)는 이 시나리오의 메시지 배치 크기와 달라 적용하지 않는다.
 
 루트의 `./gradlew check`는 smq JAR/소스 JAR에서 하네스와 그 의존성이 빠졌는지 검사하고 하네스 CLI 테스트도 실행한다. 이 테스트는 별도 JVM에서 배포 JAR을 이름 있는 JPMS 모듈로 실행한다.
+
+## 시드 재현 soak
+
+일반 공개 API 스모크는 `./gradlew smokeHarness`로 실행한다. 큐 동작 불변식을 짧게 확인하려면 고정 시드와 작은 라운드 예산으로 seeded soak을 실행한다.
+
+```sh
+./gradlew smokeHarness -Psmoke.args="soak --seed 42 --budget 2 --delay-ms 20 --durability PROCESS_CRASH"
+```
+
+`--budget`은 내구성 수준마다 실행할 라운드 수다. 라운드마다 발행·꺼내기 대조, 최대 전달 횟수와 dead letter 이동, 지연과 근사 counts, 단일 활성 컨슈머를 공개 API로 검사한다. 시드는 메시지 payload, 메시지 수와 청크 크기를 정한다. 같은 시드, 예산, 지연 및 내구성 설정은 같은 연산을 만들며, SHA-256 `workloadDigest`로 실행 간 워크로드를 비교할 수 있다. 실행 중 시간에 따라 달라지는 것은 지연이 끝나기를 기다리는 시간뿐이다.
+
+지정 환경에서 장시간 반복할 때는 아래처럼 시드와 예산을 고정하고 두 내구성 수준을 모두 실행한다. 라운드별 결과는 `schemaVersion: 1` 공통 보고서의 `results` 배열에 각각 남는다.
+
+```sh
+./gradlew smokeHarness -Psmoke.args="soak --seed 20261128 --budget 10000 --delay-ms 250 --durability BOTH --output build/smoke-harness/soak-long-report.json --work-dir build/smoke-harness/soak-long-work"
+```
+
+보고서는 `smoke-harness/build/smoke-harness/soak-report.json`에, SQLite 파일은 시드와 내구성 수준별 실행 디렉터리에 남는다. 실패하면 명령은 코드 1로 끝나며, 보고서에는 위반한 불변식, 시드, 설정, 관련 메시지 id와 기대·관측 결과가 들어간다. 하네스가 실패를 감지하는지 확인하는 음성 대조는 `--negative-control drop-first-delivery`다.
+
+| 기존 불변식 | seeded 시나리오와 구현 | 공개 API 테스트 | 유지되는 계약 검사 |
+|---|---|---|---|
+| 유실 (LOSS) | `SoakRunner#checkMessageAccounting` | `SoakCliTest#seededSoakRunsAndReportsRepeatableInvariantScenariosThroughThePackagedModule` | `StorageConservationPropertiesTest#commandSequencesPreserveSqliteQueueState` |
+| 미발행 메시지 전달 (GHOST_DELIVERY) | `SoakRunner#checkMessageAccounting` | 같은 `SoakCliTest` | `StorageConservationPropertiesTest#pull` |
+| 허용 범위를 넘긴 중복 (DUPLICATE_LIMIT) | `SoakRunner#checkDeliveryLimit` | 같은 `SoakCliTest` | `SmqConformanceTest#messagesThatHaveReachedTheMaximumNumberOfDeliveryAttemptsAreMovedToTheDeadLetterQueueWhenTheyAreRetrievedAgainAndTheRetrievalProcessContinuesWithTheNextMessageCheck1` |
+| dead letter 이동 | `SoakRunner#checkDeliveryLimit` | 같은 `SoakCliTest` | 같은 `SmqConformanceTest` 시나리오의 이동 헤더 검사 |
+| 지연 (DELAY) | `SoakRunner#checkDelayAndCounts` | 같은 `SoakCliTest` | `StorageContractTest#delayedMessageCannotBePulledBeforeDeadline`, `#delayedMessageCanBePulledAtDeadline` |
+| 단일 활성 컨슈머 | `SoakRunner#checkSingleActiveConsumer` | 같은 `SoakCliTest` | `StorageContractTest#ifASingleActiveLeasePreventsAFetchTheCompletedDelayAndExpiredLeaseCountsAreMaintainedCheck1` |
+| 근사 counts | `SoakRunner#checkDelayAndCounts` | 같은 `SoakCliTest` | `StorageContractTest#recordTheDelayAfterTheFetchIsCompletedAsReadyAndUpdateTheCountCheck1`, ADR-0018 |
+| 청크 내 순서 (CHUNK_ORDER) | `SoakRunner#checkMessageAccounting` | 같은 `SoakCliTest` | `SmqConformanceTest#fifoOrderFollowsPublishOrderAcrossBatches` |
+
+이 seeded soak은 교체 전환을 위한 추가 경로다. `randomBench`와 `randomBenchSmoke`는 티켓 #267까지 유지한다.

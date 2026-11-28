@@ -70,11 +70,11 @@
 | 보고 필드 | 의미 |
 |---|---|
 | `publishThroughputMessagesPerSecond` | 측정 구간 안에 완료된 발행 메시지 수 / 설정된 측정 시간 |
-| `deliveryLatencyP50Nanos`, `deliveryLatencyP99Nanos` | 측정 구간 안에 꺼낸 측정 발행 메시지의 발행 시작부터 `pull` 반환까지 지연. nearest-rank 방식이며 표본이 없으면 `null` |
+| `deliveryLatencyP50Nanos`, `deliveryLatencyP99Nanos` | 측정 구간 안에 꺼낸 측정 발행 메시지의 발행 시작부터 `pull` 반환까지 지연. nearest-rank 방식이며 표본이 없으면 `null`. 백로그에서는 사전 적재 메시지에 측정 발행 시각이 없으므로 측정 중 새 발행분까지 도달하지 못하면 `null` |
 | `settleThroughputMessagesPerSecond` | 측정 구간 안에 ACK 정산을 마친 메시지 수 / 설정된 측정 시간 |
 | `startDepth`, `endDepth` | 워크로드 직전과 종료 후의 ready + leased + delayed 합계. `startCounts`와 `endCounts`에 상태별 수가 함께 기록됨 |
 | `queueConfig` | 최대 전달 횟수와 dead letter 큐, 단일 활성 컨슈머 여부, leased-head 설정 |
-| `depthRatios` | 같은 내구성·큐 종류·반복에서 백로그 측정값을 빈 큐 측정값으로 나눈 값. 처리량은 백로그 / 빈 큐, 지연도 백로그 / 빈 큐 |
+| `depthRatios` | 같은 내구성·큐 종류·반복에서 백로그 측정값을 빈 큐 측정값으로 나눈 값. 처리량은 백로그 / 빈 큐. 지연 비율은 양쪽에 유효한 표본이 있을 때만 계산하며 그 외에는 `null` |
 
 두 조건은 같은 payload 크기와 내용, 발행자·컨슈머 수, 발행 배치, 꺼내기 청크, 측정 시간으로 실행한다. 측정 전 워밍업은 내구성·큐 종류별 별도 빈 큐 DB에서 실행하고 결과에는 포함하지 않는다. 측정 DB는 각 깊이와 반복마다 새로 만든다. `LEASED_HEAD`에서는 미리 넣은 메시지를 최대 10,000개씩 한 시간 리스로 꺼내 두어, 리스가 걸린 백로그에서 새 발행을 처리한다.
 
@@ -110,6 +110,32 @@ SMQ_KAFKA_DOCKER_TESTS=true ./gradlew -p smoke-harness test --tests io.github.pp
 하네스 실행에 쓰는 Kafka 클라이언트는 Gradle이 이름 있는 모듈로 올릴 수 있도록 `build/kafka-module/` 아래에 manifest만 보강한 빌드 전용 JAR로 준비한다. 이 JAR과 Kafka 의존성은 smq 배포 JAR이나 소스 JAR에 포함되지 않는다.
 
 루트의 `./gradlew check`는 smq JAR/소스 JAR에서 하네스와 그 의존성이 빠졌는지 검사하고 하네스 CLI 테스트도 실행한다. 이 테스트는 별도 JVM에서 배포 JAR을 이름 있는 JPMS 모듈로 실행한다.
+
+## 지정 장비 기준선과 릴리스 게이트
+
+`backlog`는 `--queue-kind DEFAULT|MAX_DELIVERIES|SINGLE_ACTIVE_CONSUMER|LEASED_HEAD`와 `--depth EMPTY|BACKLOG`로 단일 조건을 선택할 수 있다. 지정 장비 실행 스크립트는 내구성·큐 설정·깊이·반복 조합마다 별도 Java 프로세스와 새 데이터베이스를 만들고, 같은 조건의 별도 데이터베이스에서 워밍업한 뒤 3회 측정한다. 각 측정 보고서에 실행 호스트, 파일시스템, 코드 revision과 설정을 기록한다.
+
+첫 구·신 하네스 및 smq·RabbitMQ·Kafka 비교는 저장소 루트에서 다음을 실행한다. 이 작업은 ns0270의 로컬 XFS에서만 실행되고, 고정 하네스와 새 하네스의 실행 순서를 바꾸며, RabbitMQ 4.4.1·Kafka 4.4.0 단일 노드 비교 보고서도 만든다.
+
+```sh
+./smoke-harness/run-initial-comparison.sh
+```
+
+원시 보고서와 실행 로그는 `build/initial-comparison-<revision>/`에 남는다. 새 하네스의 `new-backlog-round-1/backlog-report.json`에는 내구성·큐 설정·빈 큐/100만 건 조건별 세 반복이 들어간다. 이를 첫 기준선으로 만든다.
+
+```sh
+python3 smoke-harness/release_gate.py baseline \
+  --report build/initial-comparison-<revision>/new-backlog-round-1/backlog-report.json \
+  --output smoke-harness/release-baseline.json
+```
+
+기준선을 만든 뒤 같은 ns0270 checkout에서 필수 릴리스 게이트를 실행한다. 게이트는 깨끗한 checkout, 현재 코드 revision, 지정 호스트와 XFS, 48개 필수 표본, 보고서 설정, 처리량·지연 회귀 및 깊이 기준을 확인한다. 누락되거나 불일치하는 표본은 실패한다.
+
+```sh
+./smoke-harness/run-release-gate.sh
+```
+
+리포트는 `build/release-benchmark/<revision>/backlog-report.json`에 기록된다. 새 처리량 지표는 기존 S1 단건/묶음 절대 하한과 워크로드가 달라 절대값을 직접 복사하지 않는다. 각 깊이의 기준선 반복 중앙값에서 처리량 80% 하한을 적용해 기존 20% 회귀 허용치를 유지한다. 기존 S1 백로그 처리량 기준은 새 `settleThroughput`의 100만 건/빈 큐 비율에 대응시켜 70%를 유지하며, 반복 비율의 중앙값으로 판정한다. 기존 S3의 p99 10ms는 부하·발행 간격이 달라 직접 대응할 수 없어 빈 큐 기준선 대비 20% 증가 상한으로 바꾼다. 100만 건 백로그에서는 측정 구간에 새 발행분까지 도달하지 못해 p99가 `null`일 수 있으므로 p99 회귀는 빈 큐에서만 판정한다. 설정·원시 결과와 기준선은 첫 측정 뒤 `benchmark-results/`에 보존한다.
 
 ## RabbitMQ 비교 (선택 실행)
 

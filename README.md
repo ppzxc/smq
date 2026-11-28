@@ -117,6 +117,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 ./gradlew build            # 컴파일, 테스트, 문서 jar 검증
 ./gradlew test             # 테스트만
 ./gradlew benchmarkSmoke   # 벤치 하네스가 도는지만 확인하는 짧은 실행
+./gradlew smokeHarness    # 새 공개 API 스모크 하네스
 ./gradlew check            # 정적 분석과 검증 작업 포함
 ./gradlew spotlessApply    # Java 소스 포맷 적용
 ```
@@ -124,6 +125,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 `check`는 채택한 PMD MUST·SHOULD·주석 정책, SpotBugs, Error Prone, NullAway/JSpecify, Spotless를 실행한다. 전체 PMD 범주와 확장 Error Prone 진단은 별도로 실행할 수 있다. 차단 기준과 실행 방법, 보고서 위치는 [Java 검사 설정](docs/agents/java-quality-checks.md)에 정리되어 있다. CodeQL은 GitHub Actions에서 별도로 실행한다.
 
 벤치마크 절차는 [docs/benchmark.md](docs/benchmark.md), 기준선은 [benchmark/README.md](benchmark/README.md)를 본다.
+새 스모크·복구·외부 브로커·지정 장비 기준선은 [smoke-harness/README.md](smoke-harness/README.md)에 있다.
 
 ## 문서 지도
 
@@ -135,6 +137,7 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
 | [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
 | [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |
+| [smoke-harness/README.md](smoke-harness/README.md) | 새 공개 API 스모크, 내구성 복구, 단일 노드 비교와 릴리스 게이트 |
 | [docs/research/](docs/research) | RabbitMQ 핵심 기능, SQLite 동시성 등 조사 자료(다중 프로세스 조사는 ADR 0012 이전의 기록) |
 
 ## 라이선스

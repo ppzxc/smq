@@ -10,7 +10,9 @@ import java.util.Map;
 
 record BacklogOptions(
         List<Durability> durabilities,
+        List<BacklogRunner.QueueKind> queueKinds,
         int backlogCount,
+        List<Integer> depths,
         long durationMillis,
         long warmupMillis,
         int repeats,
@@ -36,7 +38,9 @@ record BacklogOptions(
         for (final String key : values.keySet()) {
             if (!List.of(
                             "durability",
+                            "queue-kind",
                             "backlog-count",
+                            "depth",
                             "duration-ms",
                             "warmup-ms",
                             "repeat",
@@ -59,10 +63,23 @@ record BacklogOptions(
             case "POWER_LOSS" -> List.of(Durability.POWER_LOSS);
             default -> throw new IllegalArgumentException("--durability must be BOTH, PROCESS_CRASH, or POWER_LOSS");
         };
+        final List<BacklogRunner.QueueKind> queueKinds =
+                switch (value(values, "queue-kind", "BOTH").toUpperCase(Locale.ROOT)) {
+                    case "BOTH" -> BacklogRunner.queueKinds();
+                    default ->
+                        List.of(BacklogRunner.QueueKind.valueOf(
+                                value(values, "queue-kind", "BOTH").toUpperCase(Locale.ROOT)));
+                };
         if (!values.containsKey("backlog-count")) {
             throw new IllegalArgumentException("--backlog-count is required");
         }
         final int backlogCount = positiveInt(values, "backlog-count", 1);
+        final List<Integer> depths = switch (value(values, "depth", "BOTH").toUpperCase(Locale.ROOT)) {
+            case "BOTH" -> List.of(0, backlogCount);
+            case "EMPTY" -> List.of(0);
+            case "BACKLOG" -> List.of(backlogCount);
+            default -> throw new IllegalArgumentException("--depth must be BOTH, EMPTY, or BACKLOG");
+        };
         final long durationMillis = positiveLong(values, "duration-ms", 10_000);
         final long warmupMillis = nonNegativeLong(values, "warmup-ms", 3_000);
         final int repeats = positiveInt(values, "repeat", 3);
@@ -73,7 +90,9 @@ record BacklogOptions(
         final int consumers = positiveInt(values, "consumers", 1);
         return new BacklogOptions(
                 durabilities,
+                queueKinds,
                 backlogCount,
+                depths,
                 durationMillis,
                 warmupMillis,
                 repeats,
@@ -96,8 +115,15 @@ record BacklogOptions(
                 this.durabilities.size() == Durability.values().length
                         ? "BOTH"
                         : this.durabilities.getFirst().name());
+        arguments.add("--queue-kind");
+        arguments.add(
+                this.queueKinds.size() == BacklogRunner.queueKinds().size()
+                        ? "BOTH"
+                        : this.queueKinds.getFirst().name());
         arguments.add("--backlog-count");
         arguments.add(Integer.toString(this.backlogCount));
+        arguments.add("--depth");
+        arguments.add(this.depths.size() == 2 ? "BOTH" : this.depths.getFirst() == 0 ? "EMPTY" : "BACKLOG");
         arguments.add("--duration-ms");
         arguments.add(Long.toString(this.durationMillis));
         arguments.add("--warmup-ms");

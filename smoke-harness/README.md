@@ -77,7 +77,7 @@
 지정 환경에서 장시간 반복할 때는 아래처럼 시드와 예산을 고정하고 두 내구성 수준을 모두 실행한다. 라운드별 결과는 `schemaVersion: 1` 공통 보고서의 `results` 배열에 각각 남는다.
 
 ```sh
-./gradlew smokeHarness -Psmoke.args="soak --seed 20261128 --budget 10000 --delay-ms 50 --durability BOTH --output build/smoke-harness/soak-long-report.json --work-dir build/smoke-harness/soak-long-work"
+./gradlew smokeHarness -Psmoke.args="soak --seed 20261128 --budget 10000 --delay-ms 250 --durability BOTH --output build/smoke-harness/soak-long-report.json --work-dir build/smoke-harness/soak-long-work"
 ```
 
 보고서는 `smoke-harness/build/smoke-harness/soak-report.json`에, SQLite 파일은 시드와 내구성 수준별 실행 디렉터리에 남는다. 실패하면 명령은 코드 1로 끝나며, 보고서에는 위반한 불변식, 시드, 설정, 관련 메시지 id와 기대·관측 결과가 들어간다. 하네스가 실패를 감지하는지 확인하는 음성 대조는 `--negative-control drop-first-delivery`다.

@@ -21,6 +21,9 @@ public final class Main {
         if (args.length > 0 && "recovery".equals(args[0])) {
             return RecoveryCommand.execute(args);
         }
+        if (args.length > 0 && "backlog".equals(args[0])) {
+            return BacklogCommand.execute(args);
+        }
 
         Options options = null;
         final List<SmokeRunner.Sample> results = new ArrayList<>();

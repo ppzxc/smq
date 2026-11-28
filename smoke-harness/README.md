@@ -31,6 +31,24 @@
 
 결과는 `smoke-harness/build/smoke-harness/recovery-report.json`에 기록된다. `--negative-control drop-confirmed-publish`를 추가하면 대상 JVM 종료 후 격리 저장소 파일을 제거해, 확인된 발행 유실을 하네스가 실패로 잡는지 확인한다.
 
+## 동기화 스냅샷 기반 저장소 장애 모델
+
+`storage-loss`는 별도 임시 저장소에서 `POWER_LOSS`로 확인된 발행·정산과 `PROCESS_CRASH` 결과를 JVM 강제 종료 뒤 공개 API로 다시 확인한다. 완료 응답은 저장소 디렉터리 밖의 `completion-ledger.txt`에 기록한다. 격리 모델은 동기화된 상태를 `Smq.snapshot()`으로 보관한 뒤, 성공 응답을 받은 `PROCESS_CRASH` 쓰기를 만든다. 대상 JVM을 강제 종료하고 동기화 스냅샷으로 저장소를 되돌려, 스냅샷에 있던 상태는 남고 그 뒤 쓰기는 없어지는지 확인한다. 이 동작은 파일 스냅샷 복구 모델이며 실제 전원 차단이나 장치의 캐시 손실을 시험하지 않는다.
+
+기본 실행은 두 내구성 수준의 JVM 종료 관측과 저장소 모델을 모두 요구한다.
+
+```sh
+./gradlew smokeHarness -Psmoke.args="storage-loss --durability BOTH --simulate-storage-loss true --require-storage-loss true --output smoke-harness/build/smoke-harness/storage-loss-report.json --work-dir smoke-harness/build/smoke-harness/storage-loss-work"
+```
+
+보고서의 `faultModel`, `observationCoverage`, `storageModel`, `physicalPowerCut`, `completionLedger`는 실행한 장애 종류, 저장소 복구 방법, 외부 완료 기록 경로와 실제 전원 차단을 수행하지 않았다는 점을 구분한다. `--simulate-storage-loss false`는 모델을 건너뛰며, 함께 `--require-storage-loss true`를 주면 보고서에 미실행 사유를 남기고 종료 코드 1을 반환한다.
+
+검증기를 확인된 발행의 유실과 함께 시험하려면 다음 부정 대조를 실행한다. 이 명령은 의도한 대로 실패 코드 1을 반환해야 한다.
+
+```sh
+./gradlew smokeHarness -Psmoke.args="storage-loss --durability POWER_LOSS --simulate-storage-loss true --require-storage-loss true --negative-control drop-confirmed-publish --output smoke-harness/build/smoke-harness/storage-loss-negative-report.json --work-dir smoke-harness/build/smoke-harness/storage-loss-negative-work"
+```
+
 ## 빈 큐와 백로그 처리량 비교
 
 `backlog` 명령은 같은 SQLite 내구성 수준과 큐 설정에서 빈 큐와 사전 적재 큐를 비교한다. 기본 백로그 크기는 의도적으로 정하지 않았다. 측정 크기를 직접 지정해야 하며, 자동화 검사는 작은 값만 사용한다.

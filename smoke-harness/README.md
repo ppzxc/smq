@@ -1,6 +1,6 @@
 # smq 공개 API 스모크 하네스
 
-하네스는 별도 Gradle 빌드다. smq 배포 JAR과 SQLite JDBC만 모듈 경로에 올리고, `io.github.ppzxc.smq` 모듈이 내보낸 공개 API만 호출한다. 브로커 서버는 필요하지 않다.
+공개 API 스모크 하네스는 별도 Gradle 빌드다. smq 배포 JAR과 SQLite JDBC를 모듈 경로에 올리고, `io.github.ppzxc.smq` 공개 API를 호출한다. 기본 스모크·백로그·soak 명령에는 브로커 서버가 필요하지 않다. RabbitMQ 직접 비교는 별도 선택 실행이다.
 
 저장소 루트에서 기본 실행은 두 내구성 수준과 단건·배치 발행을 모두 실행한다. 루트 JAR 빌드도 함께 한다.
 
@@ -80,7 +80,56 @@
 
 이전 하네스의 [깊이 기준과 비교 방식](../docs/benchmark.md#비교-보고)은 S1의 100만 건 처리량이 빈 큐 처리량의 70% 이상인지 본다. 여기서는 `settleThroughput` 비율이 ACK 처리량에 가장 가까운 지표이며, 새 시나리오는 동시 프로듀서·컨슈머를 사용하므로 70%는 참고 기준이지 자동 합격 판정은 아니다. 이전 S3 지연 기준은 POWER_LOSS p99 10ms 이하였고, 새 `deliveryLatencyP99Nanos`는 같은 발행-꺼내기 경로를 보지만 배치 간격과 부하가 달라 직접적인 같은 조건 비교는 아니다. 이전 절대 처리량 floor(P1/P3/P7)는 이 시나리오의 메시지 배치 크기와 달라 적용하지 않는다.
 
+## Kafka 단일 노드 내구성 비교
+
+Kafka CLI의 계획은 Docker 없이 확인할 수 있다. 먼저 smq JAR을 만들고 `plan`을 실행한다.
+
+```sh
+./gradlew jar
+./gradlew -p smoke-harness run --args="kafka plan"
+```
+
+로컬 Docker가 실행 중일 때 아래 명령으로 단건·배치 발행 측정과 네 가지 강제 종료 시점의 복구 관찰을 수행한다. `kafka run`은 두 토픽 설정을 각각 별도 단일 브로커와 데이터 볼륨에서 실행한다.
+
+```sh
+./gradlew -p smoke-harness run --args="kafka run --count 1000 --warmup 100 --repeat 3 --batch-size 100 --payload-bytes 256 --port 19092 --work-dir smoke-harness/build/kafka-work --output smoke-harness/build/kafka-report.json"
+```
+
+두 설정 모두 토픽 복제 계수와 `min.insync.replicas`가 1이고, 발행자는 `acks=all`을 사용한다. 기본 설정은 토픽 `flush.messages`를 덮어쓰지 않아 브로커 기본값을 사용한다. 두 번째 설정은 토픽을 `flush.messages=1`로 만든다. 보고서의 `brokerConfigurations`와 `measurements[].topicConfiguration.settings`에는 AdminClient가 읽은 설정값, 설정 출처, 기본값 여부가 들어간다. `serverVersion`과 `clientVersion`은 실제 실행 버전이며 서버 이미지는 `apache/kafka:4.4.0`으로 고정되어 있다.
+
+측정 보고서에는 성공한 producer 응답 수, consumer-group `commitSync` 응답에 따른 정산 수와 지연, 측정 전·후 그룹 lag가 기록된다. 복구 시나리오는 publish 응답 직후, 전달 후 commit 전, commit 응답 직후, 응답이 오기 전 요청 진행 중에 브로커를 강제 종료하고 같은 Docker 볼륨과 `/var/lib/kafka/data`로 다시 시작한다. 보고서에는 재시작 후 노드·컨트롤러·파티션 leader·replica·ISR 확인 결과, 외부 완료 원장, 레코드와 그룹 offset 관찰이 포함된다. 요청 중 연결이 끊겨 응답을 받지 못한 발행은 `UNKNOWN`으로 집계한다. 재시작 뒤 레코드가 관찰되지 않더라도 그 사실만으로 요청이 적용되지 않았다고 판정하지 않는다.
+
+Docker 기반 CLI 테스트는 명시적으로 켰을 때만 브로커를 시작한다. 이 테스트는 기본 설정과 `flush.messages=1` 설정 모두를 실행한다.
+
+```sh
+SMQ_KAFKA_DOCKER_TESTS=true ./gradlew -p smoke-harness test --tests io.github.ppzxc.smq.harness.KafkaCliTest --rerun-tasks
+```
+
+테스트가 만든 컨테이너와 데이터 볼륨은 테스트 종료 때 제거된다. 결과 보고서와 외부 원장은 지정한 `--output` 및 `--work-dir` 경로에 남는다.
+
+하네스 실행에 쓰는 Kafka 클라이언트는 Gradle이 이름 있는 모듈로 올릴 수 있도록 `build/kafka-module/` 아래에 manifest만 보강한 빌드 전용 JAR로 준비한다. 이 JAR과 Kafka 의존성은 smq 배포 JAR이나 소스 JAR에 포함되지 않는다.
+
 루트의 `./gradlew check`는 smq JAR/소스 JAR에서 하네스와 그 의존성이 빠졌는지 검사하고 하네스 CLI 테스트도 실행한다. 이 테스트는 별도 JVM에서 배포 JAR을 이름 있는 JPMS 모듈로 실행한다.
+
+## RabbitMQ 비교 (선택 실행)
+
+RabbitMQ 비교기는 smq API가 아니라 공식 RabbitMQ Java 클라이언트로 직접 메시지를 발행·가져온다. RabbitMQ Server 이미지는 `rabbitmq:4.4.1-management`, 클라이언트는 `com.rabbitmq:amqp-client:5.36.0`으로 고정한다. 클래식 큐와 단일 멤버 quorum 큐 모두 durable이며, 메시지는 persistent (`deliveryMode=2`)로 발행한다. quorum 큐는 `x-quorum-initial-group-size=1`로 한 멤버를 지정한다.
+
+선택적인 Docker 통합 실행은 루트에서 다음 명령으로 시작한다. 기본값은 측정 반복당 1,000건, 워밍업 100건, 3회 반복이다. 짧은 재현은 예시처럼 크기를 낮춘다.
+
+```sh
+RABBITMQ_COUNT=24 RABBITMQ_WARMUP=2 RABBITMQ_REPEAT=1 ./smoke-harness/rabbitmq-integration.sh
+```
+
+이 스크립트는 Docker가 필요하며 로컬 포트 5674에 컨테이너를 띄우고 새 Docker named volume을 `/var/lib/rabbitmq`에 마운트한다. 컨테이너는 `rabbitmq` 사용자로 실행하며, 시작 전에 해당 사용자가 volume을 읽고 쓸 수 있는지 확인한다. 컨테이너와 volume은 그대로 남긴다. 기본 컨테이너 이름은 `smq-rabbitmq-441-integration`이다. 다른 이름·포트·volume 이름은 `RABBITMQ_CONTAINER`, `RABBITMQ_AMQP_PORT`, `RABBITMQ_VOLUME`로 지정할 수 있다. volume 이름은 새 이름이어야 한다. 사용자와 암호 기본값은 로컬 실험용 `bench`이며 `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD`로 덮어쓸 수 있다.
+
+측정 결과는 `smoke-harness/build/smoke-harness/rabbit-report.json`, 강제 종료 복구 결과는 `smoke-harness/build/smoke-harness/rabbit-recovery-report.json`에 기록한다. 두 보고서에 실제 브로커·클라이언트 버전, queue 설정, 작업량, 발행 확인·라우팅 오류, consumer ACK 전송, 복구 뒤 관측값과 재현 명령이 들어간다. 성능 보고서는 단건·배치 발행과 가져오기·settle 처리의 처리량과 지연 표본을 기록한다. 로컬 Docker 파일시스템과 자원 제한은 결과에 영향을 주므로 이 수치는 기준 성능으로 간주하지 않는다.
+
+발행은 `mandatory=true`와 ReturnListener로 라우팅 실패를 오류로 세고, publisher confirm을 받은 라우팅 성공 메시지만 완료로 센다. Consumer `basic.ack`는 별도로 전송을 기록한다. RabbitMQ는 consumer ACK에 publisher confirm을 보내지 않으므로, ACK 적용은 연결을 닫은 뒤 새 consumer가 메시지를 다시 가져오는지와 ready-message 수를 별도로 관찰한다.
+
+복구 실행은 확인 직후, 메시지를 가져온 뒤 ACK 전, 그리고 broker를 잠시 멈춘 동안 publish 요청을 보내 confirm을 얻기 전에 각각 같은 컨테이너와 데이터 디렉터리를 강제 종료·재시작한다. 새 큐를 만든 뒤 2초 기다린 다음 해당 메시지 관측 직후 broker를 중단한다. 각 결과의 `queueStableForMs`와 method 설정에 이 대기 시간을 기록한다. 이는 RabbitMQ가 quorum 큐 생성 직후 Raft 디렉터리 동기화를 지연하는 알려진 동작을 피하기 위한 설정이다 ([upstream discussion #17710](https://github.com/rabbitmq/rabbitmq-server/discussions/17710)).
+
+이 비교의 quorum 큐는 멤버가 하나뿐이므로 노드 장애 허용성이 없다. 관측하는 것은 단일 노드 프로세스 재시작 뒤 같은 저장소에서의 복구이며, quorum failover나 노드 손실 내구성을 검증하지 않는다. 다중 노드 quorum 큐는 과반수 멤버가 유지될 때 메시지를 보존한다는 RabbitMQ의 [quorum queue 문서](https://www.rabbitmq.com/docs/quorum-queues)를 참고한다. 일반 `./gradlew check`는 Docker를 사용하지 않는다.
 
 ## 시드 재현 soak
 

@@ -15,6 +15,9 @@ public final class Main {
     }
 
     private static int execute(final String[] args) {
+        if (args.length > 0 && "rabbit".equals(args[0])) {
+            return RabbitCommand.execute(args);
+        }
         if (args.length > 0 && "--worker".equals(args[0])) {
             return RecoveryWorker.execute(args);
         }
@@ -29,6 +32,9 @@ public final class Main {
         }
         if (args.length > 0 && "backlog".equals(args[0])) {
             return BacklogCommand.execute(args);
+        }
+        if (args.length > 0 && "kafka".equals(args[0])) {
+            return KafkaCommand.execute(args);
         }
 
         Options options = null;

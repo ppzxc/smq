@@ -51,6 +51,7 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("net.jqwik:jqwik:1.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

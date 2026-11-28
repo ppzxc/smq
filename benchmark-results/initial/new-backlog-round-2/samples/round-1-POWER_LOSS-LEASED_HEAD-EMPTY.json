@@ -1,0 +1,16 @@
+{
+  "schemaVersion":1,
+  "scenario":"backlog",
+  "status":"SUCCESS",
+  "revision":"12ffb7584e19493de6aca34fdf62b5715dcc92a6",
+  "generatedAt":"2026-11-28T11:50:05.992317244Z",
+  "productVersion":"0.1.0-SNAPSHOT",
+  "environment":{"os":"Linux 5.14.0-741.22.1.el9_9.x86_64","architecture":"amd64","host":"ns0270.nanoit.kr","javaVersion":"25.0.5+9-LTS","processors":24,"workDir":"/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-12ffb75/new-backlog-round-2/work/round-1-POWER_LOSS-LEASED_HEAD-EMPTY","workDirFileSystem":"xfs"},
+  "config":{"durabilities":["POWER_LOSS"],"backlogCount":1000000,"durationMillis":10000,"warmupMillis":3000,"repeats":1,"payloadBytes":256,"batchSize":100,"chunkSize":100,"publishers":1,"consumers":1,"queueKinds":["LEASED_HEAD"],"depths":["EMPTY"]},
+  "reproduction":{"command":"./gradlew smokeHarness -Psmoke.args='backlog --durability POWER_LOSS --queue-kind LEASED_HEAD --backlog-count 1000000 --depth EMPTY --duration-ms 10000 --warmup-ms 3000 --repeat 1 --payload-bytes 256 --batch-size 100 --chunk-size 100 --publishers 1 --consumers 1 --output /home/ppzxc/smq-spec258-ticket8/build/initial-comparison-12ffb75/new-backlog-round-2/samples/round-1-POWER_LOSS-LEASED_HEAD-EMPTY.json --work-dir /home/ppzxc/smq-spec258-ticket8/build/initial-comparison-12ffb75/new-backlog-round-2/work/round-1-POWER_LOSS-LEASED_HEAD-EMPTY'","args":["backlog","--durability","POWER_LOSS","--queue-kind","LEASED_HEAD","--backlog-count","1000000","--depth","EMPTY","--duration-ms","10000","--warmup-ms","3000","--repeat","1","--payload-bytes","256","--batch-size","100","--chunk-size","100","--publishers","1","--consumers","1","--output","/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-12ffb75/new-backlog-round-2/samples/round-1-POWER_LOSS-LEASED_HEAD-EMPTY.json","--work-dir","/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-12ffb75/new-backlog-round-2/work/round-1-POWER_LOSS-LEASED_HEAD-EMPTY"]},
+  "publishedMessages":219800,
+  "settledMessages":13600,
+  "results":[{"durability":"POWER_LOSS","queueKind":"LEASED_HEAD","queueConfig":{"maxDeliveries":null,"deadLetterQueue":null,"singleActiveConsumer":false,"leasedHead":true},"preloadedMessages":0,"repeat":1,"startDepth":0,"startCounts":{"ready":0,"leased":0,"delayed":0},"endDepth":206200,"endCounts":{"ready":206200,"leased":0,"delayed":0},"publishedMessages":219800,"settledMessages":13600,"elapsedNanos":10003882235,"publishThroughputMessagesPerSecond":21980.000,"settleThroughputMessagesPerSecond":1360.000,"deliveryLatencyP50Nanos":3108909452,"deliveryLatencyP99Nanos":9008441623,"databasePath":"/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-12ffb75/new-backlog-round-2/work/round-1-POWER_LOSS-LEASED_HEAD-EMPTY/backlog-15489169833408317148/power_loss/leased_head/depth-0-repeat-1.db"}],
+  "depthRatios":[],
+  "diagnostics":[]
+}

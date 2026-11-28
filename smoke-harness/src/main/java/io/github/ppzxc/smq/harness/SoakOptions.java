@@ -4,7 +4,6 @@ import io.github.ppzxc.smq.Durability;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 record SoakOptions(
@@ -43,13 +42,8 @@ record SoakOptions(
         if (delayMillis > 60_000) {
             throw new IllegalArgumentException("--delay-ms must not exceed 60000");
         }
-        final List<Durability> durabilities = switch (values.getOrDefault("durability", "PROCESS_CRASH")
-                .toUpperCase(Locale.ROOT)) {
-            case "BOTH" -> List.of(Durability.PROCESS_CRASH, Durability.POWER_LOSS);
-            case "PROCESS_CRASH" -> List.of(Durability.PROCESS_CRASH);
-            case "POWER_LOSS" -> List.of(Durability.POWER_LOSS);
-            default -> throw new IllegalArgumentException("--durability must be PROCESS_CRASH, POWER_LOSS, or BOTH");
-        };
+        final List<Durability> durabilities =
+                DurabilitySelection.parse(values.getOrDefault("durability", "PROCESS_CRASH"));
         final String negativeControl = values.getOrDefault("negative-control", "none");
         if (!List.of("none", "drop-first-delivery").contains(negativeControl)) {
             throw new IllegalArgumentException("--negative-control must be none or drop-first-delivery");

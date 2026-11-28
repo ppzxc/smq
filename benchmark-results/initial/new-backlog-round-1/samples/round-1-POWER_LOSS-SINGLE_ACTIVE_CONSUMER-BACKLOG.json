@@ -1,0 +1,16 @@
+{
+  "schemaVersion":1,
+  "scenario":"backlog",
+  "status":"SUCCESS",
+  "revision":"0db7e18f99496a5db67528f6f2f0ef0036e3cd8a",
+  "generatedAt":"2026-11-28T11:27:06.377439778Z",
+  "productVersion":"0.1.0-SNAPSHOT",
+  "environment":{"os":"Linux 5.14.0-741.22.1.el9_9.x86_64","architecture":"amd64","host":"ns0270.nanoit.kr","javaVersion":"25.0.5+9-LTS","processors":24,"workDir":"/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG","workDirFileSystem":"xfs"},
+  "config":{"durabilities":["POWER_LOSS"],"backlogCount":1000000,"durationMillis":10000,"warmupMillis":3000,"repeats":1,"payloadBytes":256,"batchSize":100,"chunkSize":100,"publishers":1,"consumers":1,"queueKinds":["SINGLE_ACTIVE_CONSUMER"],"depths":["BACKLOG"]},
+  "reproduction":{"command":"./gradlew smokeHarness -Psmoke.args='backlog --durability POWER_LOSS --queue-kind SINGLE_ACTIVE_CONSUMER --backlog-count 1000000 --depth BACKLOG --duration-ms 10000 --warmup-ms 3000 --repeat 1 --payload-bytes 256 --batch-size 100 --chunk-size 100 --publishers 1 --consumers 1 --output /home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/samples/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG.json --work-dir /home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG'","args":["backlog","--durability","POWER_LOSS","--queue-kind","SINGLE_ACTIVE_CONSUMER","--backlog-count","1000000","--depth","BACKLOG","--duration-ms","10000","--warmup-ms","3000","--repeat","1","--payload-bytes","256","--batch-size","100","--chunk-size","100","--publishers","1","--consumers","1","--output","/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/samples/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG.json","--work-dir","/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG"]},
+  "publishedMessages":173400,
+  "settledMessages":45700,
+  "results":[{"durability":"POWER_LOSS","queueKind":"SINGLE_ACTIVE_CONSUMER","queueConfig":{"maxDeliveries":null,"deadLetterQueue":null,"singleActiveConsumer":true,"leasedHead":false},"preloadedMessages":1000000,"repeat":1,"startDepth":1000000,"startCounts":{"ready":1000000,"leased":0,"delayed":0},"endDepth":1127700,"endCounts":{"ready":1127700,"leased":0,"delayed":0},"publishedMessages":173400,"settledMessages":45700,"elapsedNanos":10009569453,"publishThroughputMessagesPerSecond":17340.000,"settleThroughputMessagesPerSecond":4570.000,"deliveryLatencyP50Nanos":null,"deliveryLatencyP99Nanos":null,"databasePath":"/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG/backlog-11113470231439928464/power_loss/single_active_consumer/depth-1000000-repeat-1.db"}],
+  "depthRatios":[],
+  "diagnostics":[]
+}

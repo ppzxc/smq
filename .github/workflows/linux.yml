@@ -33,7 +33,7 @@ jobs:
       - name: 지정 장비 릴리스 게이트 로직 테스트
         run: |
           python3 smoke-harness/test_release_gate.py
-          for script in smoke-harness/run-backlog-suite.sh smoke-harness/run-release-gate.sh smoke-harness/run-initial-comparison.sh; do bash -n "$script"; done
+          for script in smoke-harness/run-backlog-suite.sh smoke-harness/run-release-gate.sh; do bash -n "$script"; done
 
       - name: 공개 API 단건·배치 스모크
         run: ./gradlew smokeHarness -Psmoke.args="--durability BOTH --mode BOTH --count 1000 --warmup 100 --repeat 1 --payload-bytes 256 --batch-size 100 --chunk-size 100 --max-in-flight 1000 --output build/smoke-harness/ci-smoke-report.json --work-dir build/smoke-harness/ci-smoke-work" --no-daemon --stacktrace

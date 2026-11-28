@@ -1,0 +1,1848 @@
+{
+  "config": {
+    "backlogCount": 1000000,
+    "batchSize": 100,
+    "chunkSize": 100,
+    "consumers": 1,
+    "depths": [
+      "EMPTY",
+      "BACKLOG"
+    ],
+    "durabilities": [
+      "PROCESS_CRASH",
+      "POWER_LOSS"
+    ],
+    "durationMillis": 10000,
+    "payloadBytes": 256,
+    "publishers": 1,
+    "queueKinds": [
+      "DEFAULT",
+      "MAX_DELIVERIES",
+      "SINGLE_ACTIVE_CONSUMER",
+      "LEASED_HEAD"
+    ],
+    "repeats": 3,
+    "warmupMillis": 3000
+  },
+  "depthRatios": [
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.283436669619132,
+      "queueKind": "DEFAULT",
+      "repeat": 1,
+      "settleThroughputRatio": 0.9675810473815462
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.134624468587624,
+      "queueKind": "DEFAULT",
+      "repeat": 2,
+      "settleThroughputRatio": 0.7129277566539924
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.5272244355909694,
+      "queueKind": "DEFAULT",
+      "repeat": 3,
+      "settleThroughputRatio": 0.6442006269592476
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.3119804400977995,
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 1,
+      "settleThroughputRatio": 0.8156182212581344
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 0.8509498295177789,
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 2,
+      "settleThroughputRatio": 1.1987179487179487
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 0.9809134287661895,
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 3,
+      "settleThroughputRatio": 0.9570552147239264
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.213145896656535,
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 1,
+      "settleThroughputRatio": 1.0
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.3296364756623538,
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 2,
+      "settleThroughputRatio": 0.7213930348258707
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.1178571428571429,
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 3,
+      "settleThroughputRatio": 0.9458646616541353
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": 0.9456681800157307,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.332046332046332,
+      "queueKind": "LEASED_HEAD",
+      "repeat": 1,
+      "settleThroughputRatio": 0.8179775280898877
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": 1.0104111616268858,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.0598052851182198,
+      "queueKind": "LEASED_HEAD",
+      "repeat": 2,
+      "settleThroughputRatio": 0.9949832775919732
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": 1.1557129245180728,
+      "durability": "PROCESS_CRASH",
+      "publishThroughputRatio": 1.1929215822345594,
+      "queueKind": "LEASED_HEAD",
+      "repeat": 3,
+      "settleThroughputRatio": 0.814327485380117
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 0.997055359246172,
+      "queueKind": "DEFAULT",
+      "repeat": 1,
+      "settleThroughputRatio": 0.9325581395348838
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 0.9558441558441558,
+      "queueKind": "DEFAULT",
+      "repeat": 2,
+      "settleThroughputRatio": 0.863013698630137
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 1.0663716814159292,
+      "queueKind": "DEFAULT",
+      "repeat": 3,
+      "settleThroughputRatio": 0.9879518072289156
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 0.914906103286385,
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 1,
+      "settleThroughputRatio": 1.7067669172932332
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 1.0670391061452513,
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 2,
+      "settleThroughputRatio": 0.8144144144144144
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 1.1314800901577762,
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 3,
+      "settleThroughputRatio": 0.8605108055009824
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 1.0871473354231975,
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 1,
+      "settleThroughputRatio": 1.139650872817955
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 1.184017595307918,
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 2,
+      "settleThroughputRatio": 0.7918088737201365
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": null,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 1.416851441241685,
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 3,
+      "settleThroughputRatio": 0.5302752293577981
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": 1.2794304113824464,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 1.1256218905472637,
+      "queueKind": "LEASED_HEAD",
+      "repeat": 1,
+      "settleThroughputRatio": 0.612
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": 0.9437731826290723,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 0.9875183553597651,
+      "queueKind": "LEASED_HEAD",
+      "repeat": 2,
+      "settleThroughputRatio": 1.0420475319926874
+    },
+    {
+      "backlogCount": 1000000,
+      "deliveryLatencyP99Ratio": 0.9598486646312285,
+      "durability": "POWER_LOSS",
+      "publishThroughputRatio": 0.993722839208112,
+      "queueKind": "LEASED_HEAD",
+      "repeat": 3,
+      "settleThroughputRatio": 1.4974358974358974
+    }
+  ],
+  "environment": {
+    "architecture": "amd64",
+    "host": "ns0270.nanoit.kr",
+    "javaVersion": "25.0.5+9-LTS",
+    "os": "Linux 5.14.0-741.22.1.el9_9.x86_64",
+    "processors": 24,
+    "workDir": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-DEFAULT-BACKLOG",
+    "workDirFileSystem": "xfs"
+  },
+  "generatedAt": "2026-11-28T11:41:40.541774+00:00",
+  "measurementStartedAt": "2026-11-28T11:21:33.582878+00:00",
+  "results": [
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-DEFAULT-EMPTY/backlog-13731094435500236721/process_crash/default/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3638731543,
+      "deliveryLatencyP99Nanos": 8662131084,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10010205005,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 185700
+      },
+      "endDepth": 185700,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 22580.0,
+      "publishedMessages": 225800,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4010.0,
+      "settledMessages": 40100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-DEFAULT-BACKLOG/backlog-1362128045964094049/process_crash/default/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10005126254,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1251000
+      },
+      "endDepth": 1251000,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 28980.0,
+      "publishedMessages": 289800,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 3880.0,
+      "settledMessages": 38800,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-DEFAULT-EMPTY/backlog-12588808576148029935/process_crash/default/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2523870938,
+      "deliveryLatencyP99Nanos": 6477974556,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10005812344,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 159100
+      },
+      "endDepth": 159100,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 21170.0,
+      "publishedMessages": 211700,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5260.0,
+      "settledMessages": 52600,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-DEFAULT-BACKLOG/backlog-1920337732203808675/process_crash/default/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10005722656,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1202700
+      },
+      "endDepth": 1202700,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 24020.0,
+      "publishedMessages": 240200,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 3750.0,
+      "settledMessages": 37500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-DEFAULT-EMPTY/backlog-2655908489288609997/process_crash/default/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2803624990,
+      "deliveryLatencyP99Nanos": 5490314669,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10007677926,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 86800
+      },
+      "endDepth": 86800,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 15060.0,
+      "publishedMessages": 150600,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 6380.0,
+      "settledMessages": 63800,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-DEFAULT-BACKLOG/backlog-1567103958566403667/process_crash/default/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10006921581,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1188900
+      },
+      "endDepth": 1188900,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 23000.0,
+      "publishedMessages": 230000,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 4110.0,
+      "settledMessages": 41100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-MAX_DELIVERIES-EMPTY/backlog-15454063219529918940/process_crash/max_deliveries/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 5334754731,
+      "deliveryLatencyP99Nanos": 8143912510,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10005639641,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 158400
+      },
+      "endDepth": 158400,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 20450.0,
+      "publishedMessages": 204500,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4610.0,
+      "settledMessages": 46100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-MAX_DELIVERIES-BACKLOG/backlog-11487951293633646033/process_crash/max_deliveries/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10004206977,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1230700
+      },
+      "endDepth": 1230700,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 26830.0,
+      "publishedMessages": 268300,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 3760.0,
+      "settledMessages": 37600,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-MAX_DELIVERIES-EMPTY/backlog-11405816960653290298/process_crash/max_deliveries/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 5433622896,
+      "deliveryLatencyP99Nanos": 7289025834,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10009761428,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 158500
+      },
+      "endDepth": 158500,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 20530.0,
+      "publishedMessages": 205300,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 4680.0,
+      "settledMessages": 46800,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-MAX_DELIVERIES-BACKLOG/backlog-16681407540981118801/process_crash/max_deliveries/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10003034317,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1118600
+      },
+      "endDepth": 1118600,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 17470.0,
+      "publishedMessages": 174700,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5610.0,
+      "settledMessages": 56100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-MAX_DELIVERIES-EMPTY/backlog-148236010922966976/process_crash/max_deliveries/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2686400611,
+      "deliveryLatencyP99Nanos": 5296050510,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10007143919,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 81500
+      },
+      "endDepth": 81500,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 14670.0,
+      "publishedMessages": 146700,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 6520.0,
+      "settledMessages": 65200,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-MAX_DELIVERIES-BACKLOG/backlog-8170552343116675379/process_crash/max_deliveries/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10008747053,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1081500
+      },
+      "endDepth": 1081500,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 14390.0,
+      "publishedMessages": 143900,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 6240.0,
+      "settledMessages": 62400,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-EMPTY/backlog-2517426614004409327/process_crash/single_active_consumer/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2803186921,
+      "deliveryLatencyP99Nanos": 7527650904,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10008611342,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 224500
+      },
+      "endDepth": 224500,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 26320.0,
+      "publishedMessages": 263200,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 3870.0,
+      "settledMessages": 38700,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-BACKLOG/backlog-15236079424396614578/process_crash/single_active_consumer/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10007350109,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1280600
+      },
+      "endDepth": 1280600,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 31930.0,
+      "publishedMessages": 319300,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 3870.0,
+      "settledMessages": 38700,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-EMPTY/backlog-15907384333505679477/process_crash/single_active_consumer/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2768621183,
+      "deliveryLatencyP99Nanos": 5855470008,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10008140686,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 102000
+      },
+      "endDepth": 102000,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 16230.0,
+      "publishedMessages": 162300,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 6030.0,
+      "settledMessages": 60300,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-BACKLOG/backlog-8674779461871338628/process_crash/single_active_consumer/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10006893504,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1172300
+      },
+      "endDepth": 1172300,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 21580.0,
+      "publishedMessages": 215800,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 4350.0,
+      "settledMessages": 43500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-EMPTY/backlog-13007622654343362209/process_crash/single_active_consumer/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2676096310,
+      "deliveryLatencyP99Nanos": 5151639437,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10012420937,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 73500
+      },
+      "endDepth": 73500,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 14000.0,
+      "publishedMessages": 140000,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 6650.0,
+      "settledMessages": 66500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-BACKLOG/backlog-17630251403237196456/process_crash/single_active_consumer/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10004274364,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1093600
+      },
+      "endDepth": 1093600,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 15650.0,
+      "publishedMessages": 156500,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 6290.0,
+      "settledMessages": 62900,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-LEASED_HEAD-EMPTY/backlog-11121726793589770238/process_crash/leased_head/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3308734849,
+      "deliveryLatencyP99Nanos": 6538487761,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10007370110,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 188600
+      },
+      "endDepth": 188600,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 23310.0,
+      "publishedMessages": 233100,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4450.0,
+      "settledMessages": 44500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-PROCESS_CRASH-LEASED_HEAD-BACKLOG/backlog-3227850150928114167/process_crash/leased_head/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2024144633,
+      "deliveryLatencyP99Nanos": 6183239821,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10006987543,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 274100
+      },
+      "endDepth": 1274100,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 31050.0,
+      "publishedMessages": 310500,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 3640.0,
+      "settledMessages": 36400,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 0
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-LEASED_HEAD-EMPTY/backlog-8018668871975858991/process_crash/leased_head/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3348459173,
+      "deliveryLatencyP99Nanos": 5961817348,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10006425482,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 84000
+      },
+      "endDepth": 84000,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 14380.0,
+      "publishedMessages": 143800,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5980.0,
+      "settledMessages": 59800,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-PROCESS_CRASH-LEASED_HEAD-BACKLOG/backlog-1641934684283075586/process_crash/leased_head/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3495102303,
+      "deliveryLatencyP99Nanos": 6023886792,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10017068939,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 92900
+      },
+      "endDepth": 1092900,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 15240.0,
+      "publishedMessages": 152400,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5950.0,
+      "settledMessages": 59500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 0
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-LEASED_HEAD-EMPTY/backlog-6445184633993564976/process_crash/leased_head/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2665530655,
+      "deliveryLatencyP99Nanos": 5119663923,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10007549037,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 75700
+      },
+      "endDepth": 75700,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 14410.0,
+      "publishedMessages": 144100,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 6840.0,
+      "settledMessages": 68400,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-PROCESS_CRASH-LEASED_HEAD-BACKLOG/backlog-13671770414846805460/process_crash/leased_head/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": 2083274169,
+      "deliveryLatencyP99Nanos": 5916861765,
+      "durability": "PROCESS_CRASH",
+      "elapsedNanos": 10005085085,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 116200
+      },
+      "endDepth": 1116200,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 17190.0,
+      "publishedMessages": 171900,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 5570.0,
+      "settledMessages": 55700,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 0
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-DEFAULT-EMPTY/backlog-10457265598188456392/power_loss/default/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3626995578,
+      "deliveryLatencyP99Nanos": 7362101018,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10004995948,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 126800
+      },
+      "endDepth": 126800,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 16980.0,
+      "publishedMessages": 169800,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4300.0,
+      "settledMessages": 43000,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-DEFAULT-BACKLOG/backlog-15462187001892894715/power_loss/default/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10006414549,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1129200
+      },
+      "endDepth": 1129200,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 16930.0,
+      "publishedMessages": 169300,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4010.0,
+      "settledMessages": 40100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-DEFAULT-EMPTY/backlog-2812020388137438738/power_loss/default/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3654983523,
+      "deliveryLatencyP99Nanos": 6597764961,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10008479107,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 102900
+      },
+      "endDepth": 102900,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 15400.0,
+      "publishedMessages": 154000,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5110.0,
+      "settledMessages": 51100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-DEFAULT-BACKLOG/backlog-6089997608891688031/power_loss/default/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10005622272,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1103100
+      },
+      "endDepth": 1103100,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 14720.0,
+      "publishedMessages": 147200,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 4410.0,
+      "settledMessages": 44100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-DEFAULT-EMPTY/backlog-16356367078084734073/power_loss/default/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3162400958,
+      "deliveryLatencyP99Nanos": 5793618677,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10010235262,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 77500
+      },
+      "endDepth": 77500,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 13560.0,
+      "publishedMessages": 135600,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 5810.0,
+      "settledMessages": 58100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-DEFAULT-BACKLOG/backlog-10105491722442195522/power_loss/default/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10006076605,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1087200
+      },
+      "endDepth": 1087200,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 14460.0,
+      "publishedMessages": 144600,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "DEFAULT",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 5740.0,
+      "settledMessages": 57400,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-MAX_DELIVERIES-EMPTY/backlog-3955508310724353482/power_loss/max_deliveries/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3069601886,
+      "deliveryLatencyP99Nanos": 8384785455,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10004630465,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 143800
+      },
+      "endDepth": 143800,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 17040.0,
+      "publishedMessages": 170400,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 2660.0,
+      "settledMessages": 26600,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-MAX_DELIVERIES-BACKLOG/backlog-7227077923949964994/power_loss/max_deliveries/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10009299406,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1110500
+      },
+      "endDepth": 1110500,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 15590.0,
+      "publishedMessages": 155900,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4540.0,
+      "settledMessages": 45400,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-MAX_DELIVERIES-EMPTY/backlog-842786710679455417/power_loss/max_deliveries/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3518000969,
+      "deliveryLatencyP99Nanos": 6145064268,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10004974614,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 87700
+      },
+      "endDepth": 87700,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 14320.0,
+      "publishedMessages": 143200,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5550.0,
+      "settledMessages": 55500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-MAX_DELIVERIES-BACKLOG/backlog-11073761933368166626/power_loss/max_deliveries/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10003487742,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1107600
+      },
+      "endDepth": 1107600,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 15280.0,
+      "publishedMessages": 152800,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 4520.0,
+      "settledMessages": 45200,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-MAX_DELIVERIES-EMPTY/backlog-16191670449896757060/power_loss/max_deliveries/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3595851434,
+      "deliveryLatencyP99Nanos": 6202750649,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10010817765,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 82200
+      },
+      "endDepth": 82200,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 13310.0,
+      "publishedMessages": 133100,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 5090.0,
+      "settledMessages": 50900,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-MAX_DELIVERIES-BACKLOG/backlog-9292393102607468867/power_loss/max_deliveries/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10006988065,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1106800
+      },
+      "endDepth": 1106800,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 15060.0,
+      "publishedMessages": 150600,
+      "queueConfig": {
+        "deadLetterQueue": "backlog-dlq",
+        "leasedHead": false,
+        "maxDeliveries": 5,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "MAX_DELIVERIES",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 4380.0,
+      "settledMessages": 43800,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-EMPTY/backlog-10195373710001324805/power_loss/single_active_consumer/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 4961708179,
+      "deliveryLatencyP99Nanos": 7349620486,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10009732702,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 119400
+      },
+      "endDepth": 119400,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 15950.0,
+      "publishedMessages": 159500,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4010.0,
+      "settledMessages": 40100,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG/backlog-11113470231439928464/power_loss/single_active_consumer/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10009569453,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1127700
+      },
+      "endDepth": 1127700,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 17340.0,
+      "publishedMessages": 173400,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 4570.0,
+      "settledMessages": 45700,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-EMPTY/backlog-7850687100112946680/power_loss/single_active_consumer/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3217423944,
+      "deliveryLatencyP99Nanos": 5754311681,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10011943482,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 77800
+      },
+      "endDepth": 77800,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 13640.0,
+      "publishedMessages": 136400,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5860.0,
+      "settledMessages": 58600,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG/backlog-12395128359347666702/power_loss/single_active_consumer/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10008865040,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1115100
+      },
+      "endDepth": 1115100,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 16150.0,
+      "publishedMessages": 161500,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 4640.0,
+      "settledMessages": 46400,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-EMPTY/backlog-2813965417478088511/power_loss/single_active_consumer/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3762590766,
+      "deliveryLatencyP99Nanos": 6149082793,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10009636797,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 80800
+      },
+      "endDepth": 80800,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 13530.0,
+      "publishedMessages": 135300,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 5450.0,
+      "settledMessages": 54500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG/backlog-16381796941902624459/power_loss/single_active_consumer/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": null,
+      "deliveryLatencyP99Nanos": null,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10006997535,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1162800
+      },
+      "endDepth": 1162800,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 19170.0,
+      "publishedMessages": 191700,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": false,
+        "maxDeliveries": null,
+        "singleActiveConsumer": true
+      },
+      "queueKind": "SINGLE_ACTIVE_CONSUMER",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 2890.0,
+      "settledMessages": 28900,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 1000000
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-LEASED_HEAD-EMPTY/backlog-3499331850463746710/power_loss/leased_head/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3218917995,
+      "deliveryLatencyP99Nanos": 6634807936,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10006010603,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 110800
+      },
+      "endDepth": 110800,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 16080.0,
+      "publishedMessages": 160800,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 5000.0,
+      "settledMessages": 50000,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-1-POWER_LOSS-LEASED_HEAD-BACKLOG/backlog-10379958198125077101/power_loss/leased_head/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": 4200192317,
+      "deliveryLatencyP99Nanos": 8488775047,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10009556404,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 150400
+      },
+      "endDepth": 1150400,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 18100.0,
+      "publishedMessages": 181000,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 1,
+      "settleThroughputMessagesPerSecond": 3060.0,
+      "settledMessages": 30600,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 0
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-LEASED_HEAD-EMPTY/backlog-2991757181484606496/power_loss/leased_head/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3417444763,
+      "deliveryLatencyP99Nanos": 6113122440,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10008505323,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 81500
+      },
+      "endDepth": 81500,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 13620.0,
+      "publishedMessages": 136200,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5470.0,
+      "settledMessages": 54700,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-2-POWER_LOSS-LEASED_HEAD-BACKLOG/backlog-7592381549090530126/power_loss/leased_head/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3253573275,
+      "deliveryLatencyP99Nanos": 5769401021,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10008466469,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 77500
+      },
+      "endDepth": 1077500,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 13450.0,
+      "publishedMessages": 134500,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 2,
+      "settleThroughputMessagesPerSecond": 5700.0,
+      "settledMessages": 57000,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 0
+      },
+      "startDepth": 1000000
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-LEASED_HEAD-EMPTY/backlog-6613726585856293889/power_loss/leased_head/depth-0-repeat-1.db",
+      "deliveryLatencyP50Nanos": 3583380236,
+      "deliveryLatencyP99Nanos": 8875548465,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10003299772,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 187600
+      },
+      "endDepth": 187600,
+      "preloadedMessages": 0,
+      "publishThroughputMessagesPerSecond": 20710.0,
+      "publishedMessages": 207100,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 1950.0,
+      "settledMessages": 19500,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 0,
+        "ready": 0
+      },
+      "startDepth": 0
+    },
+    {
+      "databasePath": "/home/ppzxc/smq-spec258-ticket8/build/initial-comparison-0db7e18f99496a5db67528f6f2f0ef0036e3cd8a/new-backlog-round-1/work/round-3-POWER_LOSS-LEASED_HEAD-BACKLOG/backlog-7721633058785434572/power_loss/leased_head/depth-1000000-repeat-1.db",
+      "deliveryLatencyP50Nanos": 6031072477,
+      "deliveryLatencyP99Nanos": 8519183342,
+      "durability": "POWER_LOSS",
+      "elapsedNanos": 10008597269,
+      "endCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 176600
+      },
+      "endDepth": 1176600,
+      "preloadedMessages": 1000000,
+      "publishThroughputMessagesPerSecond": 20580.0,
+      "publishedMessages": 205800,
+      "queueConfig": {
+        "deadLetterQueue": null,
+        "leasedHead": true,
+        "maxDeliveries": null,
+        "singleActiveConsumer": false
+      },
+      "queueKind": "LEASED_HEAD",
+      "repeat": 3,
+      "settleThroughputMessagesPerSecond": 2920.0,
+      "settledMessages": 29200,
+      "startCounts": {
+        "delayed": 0,
+        "leased": 1000000,
+        "ready": 0
+      },
+      "startDepth": 1000000
+    }
+  ],
+  "revision": "0db7e18f99496a5db67528f6f2f0ef0036e3cd8a",
+  "sampleFiles": [
+    "round-1-POWER_LOSS-DEFAULT-BACKLOG.json",
+    "round-1-POWER_LOSS-DEFAULT-EMPTY.json",
+    "round-1-POWER_LOSS-LEASED_HEAD-BACKLOG.json",
+    "round-1-POWER_LOSS-LEASED_HEAD-EMPTY.json",
+    "round-1-POWER_LOSS-MAX_DELIVERIES-BACKLOG.json",
+    "round-1-POWER_LOSS-MAX_DELIVERIES-EMPTY.json",
+    "round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG.json",
+    "round-1-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-EMPTY.json",
+    "round-1-PROCESS_CRASH-DEFAULT-BACKLOG.json",
+    "round-1-PROCESS_CRASH-DEFAULT-EMPTY.json",
+    "round-1-PROCESS_CRASH-LEASED_HEAD-BACKLOG.json",
+    "round-1-PROCESS_CRASH-LEASED_HEAD-EMPTY.json",
+    "round-1-PROCESS_CRASH-MAX_DELIVERIES-BACKLOG.json",
+    "round-1-PROCESS_CRASH-MAX_DELIVERIES-EMPTY.json",
+    "round-1-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-BACKLOG.json",
+    "round-1-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-EMPTY.json",
+    "round-2-POWER_LOSS-DEFAULT-BACKLOG.json",
+    "round-2-POWER_LOSS-DEFAULT-EMPTY.json",
+    "round-2-POWER_LOSS-LEASED_HEAD-BACKLOG.json",
+    "round-2-POWER_LOSS-LEASED_HEAD-EMPTY.json",
+    "round-2-POWER_LOSS-MAX_DELIVERIES-BACKLOG.json",
+    "round-2-POWER_LOSS-MAX_DELIVERIES-EMPTY.json",
+    "round-2-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG.json",
+    "round-2-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-EMPTY.json",
+    "round-2-PROCESS_CRASH-DEFAULT-BACKLOG.json",
+    "round-2-PROCESS_CRASH-DEFAULT-EMPTY.json",
+    "round-2-PROCESS_CRASH-LEASED_HEAD-BACKLOG.json",
+    "round-2-PROCESS_CRASH-LEASED_HEAD-EMPTY.json",
+    "round-2-PROCESS_CRASH-MAX_DELIVERIES-BACKLOG.json",
+    "round-2-PROCESS_CRASH-MAX_DELIVERIES-EMPTY.json",
+    "round-2-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-BACKLOG.json",
+    "round-2-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-EMPTY.json",
+    "round-3-POWER_LOSS-DEFAULT-BACKLOG.json",
+    "round-3-POWER_LOSS-DEFAULT-EMPTY.json",
+    "round-3-POWER_LOSS-LEASED_HEAD-BACKLOG.json",
+    "round-3-POWER_LOSS-LEASED_HEAD-EMPTY.json",
+    "round-3-POWER_LOSS-MAX_DELIVERIES-BACKLOG.json",
+    "round-3-POWER_LOSS-MAX_DELIVERIES-EMPTY.json",
+    "round-3-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-BACKLOG.json",
+    "round-3-POWER_LOSS-SINGLE_ACTIVE_CONSUMER-EMPTY.json",
+    "round-3-PROCESS_CRASH-DEFAULT-BACKLOG.json",
+    "round-3-PROCESS_CRASH-DEFAULT-EMPTY.json",
+    "round-3-PROCESS_CRASH-LEASED_HEAD-BACKLOG.json",
+    "round-3-PROCESS_CRASH-LEASED_HEAD-EMPTY.json",
+    "round-3-PROCESS_CRASH-MAX_DELIVERIES-BACKLOG.json",
+    "round-3-PROCESS_CRASH-MAX_DELIVERIES-EMPTY.json",
+    "round-3-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-BACKLOG.json",
+    "round-3-PROCESS_CRASH-SINGLE_ACTIVE_CONSUMER-EMPTY.json"
+  ],
+  "scenario": "backlog",
+  "schemaVersion": 1,
+  "status": "SUCCESS"
+}

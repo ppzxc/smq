@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -298,20 +299,14 @@ final class KafkaRecoveryRunner {
                     "Kafka in-flight test request completed while the broker was paused: " + completedResponse);
         }
         broker.forceStop();
-        boolean responseBeforeDisconnect = false;
-        try {
-            final RecordMetadata metadata = pending.get(250, TimeUnit.MILLISECONDS);
-            responseBeforeDisconnect = metadata != null;
-        } catch (final ExecutionException | TimeoutException expected) {
-            // A request without a broker success response remains ambiguous after a forced disconnect.
-        }
+        final Optional<RecordMetadata> responseBeforeDisconnect = completedResponse(pending);
         producer.close(Duration.ZERO);
         broker.restart();
         final Map<String, Object> restartReadiness = KafkaClientSupport.awaitReady(broker, topic);
         final ConsumerRecord<String, byte[]> recovered = KafkaWorkloadRunner.receive(
                 broker.bootstrapServers(), topic, "smq-kafka-audit-" + UUID.randomUUID(), READ_TIMEOUT);
         final boolean recoveredPresent = recovered != null && key.equals(recovered.key());
-        if (responseBeforeDisconnect) {
+        if (responseBeforeDisconnect.isPresent()) {
             throw new IllegalStateException("Kafka returned a publish success after the forced broker stop began");
         }
         return observation(
@@ -331,11 +326,20 @@ final class KafkaRecoveryRunner {
                 "requestStartedBeforeStop",
                 true,
                 "responseBeforeDisconnect",
-                false,
+                responseBeforeDisconnect.isPresent(),
                 "recoveredRecordPresent",
                 recoveredPresent,
                 "restartReadiness",
                 restartReadiness);
+    }
+
+    private static Optional<RecordMetadata> completedResponse(final Future<RecordMetadata> pending)
+            throws InterruptedException {
+        try {
+            return Optional.ofNullable(pending.get(250, TimeUnit.MILLISECONDS));
+        } catch (final ExecutionException | TimeoutException expected) {
+            return Optional.empty();
+        }
     }
 
     private static RecordMetadata publishConfirmed(final String bootstrap, final String topic, final String key)

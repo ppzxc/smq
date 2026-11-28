@@ -4,7 +4,6 @@ import io.github.ppzxc.smq.Durability;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 record RecoveryOptions(
@@ -33,13 +32,7 @@ record RecoveryOptions(
             }
         }
 
-        final List<Durability> durabilities = switch (values.getOrDefault("durability", "BOTH")
-                .toUpperCase(Locale.ROOT)) {
-            case "BOTH" -> List.of(Durability.PROCESS_CRASH, Durability.POWER_LOSS);
-            case "PROCESS_CRASH" -> List.of(Durability.PROCESS_CRASH);
-            case "POWER_LOSS" -> List.of(Durability.POWER_LOSS);
-            default -> throw new IllegalArgumentException("--durability must be BOTH, PROCESS_CRASH, or POWER_LOSS");
-        };
+        final List<Durability> durabilities = DurabilitySelection.parse(values.getOrDefault("durability", "BOTH"));
         final int messageCount = positiveInt(values, "message-count", 4);
         final long leaseMillis = positiveLong(values, "lease-ms", 200);
         final String negativeControl = values.getOrDefault("negative-control", "none");

@@ -41,13 +41,7 @@ record StorageLossOptions(
             }
         }
 
-        final List<Durability> durabilities = switch (values.getOrDefault("durability", "BOTH")
-                .toUpperCase(Locale.ROOT)) {
-            case "BOTH" -> List.of(Durability.PROCESS_CRASH, Durability.POWER_LOSS);
-            case "PROCESS_CRASH" -> List.of(Durability.PROCESS_CRASH);
-            case "POWER_LOSS" -> List.of(Durability.POWER_LOSS);
-            default -> throw new IllegalArgumentException("--durability must be BOTH, PROCESS_CRASH, or POWER_LOSS");
-        };
+        final List<Durability> durabilities = DurabilitySelection.parse(values.getOrDefault("durability", "BOTH"));
         final boolean simulate = booleanValue(values, "simulate-storage-loss", true);
         final boolean require = booleanValue(values, "require-storage-loss", false);
         final String negativeControl = values.getOrDefault("negative-control", "none");

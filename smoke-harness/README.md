@@ -115,19 +115,9 @@ SMQ_KAFKA_DOCKER_TESTS=true ./gradlew -p smoke-harness test --tests io.github.pp
 
 `backlog`는 `--queue-kind DEFAULT|MAX_DELIVERIES|SINGLE_ACTIVE_CONSUMER|LEASED_HEAD`와 `--depth EMPTY|BACKLOG`로 단일 조건을 선택할 수 있다. 지정 장비 실행 스크립트는 내구성·큐 설정·깊이·반복 조합마다 별도 Java 프로세스와 새 데이터베이스를 만들고, 같은 조건의 별도 데이터베이스에서 워밍업한 뒤 3회 측정한다. 각 측정 보고서에 실행 호스트, 파일시스템, 코드 revision과 설정을 기록한다.
 
-첫 구·신 하네스 및 smq·RabbitMQ·Kafka 비교는 저장소 루트에서 다음을 실행한다. 이 작업은 ns0270의 로컬 XFS에서만 실행되고, 고정 하네스와 새 하네스의 실행 순서를 바꾸며, RabbitMQ 4.4.1·Kafka 4.4.0 단일 노드 비교 보고서도 만든다.
+첫 구·신 하네스 및 smq·RabbitMQ·Kafka 비교 결과는 [초기 비교 보고서](../benchmark-results/initial/comparison.md)에 보존했다. 비교는 지정 장비의 XFS에서 순차 실행했다.
 
-```sh
-./smoke-harness/run-initial-comparison.sh
-```
-
-원시 보고서와 실행 로그는 `build/initial-comparison-<revision>/`에 남는다. 새 하네스의 `new-backlog-round-1/backlog-report.json`에는 내구성·큐 설정·빈 큐/100만 건 조건별 세 반복이 들어간다. 이를 첫 기준선으로 만든다.
-
-```sh
-python3 smoke-harness/release_gate.py baseline \
-  --report build/initial-comparison-<revision>/new-backlog-round-1/backlog-report.json \
-  --output smoke-harness/release-baseline.json
-```
+새 하네스의 반복 표본 보고서([초기 48개 결과](../benchmark-results/initial/new-backlog-round-1/backlog-report.json))에서 기준선을 만들었고, 현재 판정 기준은 [release-baseline.json](release-baseline.json)에 보존했다. 기준선을 다시 만들 때는 지정 장비의 깨끗한 checkout에서 그 revision으로 생성한 전체 표본 보고서를 사용해야 한다. 기존 측정 보고서는 다른 revision에서 나온 것이므로 재사용하지 않는다.
 
 기준선을 만든 뒤 같은 ns0270 checkout에서 필수 릴리스 게이트를 실행한다. 게이트는 깨끗한 checkout, 현재 코드 revision, 지정 호스트와 XFS, 48개 필수 표본, 보고서 설정, 처리량·지연 회귀 및 깊이 기준을 확인한다. 누락되거나 불일치하는 표본은 실패한다.
 

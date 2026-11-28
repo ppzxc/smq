@@ -50,7 +50,7 @@
 | 검증에 시간·토큰 투자 [15:41, 16:00] | 70%는 다른 팀의 사례다. smq는 검증별 소요 시간과 검출한 회귀를 기록한 뒤 예산을 정한다. 병렬 호출 경합과 표적 변이의 검출력을 먼저 확인한다. |
 | Pstack state-chart [16:52] | GLOSSARY와 ADR에 상태 설명은 있다. 준비·지연·리스·정산·DLQ, 만료 경계와 오래된 토큰을 보여 주는 그림을 모델의 용어와 맞추고 검증 사례와 함께 리뷰할 수 있다. counts는 기록된 상태 전환의 근사값이므로 시간만 지난 뒤 즉시 바뀌는 값으로 그리지 않는다. |
 
-근거는 [벤치와 재현 제약](../benchmark.md#무작위-블랙박스-테스트-randombench-randombenchsmoke), [저장소 공통 계약](../../src/test/java/io/github/ppzxc/smq/storage/StorageContractTest.java), [프로세스 강제 종료 검증](../../src/test/java/io/github/ppzxc/smq/SqliteSigkillTest.java), [배포 소비자](../../deploy-test/run-all.sh), [counts ADR](../adr/0018-counts-is-an-approximation-from-recorded-transitions.md)이다.
+근거는 [하네스 전환표와 무작위 검증의 한계](../benchmark-transition.md#무작위-하네스-불변식의-대응), [저장소 공통 계약](../../src/test/java/io/github/ppzxc/smq/storage/StorageContractTest.java), [프로세스 강제 종료 검증](../../src/test/java/io/github/ppzxc/smq/SqliteSigkillTest.java), [배포 소비자](../../deploy-test/run-all.sh), [counts ADR](../adr/0018-counts-is-an-approximation-from-recorded-transitions.md)이다.
 
 ## 5. 도입 순서와 바깥 루프
 

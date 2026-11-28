@@ -56,13 +56,7 @@ record BacklogOptions(
             }
         }
 
-        final List<Durability> durabilities = switch (value(values, "durability", "BOTH")
-                .toUpperCase(Locale.ROOT)) {
-            case "BOTH" -> List.of(Durability.PROCESS_CRASH, Durability.POWER_LOSS);
-            case "PROCESS_CRASH" -> List.of(Durability.PROCESS_CRASH);
-            case "POWER_LOSS" -> List.of(Durability.POWER_LOSS);
-            default -> throw new IllegalArgumentException("--durability must be BOTH, PROCESS_CRASH, or POWER_LOSS");
-        };
+        final List<Durability> durabilities = DurabilitySelection.parse(value(values, "durability", "BOTH"));
         final List<BacklogRunner.QueueKind> queueKinds =
                 switch (value(values, "queue-kind", "BOTH").toUpperCase(Locale.ROOT)) {
                     case "BOTH" -> BacklogRunner.queueKinds();

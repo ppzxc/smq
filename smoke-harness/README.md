@@ -31,4 +31,35 @@
 
 결과는 `smoke-harness/build/smoke-harness/recovery-report.json`에 기록된다. `--negative-control drop-confirmed-publish`를 추가하면 대상 JVM 종료 후 격리 저장소 파일을 제거해, 확인된 발행 유실을 하네스가 실패로 잡는지 확인한다.
 
+## 빈 큐와 백로그 처리량 비교
+
+`backlog` 명령은 같은 SQLite 내구성 수준과 큐 설정에서 빈 큐와 사전 적재 큐를 비교한다. 기본 백로그 크기는 의도적으로 정하지 않았다. 측정 크기를 직접 지정해야 하며, 자동화 검사는 작은 값만 사용한다.
+
+빠르게 실행해 보고서를 확인하려면 다음을 실행한다.
+
+```sh
+./gradlew smokeHarness -Psmoke.args="backlog --durability PROCESS_CRASH --backlog-count 100 --duration-ms 250 --warmup-ms 50 --repeat 1 --payload-bytes 256 --batch-size 16 --chunk-size 16 --publishers 1 --consumers 1"
+```
+
+전체 측정은 다음과 같이 실행한다. 두 내구성 수준과 기본, 최대 전달 횟수 5, 단일 활성 컨슈머, 리스 중인 백로그 조건을 각각 빈 큐와 100만 건 백로그에서 3회 잰다.
+
+```sh
+./gradlew smokeHarness -Psmoke.args="backlog --durability BOTH --backlog-count 1000000 --duration-ms 10000 --warmup-ms 3000 --repeat 3 --payload-bytes 256 --batch-size 100 --chunk-size 100 --publishers 1 --consumers 1"
+```
+
+보고서는 `smoke-harness/build/smoke-harness/backlog-report.json`에, 각 워밍업·측정 조건의 독립 SQLite 파일은 `smoke-harness/build/smoke-harness/backlog-work/` 아래 고유 실행 디렉터리에 생긴다. 같은 실행 안에서도 내구성·큐 종류·깊이·반복마다 DB가 다르다. 재현 명령과 인자는 보고서에 포함된다.
+
+| 보고 필드 | 의미 |
+|---|---|
+| `publishThroughputMessagesPerSecond` | 측정 구간 안에 완료된 발행 메시지 수 / 설정된 측정 시간 |
+| `deliveryLatencyP50Nanos`, `deliveryLatencyP99Nanos` | 측정 구간 안에 꺼낸 측정 발행 메시지의 발행 시작부터 `pull` 반환까지 지연. nearest-rank 방식이며 표본이 없으면 `null` |
+| `settleThroughputMessagesPerSecond` | 측정 구간 안에 ACK 정산을 마친 메시지 수 / 설정된 측정 시간 |
+| `startDepth`, `endDepth` | 워크로드 직전과 종료 후의 ready + leased + delayed 합계. `startCounts`와 `endCounts`에 상태별 수가 함께 기록됨 |
+| `queueConfig` | 최대 전달 횟수와 dead letter 큐, 단일 활성 컨슈머 여부, leased-head 설정 |
+| `depthRatios` | 같은 내구성·큐 종류·반복에서 백로그 측정값을 빈 큐 측정값으로 나눈 값. 처리량은 백로그 / 빈 큐, 지연도 백로그 / 빈 큐 |
+
+두 조건은 같은 payload 크기와 내용, 발행자·컨슈머 수, 발행 배치, 꺼내기 청크, 측정 시간으로 실행한다. 측정 전 워밍업은 내구성·큐 종류별 별도 빈 큐 DB에서 실행하고 결과에는 포함하지 않는다. 측정 DB는 각 깊이와 반복마다 새로 만든다. `LEASED_HEAD`에서는 미리 넣은 메시지를 최대 10,000개씩 한 시간 리스로 꺼내 두어, 리스가 걸린 백로그에서 새 발행을 처리한다.
+
+이전 하네스의 [깊이 기준과 비교 방식](../docs/benchmark.md#비교-보고)은 S1의 100만 건 처리량이 빈 큐 처리량의 70% 이상인지 본다. 여기서는 `settleThroughput` 비율이 ACK 처리량에 가장 가까운 지표이며, 새 시나리오는 동시 프로듀서·컨슈머를 사용하므로 70%는 참고 기준이지 자동 합격 판정은 아니다. 이전 S3 지연 기준은 POWER_LOSS p99 10ms 이하였고, 새 `deliveryLatencyP99Nanos`는 같은 발행-꺼내기 경로를 보지만 배치 간격과 부하가 달라 직접적인 같은 조건 비교는 아니다. 이전 절대 처리량 floor(P1/P3/P7)는 이 시나리오의 메시지 배치 크기와 달라 적용하지 않는다.
+
 루트의 `./gradlew check`는 smq JAR/소스 JAR에서 하네스와 그 의존성이 빠졌는지 검사하고 하네스 CLI 테스트도 실행한다. 이 테스트는 별도 JVM에서 배포 JAR을 이름 있는 JPMS 모듈로 실행한다.

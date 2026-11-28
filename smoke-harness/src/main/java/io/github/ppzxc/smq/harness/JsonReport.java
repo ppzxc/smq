@@ -158,7 +158,7 @@ final class JsonReport {
         return json.append(']').toString();
     }
 
-    private static String quote(final String value) {
+    static String quote(final String value) {
         final StringBuilder result = new StringBuilder("\"");
         for (int index = 0; index < value.length(); index++) {
             final char character = value.charAt(index);

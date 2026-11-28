@@ -24,11 +24,17 @@ public final class Main {
         if (args.length > 0 && "recovery".equals(args[0])) {
             return RecoveryCommand.execute(args);
         }
+        if (args.length > 0 && "storage-loss".equals(args[0])) {
+            return StorageLossCommand.execute(java.util.Arrays.copyOfRange(args, 1, args.length));
+        }
         if (args.length > 0 && "soak".equals(args[0])) {
             return SoakCommand.execute(java.util.Arrays.copyOfRange(args, 1, args.length));
         }
         if (args.length > 0 && "backlog".equals(args[0])) {
             return BacklogCommand.execute(args);
+        }
+        if (args.length > 0 && "kafka".equals(args[0])) {
+            return KafkaCommand.execute(args);
         }
 
         Options options = null;

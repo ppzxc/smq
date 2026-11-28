@@ -72,7 +72,7 @@ class JavaQualityPlugin : Plugin<Project> {
 
         project.extensions.configure(SpotlessExtension::class.java) {
             java {
-                target("src/*/java/**/*.java", "deploy-test/**/src/**/*.java")
+                target("src/*/java/**/*.java", "deploy-test/**/src/**/*.java", "smoke-harness/src/**/*.java")
                 palantirJavaFormat("2.103.0")
             }
         }

@@ -49,6 +49,10 @@ tasks.test {
 tasks.run {
     jvmArgs("--enable-native-access=org.xerial.sqlitejdbc")
     systemProperty("smq.version", smqVersion.get())
+    systemProperty(
+        "smoke.modulePath",
+        files(sourceSets.main.get().output.classesDirs, smqJar, configurations.runtimeClasspath).asPath
+    )
     providers.gradleProperty("smoke.args").orNull?.let { arguments ->
         args(arguments.split(Regex("\\s+")).filter(String::isNotBlank))
     }

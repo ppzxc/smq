@@ -252,13 +252,13 @@ AI 에이전트는 이 SPEC을 전달받았을 때 다음 순서를 반드시 �
 | VER-005 | SHOULD | TCP/파일/HTTP Wire Format 변경 시 Conformance Test를 수행한다 | 규격 벡터·프로토콜 테스트 |
 | VER-006 | SHOULD | 장애·재시도·Timeout·중복 요청·동시성 시나리오를 검증한다 | 실패 주입·경계 테스트 |
 | VER-007 | SHOULD | 핵심 로직의 테스트가 결함을 탐지하는지 Mutation Testing으로 평가한다 | PIT 리포트 |
-| VER-008 | SHOULD | JUnit Jupiter의 `@ParameterizedTest`·`@MethodSource`·`@RepeatedTest`와 Instancio의 데이터 생성 기능을 활용해 보안·상태 불변식을 다양한 입력으로 검증한다. 중요한 경계값은 별도 명시한다 | JUnit Jupiter + Instancio |
+| VER-008 | SHOULD | JUnit Jupiter의 명시 사례와 jqwik 속성 기반 테스트로 보안·상태 불변식을 검증한다. 가능한 작은 유한 영역은 전수 검사하고 중요한 경계값은 별도 명시한다 | JUnit Jupiter + jqwik |
 | VER-009 | MUST | 검증을 실행하지 않았으면 PASS라고 보고하지 않는다 | 실제 Task 로그 |
 | VER-010 | MUST | 필수 검사 실패를 테스트 비활성화/검사 제외로 무단 우회하지 않는다 | CI 설정 변경 리뷰 |
 | VER-011 | SHOULD | 검증 증거에 커밋 SHA·환경·명령·결과·시각을 기록한다 | CI Artifact |
 | VER-012 | SHOULD | Testcontainers 컨테이너 재사용/병렬화는 테스트 격리와 재현성 검증 후 선택한다 | CI 안정성 측정 |
 | VER-013 | SHOULD | 필수 게이트와 비용이 큰 심층 테스트를 분리한다 | CI 정책 |
-| VER-014 | MUST | 무작위 데이터 기반 검증 실패는 Seed 또는 실패 입력을 기록하여 재현 가능해야 한다. Instancio 사용 테스트는 TST-003을 따른다 | 테스트 로그·실패 리포트, ArchUnit(Instancio 사용 테스트 클래스의 확장 적용 검사) |
+| VER-014 | MUST | 생성 데이터 기반 검증 실패는 jqwik의 Seed와 축소된 실패 입력으로 재현 가능해야 한다 | jqwik 테스트 로그·실패 리포트 |
 | VER-015 | MUST | 무작위 데이터 생성만으로 모든 경계 조건이 충족된다고 가정하지 않는다. 최소·최대 길이, Null, 인코딩 등 명시적 경계 테스트를 유지한다 | JUnit `@ParameterizedTest`·`@MethodSource` |
 
 ### 5.1 프로토콜/메시징 시스템의 검증 속성 예시 (선택)
@@ -275,7 +275,7 @@ AI 에이전트는 이 SPEC을 전달받았을 때 다음 순서를 반드시 �
 
 | ID | 수준 | 내용 | 선택 기준 |
 |---|---|---|---|
-| FORM-001 | SHOULD | JUnit Jupiter + Instancio를 이용한 생성 데이터 반복 테스트로 입력 공간과 업무 불변식을 폭넓게 탐색한다. 이는 자동 Shrinking을 포함하는 전문 Property-Based Testing 엔진과 동등하지 않다 | 파서·VO·정규화·상태 처리 |
+| FORM-001 | SHOULD | jqwik 속성 기반 테스트로 생성기 조합, 자동 Shrinking, 상태 명령열을 탐색한다. 경계와 작은 유한 영역은 별도 사례 또는 전수 생성으로 검증한다 | 파서·VO·정규화·상태 처리 |
 | FORM-002 | MAY | State Machine/Statechart 기반 테스트로 불법 전이·교착·누락 경로 탐색 | 상태가 복잡한 업무 |
 | FORM-003 | MAY | TLA+로 동시성·분산 상태 모델과 안전성/활성 속성 검증 | 메시지 중복·재시도·리더 선출·정합성 |
 | FORM-004 | MAY | Lean/JML 등 형식적 명세·증명을 특정 고위험 알고리즘에 적용 | 결함 비용 매우 높음 |
@@ -286,12 +286,12 @@ AI 에이전트는 이 SPEC을 전달받았을 때 다음 순서를 반드시 �
 
 | ID | 수준 | 규칙 |
 |---|---|---|
-| TST-001 | MUST | 신규 Java 테스트는 JUnit Jupiter를 기본 플랫폼으로, 복잡한 테스트 객체 생성에는 Instancio를 사용한다. 기존 테스트의 일괄 전환은 별도 승인 없이 수행하지 않는다 |
-| TST-002 | SHOULD | 명시 사례는 `@ParameterizedTest` + `@MethodSource`로, 반복 생성 데이터 시나리오는 `@RepeatedTest` 및 Instancio JUnit 연동(필요 시 `@InstancioSource`)으로 구성한다. 지원 API는 채택한 Instancio 버전의 공식 문서로 확인한다 |
-| TST-003 | MUST | Instancio로 무작위 데이터를 생성하는 테스트 클래스는 `@ExtendWith(InstancioExtension.class)`를 적용해 실패 시 Seed가 출력되게 한다. 재현은 `@Seed`로 고정하며, 재현된 입력을 TST-004의 명시 경계 사례로 승격할지 검토한다 |
-| TST-004 | MUST | Null, 빈 값, 최대 길이, 정수 범위, UTF-8 멀티바이트 등 위험한 경계는 생성기 확률에 맡기지 않고 별도 테스트한다 |
-| TST-005 | MUST | JUnit + Instancio가 자동 Shrinking·생성기 조합·상태 기반 속성 검증을 제공하는 전문 PBT 엔진과 기능적으로 동등하다고 주장하지 않는다 |
-| TST-006 | MAY | 최소 반례 축소가 중요한 경우 별도 승인된 도구 또는 자체 축소 전략을 검토한다 |
+| TST-001 | MUST | JUnit Jupiter는 예시·통합 테스트에, jqwik은 생성형 속성 테스트에 사용한다. 두 엔진은 같은 JUnit Platform 테스트 작업에서 실행한다 |
+| TST-002 | SHOULD | 명시 사례는 JUnit Jupiter 매개변수 테스트로, 입력 공간·불변식 탐색은 jqwik `@Property`와 `@ForAll`로 작성한다. 도메인 제약과 재사용 가능한 생성기는 `@Provide`로 표현한다 |
+| TST-003 | MUST | jqwik 실패 로그의 Seed와 축소된 입력을 보존해 재현한다. 실패 입력이 계약 경계라면 별도 고정 회귀 사례로 승격한다 |
+| TST-004 | MUST | Null, 빈 값, 최대 길이, 정수 범위, UTF-8 멀티바이트 등 위험한 경계는 생성기 확률에 맡기지 않고 항상 별도 테스트한다 |
+| TST-005 | MUST | 속성 테스트 결과는 실행한 생성·전수 범위에서만 주장한다. jqwik 실행만으로 모든 입력 공간이 증명됐다고 설명하지 않는다 |
+| TST-006 | MUST | 작고 유한한 도메인은 jqwik 전수 생성 또는 명시 사례로 모든 조합이 실행되게 한다. 큰 도메인은 필수 경계 사례와 제한된 생성형 탐색을 함께 둔다 |
 
 ## 7. Prose: AGENTS.md / 프로젝트 지침
 
@@ -333,8 +333,8 @@ AGENTS.md는 **자동화할 수 없는 맥락과 도구 사용법을 전달**하
 | SCA | 의존성 취약점 | 필수 보안 게이트(SEC-015) | 전이 의존성 포함, 예외는 만료 기한 필수 |
 | JUnit / Testcontainers | 실제 단위·연동 동작 | 재현성 있는 실행 | 격리/리소스 비용 |
 | PIT | Mutation Testing | 핵심 로직·정기/조건부 | 비용이 큰 검증 |
-| JUnit Jupiter | 매개변수화·반복·회귀·속성 유사 실행 검증 | 기본 테스트 플랫폼 | `@ParameterizedTest`, `@MethodSource`, `@RepeatedTest` 활용 |
-| Instancio | 재현 가능한 무작위 객체·데이터 생성 | JUnit Jupiter와 조합 | Seed 관리 및 경계값 별도 테스트; 자동 Shrinking 제공을 전제하지 않음 |
+| JUnit Jupiter | 예시·매개변수화·통합·회귀 테스트 | 기본 테스트 플랫폼 | `@Test`, `@ParameterizedTest`, `@MethodSource`, `@RepeatedTest` 활용 |
+| jqwik | 재현 가능한 속성 기반 입력 생성, Shrinking, 전수 생성 | JUnit Platform에서 Jupiter와 함께 실행 | Seed·축소 입력 기록; 생성형 탐색을 전체 입력 공간 보장으로 간주하지 않음 |
 | TLA+ 등 | 고위험 상태/동시성 모델 검증 | 선택적 심층 검증 | 모델과 구현 연결 필요 |
 | Forgejo/GitHub CI | 게이트·증거·병합 차단 | 실제 실행 필수 | CI 파일 존재만으로 활성화 단정 금지 |
 
@@ -342,13 +342,13 @@ AGENTS.md는 **자동화할 수 없는 맥락과 도구 사용법을 전달**하
 
 | ID | 수준 | 규칙 |
 |---|---|---|
-| TOOL-001 | MUST | **기본 필수 검사**: Java compiler (`-Xlint`), Gradle/Maven 의존성 정책, ArchUnit(계층형 프로젝트 및 프로젝트 규칙 기반 DTO `record` 검증), PMD 7, Error Prone + NullAway/JSpecify(호환성 검증 후), Spotless, JUnit Jupiter + Instancio, Secret Scanner, SCA. Testcontainers·PIT는 적용 대상에 따라 선택한다 |
+| TOOL-001 | MUST | **기본 필수 검사**: Java compiler (`-Xlint`), Gradle/Maven 의존성 정책, ArchUnit(계층형 프로젝트 및 프로젝트 규칙 기반 DTO `record` 검증), PMD 7, Error Prone + NullAway/JSpecify(호환성 검증 후), Spotless, JUnit Jupiter + jqwik, Secret Scanner, SCA. Testcontainers·PIT는 적용 대상에 따라 선택한다 |
 | TOOL-002 | MUST | **제외**: OpenRewrite와 Refaster를 기본 구성·상시 CI·자동 수정 의존성에서 사용하지 않는다. 기존 코드에 남아 있으면 사용처 확인 후 별도 승인된 제거 작업으로 전환한다 |
 | TOOL-003 | MUST | **기본 미도입**: Checkstyle·SpotBugs는 신규 프로젝트의 기본 검사기로 추가하지 않는다. 이 SPEC에 인용된 해당 도구의 탐지 사례는 *참고 패턴*이며 실제 감지를 보장하지 않는다. 고유 검사가 필요하면 PMD Custom Rule, Error Prone Custom BugChecker 또는 실행 테스트로 검증 가능한지 확인하고, 불가능하면 공백을 보고한다 |
 | TOOL-004 | MUST | **자동 수정**: Spotless는 형식만 자동 수정한다. 코드 의미가 바뀌는 수정은 AI 에이전트가 작은 패치로 작성하고 필수 검증을 다시 통과해야 한다 |
 | TOOL-005 | MUST | **성능**: Gradle 증분 빌드·캐시는 호환성 검증 후 적용하고, PMD 캐시는 입력·규칙 변경에 따른 무효화와 주기적 클린 분석을 확인한다. 검출을 빠르게 보이게 하려고 심각도나 검사 범위를 줄이지 않는다 |
 | TOOL-006 | MUST | MUST·PROFILE-MUST 규칙에 매핑된 Error Prone 체크는 빌드 설정에서 `-Xep:<CheckName>:ERROR`로 명시한다. 기본 심각도(WARNING 또는 기본 비활성)에 의존하지 않는다. 경고 전체의 일괄 에러 승격은 기존 부채 조사 후 결정한다 |
-| TOOL-007 | MUST | PMD·Error Prone·NullAway·ArchUnit·Instancio 버전을 version catalog 등으로 고정하고, 버전 변경 시 커스텀 규칙 테스트(9.3)를 재실행한다. 커스텀 PMD 규칙은 고정 버전의 API 문서를 기준으로 작성한다 |
+| TOOL-007 | MUST | PMD·Error Prone·NullAway·ArchUnit·jqwik 버전을 version catalog 등으로 고정하고, 버전 변경 시 커스텀 규칙 테스트(9.3)를 재실행한다. 커스텀 PMD 규칙은 고정 버전의 API 문서를 기준으로 작성한다 |
 | TOOL-008 | MUST | 위 구성은 단일 Gradle convention plugin(`build-logic`) 또는 Maven parent POM에서 관리한다. 모듈별 빌드 파일에서 검사 비활성화·심각도 하향·대상 제외를 금지한다(STYLE-005) |
 
 smq는 TOOL-003의 프로젝트별 적용 사례로 SpotBugs 기본 검사를 `main` 바이트코드에 실행한다. `check`에 연결하고 최대 분석 강도와 낮은 신뢰도까지 적용하며 근거 있는 제외를 제외한 탐지 결과가 있으면 빌드를 실패시킨다. Linux·Windows CI는 HTML 보고서를 아티팩트로 제공한다.
@@ -521,7 +521,7 @@ SCA는 PR 외에 정기 실행으로 신규 공개 취약점을 추적한다. �
 | [NULLAWAY] | NullAway | https://github.com/uber/NullAway |
 | [PIT] | PIT Mutation Testing | https://pitest.org/ |
 | [JUNIT] | JUnit Jupiter User Guide | https://docs.junit.org/current/user-guide/ |
-| [INSTANCIO] | Instancio User Guide | https://www.instancio.org/user-guide/ |
+| [jqwik] | jqwik User Guide | https://jqwik.net/docs/current/user-guide.html |
 | [JSPECIFY] | JSpecify User Guide | https://jspecify.dev/docs/user-guide/ |
 | [MODULITH] | Spring Modulith Reference | https://docs.spring.io/spring-modulith/reference/ |
 | [JMOLECULES] | jMolecules Integrations (ArchUnit) | https://github.com/xmolecules/jmolecules-integrations |

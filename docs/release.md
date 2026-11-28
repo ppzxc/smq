@@ -22,12 +22,11 @@
 |---|---|
 | Linux·Windows `check` | CI. 공개 워크플로가 조회 |
 | 배포 테스트 (a), Linux·Windows | CI. 공개 워크플로가 조회 |
-| `randomBenchSmoke` | CI. 공개 워크플로가 조회 |
-| ns0270 기준선 벤치 PASS | 릴리스 PR head에서 수동. PR 본문에 기록 |
-| 전체 `randomBench` 불변식 위반 0 | 릴리스 PR head에서 수동. PR 본문에 기록. 위반은 공개 전에 반드시 고친다 |
+| 공개 API 스모크와 JVM 복구 스모크 | Linux CI에서 실행하고 결과 artifact 보관 |
+| 지정 장비 릴리스 기준선 | `benchmark-results/release-report.json`을 `benchmark-gate`가 확인 |
 | 배포 테스트 (b) | 공개 워크플로 안. 실패하면 Publish하지 않는다 |
 
-조회하는 CI는 릴리스 커밋(main에서 실행한 SHA)의 main push 실행이다. 네 개의 필수 체크 `linux-build`, `windows-build`, `linux-deploy-test`, `windows-deploy-test`가 모두 `success`여야 한다. `randomBenchSmoke`는 `linux-build` 잡 안의 단계라서 그 잡이 녹색이면 통과한 것이다. 배포 테스트 (a), (b), (c)는 같은 하네스(`deploy-test/run-all.sh`)를 쓰고 저장소 URL만 다르다. (a)는 `publishToMavenLocal`, (b)는 Portal 스테이징, (c)는 공개 후 Central이다.
+조회하는 CI는 릴리스 커밋(main에서 실행한 SHA)의 main push 실행이다. 네 개의 필수 체크 `linux-build`, `windows-build`, `linux-deploy-test`, `windows-deploy-test`가 모두 `success`여야 한다. Linux 잡은 공개 API 스모크와 JVM 복구를 실행하고 결과를 artifact로 보관한다. 배포 테스트 (a), (b), (c)는 같은 하네스(`deploy-test/run-all.sh`)를 쓰고 저장소 URL만 다르다. (a)는 `publishToMavenLocal`, (b)는 Portal 스테이징, (c)는 공개 후 Central이다.
 
 ## 1. 릴리스 PR
 
@@ -65,16 +64,7 @@ git commit -m "record designated-host release benchmark"
 
 `Release` 워크플로는 이 파일이 없거나 오래됐거나, 필수 표본·기준을 만족하지 못하거나, 측정 뒤 소스가 바뀌면 `benchmark-gate`에서 실패한다. 이 단계가 통과해야 Portal 업로드 작업을 시작한다.
 
-이전 하네스는 전환 검증이 끝날 때까지 구 결과와 새 게이트를 비교하는 용도로 유지한다. #267에서 삭제하기 전까지 같은 checkout에서 기존 검증도 실행하고 결과를 PR에 기록한다.
-
-```bash
-./gradlew benchmark      # ns0270 기준선과 비교. FAIL이 하나라도 있으면 비정상 종료한다. 비율 검사는 3회 측정의 중앙값으로 판정한다
-./gradlew randomBench    # 전체 무작위 테스트. 첫 위반에서 멈추고 비정상 종료한다
-```
-
-`benchmark`는 기존 비교 확인용이다. 새 릴리스 판정은 위 새 게이트 결과로 한다. 기존 `benchmark` 비율 항목은 하네스가 세 바퀴 값의 중앙값으로 판정한다. PR 본문에는 새 게이트 보고서와 전환 중인 기존 검사 결과를 함께 적는다.
-
-벤치 절차와 비교 기준은 [docs/benchmark.md](benchmark.md), 기준선은 [benchmark/README.md](../benchmark/README.md)를 본다. `randomBench`의 옵션(`--seed`, `--budget` 등)과 결과 위치도 docs/benchmark.md에 있다. 위반이 나오면 실패한 실행의 시드로 재현해 고치고, 공개는 미룬다.
+기존 성능 기준과 무작위 불변식의 대응은 [벤치마크 전환표](benchmark-transition.md)에 기록한다. PR 본문에는 새 기준선 보고서와 지정 장비 릴리스 게이트 결과를 남긴다.
 
 ### PR 본문 양식
 
@@ -83,8 +73,7 @@ git commit -m "record designated-host release benchmark"
 
 - 장비: <호스트, OS, 파일시스템, 컨트롤러 캐시 상태>
 - 새 smq 기준선: PASS (`./smoke-harness/run-release-gate.sh`, 통과 <n>, 실패 0, 보고서 <경로>)
-- ns0270 기준선 벤치: PASS (`./gradlew benchmark`, 합계: 통과 <n>, 실패 0, 건너뜀 <n>)
-- 전체 `randomBench`: 불변식 위반 0 (마스터 시드 <값>, 실행 <n>회, 예산 <시간>)
+- 새 하네스 기준선: <회귀 한도와 백로그 깊이 판정>
 
 ## 바꾼 곳
 
@@ -201,4 +190,5 @@ Portal 토큰은 만료가 없어서 폐기하지 않으면 계속 유효하다.
 
 - 워크플로: `.github/workflows/release.yml`(Release), `.github/workflows/deploy-test.yml`(Deploy test), `linux.yml`, `windows.yml`
 - 배포 테스트 하네스: `deploy-test/run-all.sh`
-- 벤치마크: [docs/benchmark.md](benchmark.md)
+- 벤치마크 전환표: [docs/benchmark-transition.md](benchmark-transition.md)
+- 성능·내구성 하네스: [smoke-harness/README.md](../smoke-harness/README.md)

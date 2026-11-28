@@ -4,33 +4,33 @@ The `smq.java-quality` Gradle convention plugin owns the versions and settings i
 
 | SPEC ID | Check | Applied source sets | Enforcement |
 | --- | --- | --- | --- |
-| TOOL-001, STYLE-008 | javac `-Xlint:unchecked` | main, test, benchmark | warnings fail main compilation; errors fail test and benchmark |
-| TOOL-001, STYLE-008 | javac `-Xlint:rawtypes` | main, test, benchmark | warnings fail main compilation; errors fail test and benchmark |
-| OBJ-001 | Error Prone `ArrayEquals` | main, test, benchmark | error |
-| OBJ-002 | Error Prone `ArrayToString` | main, test, benchmark | error |
-| OBJ-003 | Error Prone `EqualsIncompatibleType` | main, test, benchmark | error |
-| OBJ-004 | Error Prone `EqualsHashCode` | main, test, benchmark | error |
-| OBJ-005 | Error Prone `EnumOrdinal` | main, test, benchmark | error |
-| OBJ-006 | Error Prone `ModifyCollectionInEnhancedForLoop` | main, test, benchmark | error |
-| OBJ-007 | Error Prone `ModifySourceCollectionInStream` | main, test, benchmark | error |
-| OBJ-010 | Error Prone `NarrowCalculation` | main, test, benchmark | error |
-| OBJ-010 | Error Prone `NarrowingCompoundAssignment` | main, test, benchmark | error |
-| OBJ-010 | Error Prone `FloatingPointLiteralPrecision`, `IntLongMath`, `TimeUnitConversionChecker` | main, test, benchmark | error |
-| OBJ-011 | Error Prone `DefaultLocale` | main, test, benchmark | error |
-| OBJ-012 | Error Prone `DefaultCharset` | main, test, benchmark | error |
-| ERR-008 | Error Prone `UnusedException` | main, test, benchmark | error |
-| ERR-007 | Error Prone `CatchAndPrintStackTrace` | main, test, benchmark | error |
-| CON-002 | Error Prone `FutureReturnValueIgnored`, `WaitNotInLoop` | main, test, benchmark | error |
-| CON-002 | Error Prone `LockNotBeforeTry`, `NonAtomicVolatileUpdate`, `SynchronizeOnNonFinalField` | main, test, benchmark | error |
-| CON-002 | Error Prone `InterruptedExceptionSwallowed` | main, benchmark | error |
-| | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test, benchmark | error |
-| Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test, benchmark | any violation fails the build |
-| Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test, benchmark | any violation fails the build |
+| TOOL-001, STYLE-008 | javac `-Xlint:unchecked` | main, test | warnings fail main compilation; errors fail test |
+| TOOL-001, STYLE-008 | javac `-Xlint:rawtypes` | main, test | warnings fail main compilation; errors fail test |
+| OBJ-001 | Error Prone `ArrayEquals` | main, test | error |
+| OBJ-002 | Error Prone `ArrayToString` | main, test | error |
+| OBJ-003 | Error Prone `EqualsIncompatibleType` | main, test | error |
+| OBJ-004 | Error Prone `EqualsHashCode` | main, test | error |
+| OBJ-005 | Error Prone `EnumOrdinal` | main, test | error |
+| OBJ-006 | Error Prone `ModifyCollectionInEnhancedForLoop` | main, test | error |
+| OBJ-007 | Error Prone `ModifySourceCollectionInStream` | main, test | error |
+| OBJ-010 | Error Prone `NarrowCalculation` | main, test | error |
+| OBJ-010 | Error Prone `NarrowingCompoundAssignment` | main, test | error |
+| OBJ-010 | Error Prone `FloatingPointLiteralPrecision`, `IntLongMath`, `TimeUnitConversionChecker` | main, test | error |
+| OBJ-011 | Error Prone `DefaultLocale` | main, test | error |
+| OBJ-012 | Error Prone `DefaultCharset` | main, test | error |
+| ERR-008 | Error Prone `UnusedException` | main, test | error |
+| ERR-007 | Error Prone `CatchAndPrintStackTrace` | main, test | error |
+| CON-002 | Error Prone `FutureReturnValueIgnored`, `WaitNotInLoop` | main, test | error |
+| CON-002 | Error Prone `LockNotBeforeTry`, `NonAtomicVolatileUpdate`, `SynchronizeOnNonFinalField` | main, test | error |
+| CON-002 | Error Prone `InterruptedExceptionSwallowed` | main | error |
+| | Error Prone `JavaTimeDefaultTimeZone`, `MissingFail` | main, test | error |
+| Multiple | [PMD MUST rules](../../config/pmd/must.xml) | main, test | any violation fails the build |
+| Multiple | [PMD SHOULD rules](../../config/pmd/should.xml) | main, test | any violation fails the build |
 | TOOL-003 | SpotBugs 4.10.5 with maximum effort and low confidence threshold | main | findings fail the build |
 | NUL-001 | NullAway / JSpecify | main | error; only `@NullMarked` code, explicit nullness required |
-| STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, benchmark, deploy-test Java | `spotlessCheck` is part of `check` |
+| STYLE-002 | Spotless with Palantir Java Format 2.103.0 | src main, test, deploy-test Java | `spotlessCheck` is part of `check` |
 
-Error Prone 2.51.0 runs its default checks and the explicitly adopted checks. Main compilation treats warnings as errors; test and benchmark compilations retain their existing error levels and Korean test scenario names. `InterruptedExceptionSwallowed` is an error in main and benchmark.
+Error Prone 2.51.0 runs its default checks and the explicitly adopted checks. Main compilation treats warnings as errors; test compilations retain their existing error levels and Korean test scenario names. `InterruptedExceptionSwallowed` is an error in main.
 
 For additional disabled-by-default checks and suggestions, run `./gradlew --rerun-tasks compileJava -PextendedErrorProne`. Diagnostics appear in the console and Gradle problems report (`build/reports/problems/problems-report.html`); this optional compilation can fail on diagnostics. Omit the property for the normal gate.
 
@@ -44,15 +44,9 @@ Test fixtures retain narrowly scoped PMD suppressions for behavior that the test
 - `UnusedLocalVariable` permits samplers to remain open for the body of their try-with-resources, even though the variable itself is not read.
 - `DoNotCallGarbageCollectionExplicitly` is necessary to probe weakly reachable records during a session.
 
-Benchmark code retains narrowly scoped PMD suppressions to preserve its external behavior:
-
-- `SystemPrintln` preserves the parent and child CLI output, progress, errors, and module-path diagnostics.
-- `UseTryWithResources` preserves `RandomBenchMain.run`'s optional JFR lifecycle and `RecordSpool.close`'s synchronized close order and exception behavior.
-- `CloseResource` preserves `RandomBenchMain.run`'s optional JFR recording, which its cleanup path closes.
-
 ## PMD enforcement and reports
 
-PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java`. The [MUST ruleset](../../config/pmd/must.xml) contains 86 built-in rule IDs, grouped as follows, and the custom `PolicyException` rule:
+PMD 7.29.0 analyzes `main` and `test`, excluding `module-info.java`. The [MUST ruleset](../../config/pmd/must.xml) contains 86 built-in rule IDs, grouped as follows, and the custom `PolicyException` rule:
 
 | PMD category | MUST rules |
 | --- | ---: |
@@ -64,9 +58,9 @@ PMD 7.29.0 analyzes `main`, `test`, and `benchmark`, excluding `module-info.java
 | performance | 5 |
 | security | 2 |
 
-Both adopted PMD rulesets cover priorities 1 through 5. Violations fail their respective tasks in all three source sets. Run `./gradlew --continue pmdMain pmdTest pmdBenchmark pmdMainShould pmdTestShould pmdBenchmarkShould` to collect the gate reports.
+Both adopted PMD rulesets cover priorities 1 through 5. Violations fail their respective tasks in both source sets. Run `./gradlew --continue pmdMain pmdTest pmdMainShould pmdTestShould` to collect the gate reports.
 
-Run `./gradlew pmdMainAll pmdTestAll pmdBenchmarkAll` for the separate, non-blocking report of all eight Java categories at priorities 1–5. Its ruleset excludes `LoosePackageCoupling`, which requires a project-specific list, and `CommentDefaultAccessModifier` and `CommentRequired`, which conflict with the comment policy, and `PrematureDeclaration`, which conflicts with the adopted block-start declaration rule. The XML and HTML reports are under `build/reports/pmd/`, with task names distinguishing the gate and extended reports. Linux and Windows CI upload gate HTML reports as `linux-pmd-report` and `windows-pmd-report`.
+Run `./gradlew pmdMainAll pmdTestAll` for the separate, non-blocking report of all eight Java categories at priorities 1–5. Its ruleset excludes `LoosePackageCoupling`, which requires a project-specific list, and `CommentDefaultAccessModifier` and `CommentRequired`, which conflict with the comment policy, and `PrematureDeclaration`, which conflicts with the adopted block-start declaration rule. The XML and HTML reports are under `build/reports/pmd/`, with task names distinguishing the gate and extended reports. Linux and Windows CI upload gate HTML reports as `linux-pmd-report` and `windows-pmd-report`.
 
 `SqliteStorage` retains narrowly scoped PMD suppressions for these contracts:
 
@@ -96,14 +90,3 @@ On Linux with JDK 25, integration commit `aab13e0` reported 89 violations in
 13 AvoidCatchingGenericException, 6 CognitiveComplexity, 2 CyclomaticComplexity,
 and 2 UnitTestShouldIncludeAssert. The XML and HTML reports identify each location.
 The findings were resolved or addressed with narrowly scoped, justified exceptions before the test gate was enabled.
-
-### PMD SHOULD benchmark baseline (#248)
-
-On Linux with JDK 25, the initial `pmdBenchmarkShould` baseline was 58 violations:
-20 CyclomaticComplexity, 12 AvoidCatchingGenericException, 11 CognitiveComplexity,
-9 UnnecessaryWarningSuppression, 5 CloseResource, and 1 AvoidReassigningParameters.
-After the rule changes in #242 and #247, the benchmark cleanup started at 57.
-The findings were resolved or addressed with narrowly scoped, justified exceptions before the benchmark gate was enabled.
-`RandomRun` coordinates the workload, recording, and judgment phases; its aggregate
-class complexity is excepted with a class-node-only XPath and `@PolicyException`.
-Method complexity findings remain enabled, including for `RandomRun`.

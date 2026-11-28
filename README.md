@@ -98,34 +98,23 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 - **Windows 성능**: Linux 기준 환경보다 처리량이 낮다. 특히 `POWER_LOSS` 단건은 fsync 비용에 묶여 약 80~90 msg/s다. 배치로 발행하면 격차가 크게 줄어든다. 근거는 [ADR 0008](docs/adr/0008-windows-has-no-absolute-throughput-floor.md)이다.
 - **인메모리 저장소**: `Smq.inMemory()`는 한 프로세스 안에서만 쓴다.
 
-## 성능: 내구성 수준과 배치
+## 성능과 내구성 측정
 
-두 내구성 수준의 처리량(msg/s)이다. 발행·꺼내기·ACK를 반복하는 조건이고, "단건"은 한 건씩, "묶음"은 발행 배치와 청크를 키운 경우다(256B 100건, 2KB 300건, 4KB 400건, 6KB 500건). 베어메탈 서버(배터리 백업 쓰기 캐시가 있는 HDD, xfs)에서 1회 잰 값이다.
-
-| 메시지 크기 | `PROCESS_CRASH`(기본) 단건 | `PROCESS_CRASH`(기본) 묶음 | `POWER_LOSS` 단건 | `POWER_LOSS` 묶음 |
-|---|---|---|---|---|
-| 256B | 2,276 | 49,925 | 648 | 16,836 |
-| 2KB | 2,152 | 15,530 | 685 | 9,806 |
-| 4KB | 2,535 | 13,695 | 595 | 9,006 |
-| 6KB | 2,580 | 6,842 | 567 | 5,734 |
-
-`POWER_LOSS`는 쓰기 트랜잭션마다 fsync를 하므로 저장 장치의 fsync 속도에 묶인다. 이 서버는 쓰기 캐시 덕분에 fsync가 빠르다. 쓰기 캐시가 없는 디스크나 가상 디스크에서는 `POWER_LOSS` 단건이 수십 msg/s까지 떨어진다(WSL2에서 256B 단건 29~67 msg/s). 어느 수준이든 가능하면 발행을 묶고 청크를 크게 꺼낸다. 측정 환경은 [docs/benchmark.md](docs/benchmark.md#성능-참고-배치-없이-쓰면-느리다)에 있다.
+`POWER_LOSS`는 저장 장치의 fsync 속도에 묶여 장비별 처리량 차이가 크다. 어느 내구성 수준이든 가능하면 발행을 묶고 청크를 크게 꺼낸다. 새 기준선과 회귀 판정, 기존 기준의 대응 근거는 [벤치마크 전환표](docs/benchmark-transition.md)와 [스모크 하네스 안내](smoke-harness/README.md)에 있다.
 
 ## 빌드와 테스트
 
 ```bash
 ./gradlew build            # 컴파일, 테스트, 문서 jar 검증
 ./gradlew test             # 테스트만
-./gradlew benchmarkSmoke   # 벤치 하네스가 도는지만 확인하는 짧은 실행
-./gradlew smokeHarness    # 새 공개 API 스모크 하네스
+./gradlew smokeHarness    # 공개 API 스모크 하네스
 ./gradlew check            # 정적 분석과 검증 작업 포함
 ./gradlew spotlessApply    # Java 소스 포맷 적용
 ```
 
 `check`는 채택한 PMD MUST·SHOULD·주석 정책, SpotBugs, Error Prone, NullAway/JSpecify, Spotless를 실행한다. 전체 PMD 범주와 확장 Error Prone 진단은 별도로 실행할 수 있다. 차단 기준과 실행 방법, 보고서 위치는 [Java 검사 설정](docs/agents/java-quality-checks.md)에 정리되어 있다. CodeQL은 GitHub Actions에서 별도로 실행한다.
 
-벤치마크 절차는 [docs/benchmark.md](docs/benchmark.md), 기준선은 [benchmark/README.md](benchmark/README.md)를 본다.
-새 스모크·복구·외부 브로커·지정 장비 기준선은 [smoke-harness/README.md](smoke-harness/README.md)에 있다.
+스모크·복구·외부 브로커·지정 장비 기준선은 [smoke-harness/README.md](smoke-harness/README.md)에 있다.
 
 ## 문서 지도
 
@@ -136,8 +125,8 @@ try (Smq smq = Smq.sqlite(Path.of("smq.db")).open()) {   // 또는 Smq.inMemory(
 | [docs/adr/](docs/adr) | 설계 결정 기록(0001~0018) |
 | [docs/future-requirements.md](docs/future-requirements.md) | v1에서 뺀 기능 목록 |
 | [docs/release.md](docs/release.md), [CHANGELOG.md](CHANGELOG.md) | 릴리스 런북, 변경 이력 |
-| [docs/benchmark.md](docs/benchmark.md), [benchmark/README.md](benchmark/README.md) | 벤치 하네스, 성능 수치, 기준선 |
-| [smoke-harness/README.md](smoke-harness/README.md) | 새 공개 API 스모크, 내구성 복구, 단일 노드 비교와 릴리스 게이트 |
+| [docs/benchmark-transition.md](docs/benchmark-transition.md) | 기존 성능·무작위 검증 기준의 새 하네스 대응 |
+| [smoke-harness/README.md](smoke-harness/README.md) | 공개 API 스모크, 내구성 복구, 단일 노드 비교와 릴리스 게이트 |
 | [docs/research/](docs/research) | RabbitMQ 핵심 기능, SQLite 동시성 등 조사 자료(다중 프로세스 조사는 ADR 0012 이전의 기록) |
 
 ## 라이선스

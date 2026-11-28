@@ -74,7 +74,7 @@ RabbitMQ 비교기는 smq API가 아니라 공식 RabbitMQ Java 클라이언트�
 RABBITMQ_COUNT=24 RABBITMQ_WARMUP=2 RABBITMQ_REPEAT=1 ./smoke-harness/rabbitmq-integration.sh
 ```
 
-이 스크립트는 Docker가 필요하며 로컬 포트 5674에 컨테이너를 띄우고 `smoke-harness/build/rabbitmq-data/`를 `/var/lib/rabbitmq`에 마운트한다. 컨테이너와 데이터 디렉터리는 그대로 남긴다. 기본 컨테이너 이름은 `smq-rabbitmq-441-integration`이다. 다른 이름·포트·데이터 위치는 `RABBITMQ_CONTAINER`, `RABBITMQ_AMQP_PORT`, `RABBITMQ_DATA_DIR`로 지정할 수 있다. 사용자와 암호 기본값은 로컬 실험용 `bench`이며 `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD`로 덮어쓸 수 있다.
+이 스크립트는 Docker가 필요하며 로컬 포트 5674에 컨테이너를 띄우고 새 Docker named volume을 `/var/lib/rabbitmq`에 마운트한다. 컨테이너는 `rabbitmq` 사용자로 실행하며, 시작 전에 해당 사용자가 volume을 읽고 쓸 수 있는지 확인한다. 컨테이너와 volume은 그대로 남긴다. 기본 컨테이너 이름은 `smq-rabbitmq-441-integration`이다. 다른 이름·포트·volume 이름은 `RABBITMQ_CONTAINER`, `RABBITMQ_AMQP_PORT`, `RABBITMQ_VOLUME`로 지정할 수 있다. volume 이름은 새 이름이어야 한다. 사용자와 암호 기본값은 로컬 실험용 `bench`이며 `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD`로 덮어쓸 수 있다.
 
 측정 결과는 `smoke-harness/build/smoke-harness/rabbit-report.json`, 강제 종료 복구 결과는 `smoke-harness/build/smoke-harness/rabbit-recovery-report.json`에 기록한다. 두 보고서에 실제 브로커·클라이언트 버전, queue 설정, 작업량, 발행 확인·라우팅 오류, consumer ACK 전송, 복구 뒤 관측값과 재현 명령이 들어간다. 성능 보고서는 단건·배치 발행과 가져오기·settle 처리의 처리량과 지연 표본을 기록한다. 로컬 Docker 파일시스템과 자원 제한은 결과에 영향을 주므로 이 수치는 기준 성능으로 간주하지 않는다.
 

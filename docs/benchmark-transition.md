@@ -1,6 +1,6 @@
 # 벤치마크·무작위 검증 전환표
 
-새 기준선은 [지정 장비 보고서](../benchmark-results/initial-comparison.md)와 [릴리스 기준선](../smoke-harness/release-baseline.json)에 기록한다. 측정 절차와 실행 명령은 [스모크 하네스 안내](../smoke-harness/README.md)에 있다.
+새 기준선은 [초기 비교 보고서](../benchmark-results/initial/comparison.md)와 [릴리스 기준선](../smoke-harness/release-baseline.json)에 기록한다. 측정 절차와 실행 명령은 [스모크 하네스 안내](../smoke-harness/README.md)에 있다.
 
 ## 성능 판정 기준
 

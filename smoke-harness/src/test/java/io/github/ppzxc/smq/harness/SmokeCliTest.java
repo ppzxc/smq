@@ -19,6 +19,50 @@ class SmokeCliTest {
     Path directory;
 
     @Test
+    void rabbitPlanDescribesPinnedBrokerAndQueueConfigurationsWithoutDocker() throws Exception {
+        final Path report = this.directory.resolve("rabbit-plan.json");
+        final Process process = new ProcessBuilder(this.javaCommand("rabbit", "plan", "--output", report.toString()))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(0, process.waitFor(), diagnostics);
+        final String json = Files.readString(report);
+        assertTrue(json.contains("\"rabbitmqVersion\":\"4.4.1\""), json);
+        assertTrue(json.contains("\"javaClientVersion\":\"5.36.0\""), json);
+        assertTrue(json.contains("\"queueType\":\"classic\""), json);
+        assertTrue(json.contains("\"durable\":true"), json);
+        assertTrue(json.contains("\"deliveryMode\":2"), json);
+        assertTrue(json.contains("\"queueType\":\"quorum\""), json);
+        assertTrue(json.contains("\"x-quorum-initial-group-size\":1"), json);
+        assertTrue(json.contains("mandatory publishes with ReturnListener"), json);
+        assertTrue(json.contains("consumer ACK sends are not publisher confirms"), json);
+        assertTrue(json.contains("\"recoveryQueueStabilizationMillis\":2000"), json);
+    }
+
+    @Test
+    void rabbitRunRejectsInvalidWorkloadBeforeConnectingToABroker() throws Exception {
+        final Process process = new ProcessBuilder(this.javaCommand("rabbit", "run", "--count", "0"))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(1, process.waitFor(), diagnostics);
+        assertTrue(diagnostics.contains("--count must be positive"), diagnostics);
+    }
+
+    @Test
+    void rabbitRecoveryRejectsInvalidPortBeforeCallingDocker() throws Exception {
+        final Process process = new ProcessBuilder(this.javaCommand("rabbit", "recovery", "--port", "0"))
+                .redirectErrorStream(true)
+                .start();
+        final String diagnostics = new String(process.getInputStream().readAllBytes());
+
+        assertEquals(1, process.waitFor(), diagnostics);
+        assertTrue(diagnostics.contains("--port must be positive"), diagnostics);
+    }
+
+    @Test
     void cliPublishesPullsSettlesAndWritesAReportThroughThePackagedModule() throws Exception {
         final Path report = this.directory.resolve("report.json");
         final Path database = this.directory.resolve("work");

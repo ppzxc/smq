@@ -25,7 +25,9 @@ val smqVersion = providers.provider<String> {
 
 dependencies {
     implementation(files(smqJar))
+    implementation("com.rabbitmq:amqp-client:5.36.0")
     compileOnly("org.jspecify:jspecify:1.0.1")
+    runtimeOnly("org.slf4j:slf4j-nop:1.7.36")
     runtimeOnly("org.xerial:sqlite-jdbc:3.53.4.0")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
@@ -40,8 +42,7 @@ application {
 
 tasks.test {
     useJUnitPlatform()
-    val sqlite = configurations.runtimeClasspath
-    val modulePath = files(sourceSets.main.get().output.classesDirs, smqJar, sqlite).asPath
+    val modulePath = files(sourceSets.main.get().output.classesDirs, configurations.runtimeClasspath).asPath
     systemProperty("smoke.modulePath", modulePath)
     systemProperty("smoke.smqVersion", smqVersion.get())
 }
@@ -51,7 +52,7 @@ tasks.run {
     systemProperty("smq.version", smqVersion.get())
     systemProperty(
         "smoke.modulePath",
-        files(sourceSets.main.get().output.classesDirs, smqJar, configurations.runtimeClasspath).asPath
+        files(sourceSets.main.get().output.classesDirs, configurations.runtimeClasspath).asPath
     )
     providers.gradleProperty("smoke.args").orNull?.let { arguments ->
         args(arguments.split(Regex("\\s+")).filter(String::isNotBlank))

@@ -3,7 +3,6 @@ import com.vanniktech.maven.publish.JavaLibrary
 import com.vanniktech.maven.publish.SourcesJar
 import java.util.zip.ZipFile
 import org.gradle.plugins.signing.SigningExtension
-import org.gradle.api.tasks.options.Option
 import org.gradle.external.javadoc.StandardJavadocDocletOptions
 
 plugins {
@@ -22,21 +21,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
-}
-
-// 벤치 하네스. 배포 jar에는 들어가지 않고, main 출력과 sqlite-jdbc에만 의존한다.
-val benchmark: SourceSet = sourceSets.create("benchmark") {
-    compileClasspath += sourceSets.main.get().output
-    runtimeClasspath += sourceSets.main.get().output
-}
-
-configurations[benchmark.implementationConfigurationName].extendsFrom(configurations.implementation.get())
-configurations[benchmark.runtimeOnlyConfigurationName].extendsFrom(configurations.runtimeOnly.get())
-
-// 러너·집계·비교기 같은 순수 로직은 test 소스셋에서 단위 테스트한다.
-sourceSets.test {
-    compileClasspath += benchmark.output
-    runtimeClasspath += benchmark.output
 }
 
 repositories {
@@ -61,6 +45,10 @@ tasks.javadoc {
         addBooleanOption("Werror", true)
         encoding = "UTF-8"
     }
+}
+
+tasks.jar {
+    manifest.attributes["Implementation-Version"] = project.version
 }
 
 val minimumCoverage = "0.90".toBigDecimal()
@@ -99,135 +87,8 @@ tasks.jacocoTestCoverageVerification {
     }
 }
 
-val benchmarkBaseline = layout.projectDirectory.file("benchmark/baseline.json")
-
-fun JavaExec.benchmarkRunner(vararg extra: String, main: String = "io.github.ppzxc.smq.benchmark.BenchMain") {
-    group = "benchmark"
-    // smq jar와 그 런타임 의존성은 모듈 경로에, 하네스(benchmark 출력)만 클래스패스에 둔다.
-    // 자식 JVM은 부모의 jdk.module.path와 java.class.path를 그대로 물려받는다.
-    dependsOn(tasks.jar)
-    classpath = benchmark.output
-    mainClass = main
-    val modulePath = files(tasks.jar, configurations.runtimeClasspath)
-    jvmArgumentProviders.add(CommandLineArgumentProvider {
-        // ModuleGuard.childJvmArgs와 같은 인자 목록이다. 한쪽을 바꾸면 다른 쪽도 맞춘다.
-        listOf("--enable-native-access=ALL-UNNAMED", "--enable-native-access=org.xerial.sqlitejdbc",
-            "--module-path", modulePath.asPath, "--add-modules", "io.github.ppzxc.smq")
-    })
-    javaLauncher = javaToolchains.launcherFor(java.toolchain)
-    args(*extra)
-}
-
-tasks.register<JavaExec>("benchmarkSmoke") {
-    description = "짧은 스모크 실행. 임계값 없이 하네스가 끝까지 도는지만 확인한다."
-    benchmarkRunner("--mode", "smoke")
-}
-
-abstract class FullBenchmark : JavaExec() {
-    @get:Input
-    @get:Optional
-    @get:Option(option = "repeat", description = "비율 검사의 S1 조건을 재는 횟수 (기본 3, 1이면 단발)")
-    abstract val repeat: Property<String>
-}
-
-tasks.register<FullBenchmark>("benchmark") {
-    description = "전체 벤치. 기준 환경에서 수동으로 돌린다. --repeat 옵션, 그 밖의 옵션은 -Pbenchmark.args=\"...\"로 더한다."
-    benchmarkRunner("--mode", "full", "--baseline", benchmarkBaseline.asFile.path,
-            "--output", layout.buildDirectory.file("benchmark/result.json").get().asFile.path)
-    (findProperty("benchmark.args") as String?)?.let { args(it.split(" ").filter(String::isNotBlank)) }
-    doFirst { repeat.orNull?.let { args("--repeat", it) } }
-}
-
-tasks.register<JavaExec>("backlogBench") {
-    description = "발행량을 줄여 적체가 회복되는지 측정한다."
-    benchmarkRunner(layout.buildDirectory.dir("backlog-bench").get().asFile.path,
-            main = "io.github.ppzxc.smq.benchmark.BacklogBench")
-    args((findProperty("backlog.args") as String? ?: "100000 10000 5000 2000 30 180")
-            .split(" ").filter(String::isNotBlank))
-}
-
-// 무작위 블랙박스 하네스. 옵션은 `./gradlew randomBench --seed 42 --budget 10m`처럼 태스크 옵션으로 준다.
-abstract class RandomBench : JavaExec() {
-    @get:Input
-    @get:Optional
-    @get:Option(option = "seed", description = "이 시드 하나만 다시 돈다")
-    abstract val seed: Property<String>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "budget", description = "새 실행을 시작할 수 있는 세션 시간. 예: 30m, 90s (기본 30m)")
-    abstract val budget: Property<String>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "load", description = "부하 구간 길이. 예: 10s (기본 10s)")
-    abstract val load: Property<String>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "master-seed", description = "실행 시드를 뽑을 마스터 시드 (기본 현재 시각)")
-    abstract val masterSeed: Property<String>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "jfr", description = "JVM에 Java Flight Recorder 연속 레코딩을 켠다 (기본 끔)")
-    abstract val jfr: Property<Boolean>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "rate", description = "고정 속도 모드. 프로듀서 전체가 초당 이만큼 보내고 달성률과 백로그 추세를 판정한다. JFR이 기본으로 켜진다 (예: 500)")
-    abstract val rate: Property<String>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "message-bytes", description = "고정 속도 모드의 메시지 크기 상한(최소는 그 절반). 기본 1024. --rate가 있어야 한다")
-    abstract val messageBytes: Property<String>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "depth", description = "고정 속도 모드의 미리 채울 깊이. 기본 100000. --rate가 있어야 한다")
-    abstract val depth: Property<String>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "standing-queue", description = "고정 속도 모드에서 큐 깊이가 미리 채운 깊이 이하면 컨슈머가 쉬어 그 깊이를 유지한다. --rate가 있어야 한다")
-    abstract val standingQueue: Property<Boolean>
-
-    @get:Input
-    @get:Optional
-    @get:Option(option = "durability", description = "내구성 수준을 고정한다: POWER_LOSS 또는 PROCESS_CRASH (기본: 시드에서 무작위)")
-    abstract val durability: Property<String>
-}
-
-val randomBenchMain = "io.github.ppzxc.smq.benchmark.random.RandomBenchMain"
-val randomBenchOut = layout.buildDirectory.dir("random-bench").get().asFile.path
-
-tasks.register<RandomBench>("randomBench") {
-    description = "무작위 워크로드와 불변식 검사기. 수동 실행. 첫 위반에서 멈추고 비정상 종료한다. --seed, --budget, --durability 옵션."
-    benchmarkRunner("--out-dir", randomBenchOut, main = randomBenchMain)
-    doFirst {
-        seed.orNull?.let { args("--seed", it) }
-        budget.orNull?.let { args("--budget", it) }
-        load.orNull?.let { args("--load", it) }
-        masterSeed.orNull?.let { args("--master-seed", it) }
-        rate.orNull?.let { args("--rate", it) }
-        messageBytes.orNull?.let { args("--message-bytes", it) }
-        depth.orNull?.let { args("--depth", it) }
-        durability.orNull?.let { args("--durability", it) }
-        if (standingQueue.orNull == true) args("--standing-queue")
-        if (jfr.orNull == true) args("--jfr")
-    }
-}
-
-// check에는 넣지 않는다. CI Linux 잡이 별도 단계로 돌린다.
-tasks.register<JavaExec>("randomBenchSmoke") {
-    description = "고정 시드 몇 개를 실행당 약 2초씩 돈다. 하네스와 검사기가 끝까지 도는지, 위반이 없는지 확인한다."
-    val outputDir = providers.gradleProperty("randomBenchSmokeOutDir").orElse(randomBenchOut)
-    benchmarkRunner("--smoke", "--out-dir", outputDir.get(), main = randomBenchMain)
-}
-
-// benchmark 소스셋이 배포 jar와 소스 jar에 섞이지 않았는지 jar 내용으로 확인한다.
-val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
+// The application artifact must not include the standalone test harness or its test dependencies.
+val verifyPublishedJarBoundary = tasks.register("verifyPublishedJarBoundary") {
     group = "verification"
     val jars = tasks.jar.get().archiveFile
     val sources = tasks.named<Jar>("sourcesJar").get().archiveFile
@@ -236,12 +97,34 @@ val verifyJarExcludesBenchmark = tasks.register("verifyJarExcludesBenchmark") {
         listOf(jars.get().asFile, sources.get().asFile).forEach { jar ->
             val entries = ZipFile(jar).use { z -> z.entries().toList().map { it.name } }
             check(entries.any { it.endsWith("smq/Smq.class") || it.endsWith("smq/Smq.java") }) { "${jar.name}에 main 항목이 없다" }
-            val bad = entries.filter { it.contains("smq/benchmark/") }
-            check(bad.isEmpty()) { "${jar.name}에 benchmark 항목이 들어 있다: $bad" }
+            val bad = entries.filter {
+                it.contains("smq/harness/")
+                        || it.startsWith("org/junit/")
+                        || it.startsWith("org/xerial/")
+            }
+            check(bad.isEmpty()) { "${jar.name}에 harness 또는 test 항목이 들어 있다: $bad" }
         }
     }
 }
-tasks.check { dependsOn(verifyJarExcludesBenchmark, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
+tasks.check { dependsOn(verifyPublishedJarBoundary, tasks.jacocoTestCoverageVerification, tasks.javadoc) }
+
+val smokeHarnessCheck = tasks.register<GradleBuild>("smokeHarnessCheck") {
+    group = "verification"
+    description = "독립 Gradle 하네스의 공개 API 스모크 테스트를 실행한다."
+    dir = layout.projectDirectory.dir("smoke-harness").asFile
+    tasks = listOf("test")
+    dependsOn("jar")
+}
+tasks.check { dependsOn(smokeHarnessCheck) }
+
+tasks.register<GradleBuild>("smokeHarness") {
+    group = "verification"
+    description = "두 내구성 수준과 단건·배치 공개 API 스모크를 실행한다. -Psmoke.args로 옵션을 넘긴다."
+    dir = layout.projectDirectory.dir("smoke-harness").asFile
+    tasks = listOf("run")
+    dependsOn("jar")
+    findProperty("smoke.args")?.toString()?.let { startParameter.projectProperties["smoke.args"] = it }
+}
 
 val commentRules = layout.projectDirectory.file("config/pmd/comments.xml")
 // PMD 7.29 cannot parse both requires modifiers. Keep the line length for comment locations.

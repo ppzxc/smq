@@ -1,0 +1,304 @@
+> Task :build-logic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :build-logic:compileKotlin UP-TO-DATE
+> Task :build-logic:compileJava NO-SOURCE
+> Task :build-logic:pluginDescriptors UP-TO-DATE
+> Task :build-logic:processResources UP-TO-DATE
+> Task :build-logic:classes UP-TO-DATE
+> Task :build-logic:jar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+
+> Task :compileBenchmarkJava
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/ChildResult.java:11: warning: [ArrayRecordComponent] Record components should not be arrays.
+record ChildResult(String role, long messages, long elapsedNanos, long[] latenciesMicros) {
+                                                                         ^
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/BacklogBench.java:209: warning: [LongDoubleConversion] Conversion from long to double may lose precision; use an explicit cast to double if this was intentional
+            pace(now, chunk.messages().size(), rate);
+                                               ^
+    (see https://errorprone.info/bugpattern/LongDoubleConversion)
+  Did you mean 'pace(now, chunk.messages().size(), (double) rate);'?
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/BenchMain.java:143: warning: [IncrementInForLoopAndHeader] This for loop increments the same variable in the header and in the body
+        for (int i = 0; i < args.length; i++) {
+        ^
+    (see https://errorprone.info/bugpattern/IncrementInForLoopAndHeader)
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/Environment.java:16: warning: [InvalidParam] `workDirFs` is very close to the parameter `workDir`. Did you mean to reference the parameter?
+    /** @param workDir SQLite 파일을 만들 디렉터리. 이 파일 시스템 종류가 {@code workDirFs}로 남는다 */
+                                                        ^
+    (see https://errorprone.info/bugpattern/InvalidParam)
+  Did you mean '/** @param workDir SQLite 파일을 만들 디렉터리. 이 파일 시스템 종류가 {@code workDir}로 남는다 */'?
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/Environment.java:16: warning: [MissingSummary] A summary line is required on public/protected Javadocs.
+    /** @param workDir SQLite 파일을 만들 디렉터리. 이 파일 시스템 종류가 {@code workDirFs}로 남는다 */
+        ^
+    (see https://google.github.io/styleguide/javaguide.html#s7.2-summary-fragment)
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/Json.java:245: warning: [BooleanLiteral] This expression can be written more clearly with a boolean literal.
+                return Boolean.TRUE;
+                              ^
+    (see https://errorprone.info/bugpattern/BooleanLiteral)
+  Did you mean 'return true;'?
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/Json.java:249: warning: [BooleanLiteral] This expression can be written more clearly with a boolean literal.
+                return Boolean.FALSE;
+                              ^
+    (see https://errorprone.info/bugpattern/BooleanLiteral)
+  Did you mean 'return false;'?
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/random/Options.java:88: warning: [IncrementInForLoopAndHeader] This for loop increments the same variable in the header and in the body
+        for (int i = 0; i < args.length; i++) {
+        ^
+    (see https://errorprone.info/bugpattern/IncrementInForLoopAndHeader)
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/random/Session.java:67: warning: [MissingSummary] A summary fragment is required; consider using the value of the @return block as a summary fragment instead.
+     * @param budgetMillis 새 실행을 시작할 수 있는 시간. 지나면 더 시작하지 않는다(이미 도는 실행은 끝낸다)
+       ^
+    (see https://google.github.io/styleguide/javaguide.html#s7.2-summary-fragment)
+  Did you mean '* Returns \ubaa8\ub450 \ud1b5\uacfc\ud558\uba74 {@link #EXIT_OK}, \uc2e4\ud328\uac00 \uc788\uc73c\uba74 {@link #EXIT_FAILED}. \uace0\uc815 \uc18d\ub3c4 \ubaa8\ub4dc\uc5d0\uc11c\ub294 \ubc31\ub85c\uadf8 \uc99d\uac00({@link Verdict#BACKLOG_GROWING}), \ub2ec\uc131\ub960 \ubbf8\ub2ec({@link Verdict#UNDER_RATE}), \uc608\uc678(\uc5f0\uc18d {@link #MAX_CONSECUTIVE_ERRORS}\ubc88 \ubbf8\ub9cc)\ub97c \uae30\ub85d\ub9cc \ud558\uace0 \uacc4\uc18d \ub3cc\uace0, \ub2e4\ub978 \uc2e4\ud328\ub294 \uac70\uae30\uc11c \uba48\ucd98\ub2e4.'?
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/random/Session.java:269: warning: [StreamToIterable] Using stream::iterator creates a one-shot Iterable, which may cause surprising failures.
+            Files.write(file, (Iterable<String>) lines::iterator);
+                                                 ^
+    (see https://errorprone.info/bugpattern/StreamToIterable)
+  Did you mean 'Files.write(file, (Iterable<String>) lines.collect(toImmutableList()));'?
+/home/ppzxc/smq-spec258-ticket8/src/benchmark/java/io/github/ppzxc/smq/benchmark/random/Summary.java:28: warning: [BoxingComparator] Comparator.comparing() unnecessarily boxes numerical primitives; please use the primitive-specific method instead (e.g., comparingInt()).
+                        .sorted(Comparator.comparing((RunResult r) -> r.p99Ms() == null ? -1.0 : r.p99Ms())
+                                                    ^
+    (see https://errorprone.info/bugpattern/BoxingComparator)
+  Did you mean '.sorted(Comparator.comparingDouble((RunResult r) -> r.p99Ms() == null ? -1.0 : r.p99Ms())'?
+11 warnings
+
+> Task :processBenchmarkResources NO-SOURCE
+> Task :benchmarkClasses
+> Task :jar UP-TO-DATE
+
+> Task :benchmark
+[module] 부모 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+[1/53] 바퀴 1/3 sqlite/S1/P0/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P0/POWER_LOSS/empty:msgPerSec = 653.35
+[2/53] 바퀴 1/3 sqlite/S1/P0/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P0/PROCESS_CRASH/empty:msgPerSec = 2282.18
+[3/53] 바퀴 1/3 sqlite/S1/P1/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/POWER_LOSS/empty:msgPerSec = 12473.04
+[4/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec = 33431.37
+[5/53] 바퀴 1/3 sqlite/S1/P3/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P3/POWER_LOSS/empty:msgPerSec = 10731.99
+[6/53] 바퀴 1/3 sqlite/S1/P3/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P3/PROCESS_CRASH/empty:msgPerSec = 18598.09
+[7/53] 바퀴 1/3 sqlite/S1/P5/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P5/POWER_LOSS/empty:msgPerSec = 9571.27
+[8/53] 바퀴 1/3 sqlite/S1/P5/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P5/PROCESS_CRASH/empty:msgPerSec = 12317.22
+[9/53] 바퀴 1/3 sqlite/S1/P7/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P7/POWER_LOSS/empty:msgPerSec = 5084.55
+[10/53] 바퀴 1/3 sqlite/S1/P7/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P7/PROCESS_CRASH/empty:msgPerSec = 5883.64
+[11/53] 바퀴 1/3 sqlite/S1/P2/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P2/POWER_LOSS/empty:msgPerSec = 631.63
+[12/53] 바퀴 1/3 sqlite/S1/P2/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P2/PROCESS_CRASH/empty:msgPerSec = 2373.62
+[13/53] 바퀴 1/3 sqlite/S1/P4/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P4/POWER_LOSS/empty:msgPerSec = 575.24
+[14/53] 바퀴 1/3 sqlite/S1/P4/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P4/PROCESS_CRASH/empty:msgPerSec = 2178.18
+[15/53] 바퀴 1/3 sqlite/S1/P6/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P6/POWER_LOSS/empty:msgPerSec = 545.90
+[16/53] 바퀴 1/3 sqlite/S1/P6/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P6/PROCESS_CRASH/empty:msgPerSec = 2209.66
+[17/53] 바퀴 1/3 sqlite/S1/P1/POWER_LOSS/1m
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/POWER_LOSS/1m:msgPerSec = 11151.56
+[18/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/1m
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec = 32164.57
+[19/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/empty/MAX_DELIVERIES
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/MAX_DELIVERIES:msgPerSec = 34172.18
+[20/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/1m/MAX_DELIVERIES
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/MAX_DELIVERIES:msgPerSec = 30857.94
+[21/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/empty/SINGLE_ACTIVE_CONSUMER
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/SINGLE_ACTIVE_CONSUMER:msgPerSec = 35459.17
+[22/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/1m/SINGLE_ACTIVE_CONSUMER
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/SINGLE_ACTIVE_CONSUMER:msgPerSec = 29013.84
+[23/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/empty/LEASED_HEAD
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/LEASED_HEAD:msgPerSec = 34783.57
+[24/53] 바퀴 1/3 sqlite/S1/P1/PROCESS_CRASH/1m/LEASED_HEAD
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/LEASED_HEAD:msgPerSec = 29973.85
+[25/53] 바퀴 1/3 sqlite/S2/P1/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P1/POWER_LOSS/empty:msgPerSec = 25646.76
+[26/53] 바퀴 1/3 sqlite/S2/P3/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P3/POWER_LOSS/empty:msgPerSec = 15728.99
+[27/53] 바퀴 1/3 sqlite/S2/P5/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P5/POWER_LOSS/empty:msgPerSec = 16293.10
+[28/53] 바퀴 1/3 sqlite/S2/P7/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P7/POWER_LOSS/empty:msgPerSec = 10457.87
+[29/53] 바퀴 1/3 sqlite/S2/P0/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P0/POWER_LOSS/empty:msgPerSec = 3236.06
+[30/53] 바퀴 1/3 sqlite/S2/P2/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P2/POWER_LOSS/empty:msgPerSec = 2623.48
+[31/53] 바퀴 1/3 sqlite/S2/P4/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P4/POWER_LOSS/empty:msgPerSec = 2590.90
+[32/53] 바퀴 1/3 sqlite/S2/P6/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S2/P6/POWER_LOSS/empty:msgPerSec = 2385.64
+[33/53] 바퀴 1/3 sqlite/S3/P1/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S3/P1/POWER_LOSS/empty:p50Ms = 6.24
+        sqlite/S3/P1/POWER_LOSS/empty:p99Ms = 7.47
+[34/53] 바퀴 2/3 sqlite/S1/P1/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/POWER_LOSS/empty:msgPerSec = 12311.07
+[35/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec = 36020.31
+[36/53] 바퀴 2/3 sqlite/S1/P1/POWER_LOSS/1m
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/POWER_LOSS/1m:msgPerSec = 10514.10
+[37/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/1m
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec = 30929.33
+[38/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/empty/MAX_DELIVERIES
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/MAX_DELIVERIES:msgPerSec = 35912.74
+[39/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/1m/MAX_DELIVERIES
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/MAX_DELIVERIES:msgPerSec = 29878.03
+[40/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/empty/SINGLE_ACTIVE_CONSUMER
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/SINGLE_ACTIVE_CONSUMER:msgPerSec = 36181.07
+[41/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/1m/SINGLE_ACTIVE_CONSUMER
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/SINGLE_ACTIVE_CONSUMER:msgPerSec = 29730.07
+[42/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/empty/LEASED_HEAD
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/LEASED_HEAD:msgPerSec = 31686.55
+[43/53] 바퀴 2/3 sqlite/S1/P1/PROCESS_CRASH/1m/LEASED_HEAD
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/LEASED_HEAD:msgPerSec = 32343.14
+[44/53] 바퀴 3/3 sqlite/S1/P1/POWER_LOSS/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/POWER_LOSS/empty:msgPerSec = 12933.87
+[45/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/empty
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec = 33230.12
+[46/53] 바퀴 3/3 sqlite/S1/P1/POWER_LOSS/1m
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/POWER_LOSS/1m:msgPerSec = 10921.66
+[47/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/1m
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec = 29988.77
+[48/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/empty/MAX_DELIVERIES
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/MAX_DELIVERIES:msgPerSec = 34830.47
+[49/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/1m/MAX_DELIVERIES
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/MAX_DELIVERIES:msgPerSec = 28112.70
+[50/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/empty/SINGLE_ACTIVE_CONSUMER
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/SINGLE_ACTIVE_CONSUMER:msgPerSec = 35138.76
+[51/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/1m/SINGLE_ACTIVE_CONSUMER
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/SINGLE_ACTIVE_CONSUMER:msgPerSec = 31957.77
+[52/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/empty/LEASED_HEAD
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/empty/LEASED_HEAD:msgPerSec = 30548.99
+[53/53] 바퀴 3/3 sqlite/S1/P1/PROCESS_CRASH/1m/LEASED_HEAD
+[module] 자식 JVM: smq는 모듈 경로의 io.github.ppzxc.smq 모듈에서 읽는다
+        sqlite/S1/P1/PROCESS_CRASH/1m/LEASED_HEAD:msgPerSec = 29913.29
+결과 파일: /home/ppzxc/smq-spec258-ticket8/build/initial-comparison-4047ebca631804cd3bb0f4e473006e629bc74f15/legacy-benchmark-round-1.json
+
+PASS  floor S1 P1 POWER_LOSS >= 10000 msg/s  [12473 msg/s]
+PASS  floor S1 P3 POWER_LOSS >= 8000 msg/s  [10732 msg/s]
+PASS  floor S1 P7 POWER_LOSS >= 4000 msg/s  [5085 msg/s]
+PASS  depth S1 P1 POWER_LOSS 1m >= 70% of empty  [중앙값 85.4%, 바퀴별 1회 11152 / 12473 = 89.4%; 2회 10514 / 12311 = 85.4%; 3회 10922 / 12934 = 84.4%]
+PASS  depth S1 P1 PROCESS_CRASH 1m >= 70% of empty  [중앙값 90.2%, 바퀴별 1회 32165 / 33431 = 96.2%; 2회 30929 / 36020 = 85.9%; 3회 29989 / 33230 = 90.2%]
+PASS  depth S1 P1 PROCESS_CRASH MAX_DELIVERIES 1m >= 70% of empty  [중앙값 83.2%, 바퀴별 1회 30858 / 34172 = 90.3%; 2회 29878 / 35913 = 83.2%; 3회 28113 / 34830 = 80.7%]
+PASS  depth S1 P1 PROCESS_CRASH SINGLE_ACTIVE_CONSUMER 1m >= 70% of empty  [중앙값 82.2%, 바퀴별 1회 29014 / 35459 = 81.8%; 2회 29730 / 36181 = 82.2%; 3회 31958 / 35139 = 90.9%]
+PASS  depth S1 P1 PROCESS_CRASH LEASED_HEAD 1m >= 70% of empty  [중앙값 97.9%, 바퀴별 1회 29974 / 34784 = 86.2%; 2회 32343 / 31687 = 102.1%; 3회 29913 / 30549 = 97.9%]
+PASS  latency S3 P1 p99 <= 10 ms  [7.47 ms]
+PASS  regression sqlite/S1/P0/POWER_LOSS/empty:msgPerSec  [653 vs 기준선 654 (-0.2%)]
+PASS  regression sqlite/S1/P0/PROCESS_CRASH/empty:msgPerSec  [2282 vs 기준선 2369 (-3.7%)]
+PASS  regression sqlite/S1/P1/POWER_LOSS/1m:msgPerSec  [10922 vs 기준선 11390 (-4.1%)]
+PASS  regression sqlite/S1/P1/POWER_LOSS/empty:msgPerSec  [12473 vs 기준선 13446 (-7.2%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/1m/LEASED_HEAD:msgPerSec  [29974 vs 기준선 33909 (-11.6%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/1m/MAX_DELIVERIES:msgPerSec  [29878 vs 기준선 30537 (-2.2%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/1m/SINGLE_ACTIVE_CONSUMER:msgPerSec  [29730 vs 기준선 31871 (-6.7%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/1m:msgPerSec  [30929 vs 기준선 31866 (-2.9%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/empty/LEASED_HEAD:msgPerSec  [31687 vs 기준선 39366 (-19.5%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/empty/MAX_DELIVERIES:msgPerSec  [34830 vs 기준선 38211 (-8.8%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/empty/SINGLE_ACTIVE_CONSUMER:msgPerSec  [35459 vs 기준선 38498 (-7.9%)]
+PASS  regression sqlite/S1/P1/PROCESS_CRASH/empty:msgPerSec  [33431 vs 기준선 39471 (-15.3%)]
+PASS  regression sqlite/S1/P2/POWER_LOSS/empty:msgPerSec  [632 vs 기준선 657 (-3.9%)]
+PASS  regression sqlite/S1/P2/PROCESS_CRASH/empty:msgPerSec  [2374 vs 기준선 2350 (+1.0%)]
+PASS  regression sqlite/S1/P3/POWER_LOSS/empty:msgPerSec  [10732 vs 기준선 10711 (+0.2%)]
+PASS  regression sqlite/S1/P3/PROCESS_CRASH/empty:msgPerSec  [18598 vs 기준선 19416 (-4.2%)]
+PASS  regression sqlite/S1/P4/POWER_LOSS/empty:msgPerSec  [575 vs 기준선 573 (+0.4%)]
+PASS  regression sqlite/S1/P4/PROCESS_CRASH/empty:msgPerSec  [2178 vs 기준선 2340 (-6.9%)]
+PASS  regression sqlite/S1/P5/POWER_LOSS/empty:msgPerSec  [9571 vs 기준선 8461 (+13.1%)]
+PASS  regression sqlite/S1/P5/PROCESS_CRASH/empty:msgPerSec  [12317 vs 기준선 11433 (+7.7%)]
+PASS  regression sqlite/S1/P6/POWER_LOSS/empty:msgPerSec  [546 vs 기준선 566 (-3.5%)]
+PASS  regression sqlite/S1/P6/PROCESS_CRASH/empty:msgPerSec  [2210 vs 기준선 2237 (-1.2%)]
+PASS  regression sqlite/S1/P7/POWER_LOSS/empty:msgPerSec  [5085 vs 기준선 5728 (-11.2%)]
+PASS  regression sqlite/S1/P7/PROCESS_CRASH/empty:msgPerSec  [5884 vs 기준선 5925 (-0.7%)]
+PASS  regression sqlite/S2/P0/POWER_LOSS/empty:msgPerSec  [3236 vs 기준선 3296 (-1.8%)]
+PASS  regression sqlite/S2/P1/POWER_LOSS/empty:msgPerSec  [25647 vs 기준선 27683 (-7.4%)]
+PASS  regression sqlite/S2/P2/POWER_LOSS/empty:msgPerSec  [2623 vs 기준선 2746 (-4.5%)]
+PASS  regression sqlite/S2/P3/POWER_LOSS/empty:msgPerSec  [15729 vs 기준선 17444 (-9.8%)]
+PASS  regression sqlite/S2/P4/POWER_LOSS/empty:msgPerSec  [2591 vs 기준선 2738 (-5.4%)]
+PASS  regression sqlite/S2/P5/POWER_LOSS/empty:msgPerSec  [16293 vs 기준선 16672 (-2.3%)]
+PASS  regression sqlite/S2/P6/POWER_LOSS/empty:msgPerSec  [2386 vs 기준선 2485 (-4.0%)]
+PASS  regression sqlite/S2/P7/POWER_LOSS/empty:msgPerSec  [10458 vs 기준선 10231 (+2.2%)]
+PASS  regression sqlite/S3/P1/POWER_LOSS/empty:p50Ms  [6.24 vs 기준선 6.35 (-1.7%)]
+PASS  regression sqlite/S3/P1/POWER_LOSS/empty:p99Ms  [7.47 vs 기준선 7.69 (-2.8%)]
+합계: 통과 43, 실패 0, 건너뜀 0
+
+청크 1 대 묶음 (빈 큐, msg/s)
+조건                 크기           청크 1         묶음       배수
+S1 POWER_LOSS      256B          653     12,473    19.1x
+S1 POWER_LOSS      2KB           632     10,732    17.0x
+S1 POWER_LOSS      4KB           575      9,571    16.6x
+S1 POWER_LOSS      6KB           546      5,085     9.3x
+S1 PROCESS_CRASH   256B        2,282     33,431    14.6x
+S1 PROCESS_CRASH   2KB         2,374     18,598     7.8x
+S1 PROCESS_CRASH   4KB         2,178     12,317     5.7x
+S1 PROCESS_CRASH   6KB         2,210      5,884     2.7x
+S2 POWER_LOSS      256B        3,236     25,647     7.9x
+S2 POWER_LOSS      2KB         2,623     15,729     6.0x
+S2 POWER_LOSS      4KB         2,591     16,293     6.3x
+S2 POWER_LOSS      6KB         2,386     10,458     4.4x
+
+[Incubating] Problems report is available at: file:///home/ppzxc/smq-spec258-ticket8/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 20m
+8 actionable tasks: 2 executed, 6 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html

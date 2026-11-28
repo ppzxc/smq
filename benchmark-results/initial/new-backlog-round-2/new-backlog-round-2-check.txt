@@ -1,0 +1,49 @@
+FAIL settle throughput regressed for PROCESS_CRASH/DEFAULT/EMPTY: median 2390.000, minimum 4208.000
+FAIL delivery p99 latency regressed for PROCESS_CRASH/DEFAULT/EMPTY: median 8642225859.000, maximum 7773569467.200
+FAIL settle throughput regressed for PROCESS_CRASH/DEFAULT/BACKLOG: median 1640.000, minimum 3104.000
+FAIL median settle depth ratio below 70% for PROCESS_CRASH/DEFAULT: 64.0%
+FAIL settle throughput regressed for PROCESS_CRASH/MAX_DELIVERIES/EMPTY: median 1880.000, minimum 3744.000
+FAIL delivery p99 latency regressed for PROCESS_CRASH/MAX_DELIVERIES/EMPTY: median 8785951067.000, maximum 8746831000.800
+FAIL settle throughput regressed for PROCESS_CRASH/MAX_DELIVERIES/BACKLOG: median 3720.000, minimum 4488.000
+FAIL settle throughput regressed for PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/EMPTY: median 1570.000, minimum 4824.000
+FAIL delivery p99 latency regressed for PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/EMPTY: median 8548169137.000, maximum 7026564009.600
+FAIL settle throughput regressed for PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/BACKLOG: median 3120.000, minimum 3480.000
+FAIL settle throughput regressed for PROCESS_CRASH/LEASED_HEAD/EMPTY: median 2470.000, minimum 4784.000
+FAIL delivery p99 latency regressed for PROCESS_CRASH/LEASED_HEAD/EMPTY: median 8483498479.000, maximum 7154180817.600
+FAIL settle throughput regressed for PROCESS_CRASH/LEASED_HEAD/BACKLOG: median 340.000, minimum 4456.000
+FAIL median settle depth ratio below 70% for PROCESS_CRASH/LEASED_HEAD: 17.8%
+FAIL settle throughput regressed for POWER_LOSS/DEFAULT/EMPTY: median 2820.000, minimum 4088.000
+FAIL delivery p99 latency regressed for POWER_LOSS/DEFAULT/EMPTY: median 8433357551.000, maximum 7917317953.200
+FAIL settle throughput regressed for POWER_LOSS/DEFAULT/BACKLOG: median 2290.000, minimum 3528.000
+FAIL settle throughput regressed for POWER_LOSS/MAX_DELIVERIES/EMPTY: median 1530.000, minimum 4072.000
+FAIL delivery p99 latency regressed for POWER_LOSS/MAX_DELIVERIES/EMPTY: median 8973824591.000, maximum 7443300778.800
+FAIL settle throughput regressed for POWER_LOSS/MAX_DELIVERIES/BACKLOG: median 1890.000, minimum 3616.000
+FAIL settle throughput regressed for POWER_LOSS/SINGLE_ACTIVE_CONSUMER/EMPTY: median 3220.000, minimum 4360.000
+FAIL delivery p99 latency regressed for POWER_LOSS/SINGLE_ACTIVE_CONSUMER/EMPTY: median 8100501323.000, maximum 7378899351.600
+FAIL settle throughput regressed for POWER_LOSS/SINGLE_ACTIVE_CONSUMER/BACKLOG: median 1950.000, minimum 3656.000
+FAIL median settle depth ratio below 70% for POWER_LOSS/SINGLE_ACTIVE_CONSUMER: 60.6%
+FAIL settle throughput regressed for POWER_LOSS/LEASED_HEAD/EMPTY: median 2040.000, minimum 4000.000
+FAIL delivery p99 latency regressed for POWER_LOSS/LEASED_HEAD/EMPTY: median 8629280644.000, maximum 7961769523.200
+PASS publish throughput PROCESS_CRASH/DEFAULT/EMPTY: 28270.000
+PASS publish throughput PROCESS_CRASH/DEFAULT/BACKLOG: 33810.000
+PASS publish throughput PROCESS_CRASH/MAX_DELIVERIES/EMPTY: 34620.000
+PASS publish throughput PROCESS_CRASH/MAX_DELIVERIES/BACKLOG: 28860.000
+PASS median settle depth ratio PROCESS_CRASH/MAX_DELIVERIES: 136.8%
+PASS publish throughput PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/EMPTY: 31060.000
+PASS publish throughput PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/BACKLOG: 27640.000
+PASS median settle depth ratio PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER: 174.3%
+PASS publish throughput PROCESS_CRASH/LEASED_HEAD/EMPTY: 31770.000
+PASS publish throughput PROCESS_CRASH/LEASED_HEAD/BACKLOG: 42730.000
+PASS publish throughput POWER_LOSS/DEFAULT/EMPTY: 19910.000
+PASS publish throughput POWER_LOSS/DEFAULT/BACKLOG: 20580.000
+PASS median settle depth ratio POWER_LOSS/DEFAULT: 125.2%
+PASS publish throughput POWER_LOSS/MAX_DELIVERIES/EMPTY: 21570.000
+PASS publish throughput POWER_LOSS/MAX_DELIVERIES/BACKLOG: 20010.000
+PASS median settle depth ratio POWER_LOSS/MAX_DELIVERIES: 123.5%
+PASS publish throughput POWER_LOSS/SINGLE_ACTIVE_CONSUMER/EMPTY: 19270.000
+PASS publish throughput POWER_LOSS/SINGLE_ACTIVE_CONSUMER/BACKLOG: 20070.000
+PASS publish throughput POWER_LOSS/LEASED_HEAD/EMPTY: 20710.000
+PASS publish throughput POWER_LOSS/LEASED_HEAD/BACKLOG: 19840.000
+PASS settle throughput POWER_LOSS/LEASED_HEAD/BACKLOG: 2940.000
+PASS median settle depth ratio POWER_LOSS/LEASED_HEAD: 139.0%
+release gate: 22 passed, 26 failed

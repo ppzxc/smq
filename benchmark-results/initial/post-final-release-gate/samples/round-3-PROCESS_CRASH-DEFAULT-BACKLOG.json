@@ -1,0 +1,16 @@
+{
+  "schemaVersion":1,
+  "scenario":"backlog",
+  "status":"SUCCESS",
+  "revision":"1575da2dafe4628bdb7165005727ea9968591341",
+  "generatedAt":"2026-11-28T14:39:12.146070415Z",
+  "productVersion":"0.1.0-SNAPSHOT",
+  "environment":{"os":"Linux 5.14.0-741.22.1.el9_9.x86_64","architecture":"amd64","host":"ns0270.nanoit.kr","javaVersion":"25.0.5+9-LTS","processors":24,"workDir":"/home/ppzxc/smq-spec258-ticket8/build/release-benchmark/1575da2dafe4628bdb7165005727ea9968591341/work/round-3-PROCESS_CRASH-DEFAULT-BACKLOG","workDirFileSystem":"xfs"},
+  "config":{"durabilities":["PROCESS_CRASH"],"backlogCount":1000000,"durationMillis":10000,"warmupMillis":3000,"repeats":1,"payloadBytes":256,"batchSize":100,"chunkSize":100,"publishers":1,"consumers":1,"queueKinds":["DEFAULT"],"depths":["BACKLOG"]},
+  "reproduction":{"command":"./gradlew smokeHarness -Psmoke.args='backlog --durability PROCESS_CRASH --queue-kind DEFAULT --backlog-count 1000000 --depth BACKLOG --duration-ms 10000 --warmup-ms 3000 --repeat 1 --payload-bytes 256 --batch-size 100 --chunk-size 100 --publishers 1 --consumers 1 --output /home/ppzxc/smq-spec258-ticket8/build/release-benchmark/1575da2dafe4628bdb7165005727ea9968591341/samples/round-3-PROCESS_CRASH-DEFAULT-BACKLOG.json --work-dir /home/ppzxc/smq-spec258-ticket8/build/release-benchmark/1575da2dafe4628bdb7165005727ea9968591341/work/round-3-PROCESS_CRASH-DEFAULT-BACKLOG'","args":["backlog","--durability","PROCESS_CRASH","--queue-kind","DEFAULT","--backlog-count","1000000","--depth","BACKLOG","--duration-ms","10000","--warmup-ms","3000","--repeat","1","--payload-bytes","256","--batch-size","100","--chunk-size","100","--publishers","1","--consumers","1","--output","/home/ppzxc/smq-spec258-ticket8/build/release-benchmark/1575da2dafe4628bdb7165005727ea9968591341/samples/round-3-PROCESS_CRASH-DEFAULT-BACKLOG.json","--work-dir","/home/ppzxc/smq-spec258-ticket8/build/release-benchmark/1575da2dafe4628bdb7165005727ea9968591341/work/round-3-PROCESS_CRASH-DEFAULT-BACKLOG"]},
+  "publishedMessages":338900,
+  "settledMessages":39100,
+  "results":[{"durability":"PROCESS_CRASH","queueKind":"DEFAULT","queueConfig":{"maxDeliveries":null,"deadLetterQueue":null,"singleActiveConsumer":false,"leasedHead":false},"preloadedMessages":1000000,"repeat":1,"startDepth":1000000,"startCounts":{"ready":1000000,"leased":0,"delayed":0},"endDepth":1299800,"endCounts":{"ready":1299800,"leased":0,"delayed":0},"publishedMessages":338900,"settledMessages":39100,"elapsedNanos":10007438371,"publishThroughputMessagesPerSecond":33890.000,"settleThroughputMessagesPerSecond":3910.000,"deliveryLatencyP50Nanos":null,"deliveryLatencyP99Nanos":null,"databasePath":"/home/ppzxc/smq-spec258-ticket8/build/release-benchmark/1575da2dafe4628bdb7165005727ea9968591341/work/round-3-PROCESS_CRASH-DEFAULT-BACKLOG/backlog-737399971353575793/process_crash/default/depth-1000000-repeat-1.db"}],
+  "depthRatios":[],
+  "diagnostics":[]
+}

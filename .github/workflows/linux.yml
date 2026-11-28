@@ -30,6 +30,25 @@ jobs:
       - name: ./gradlew check
         run: ./gradlew check --continue --no-daemon --stacktrace
 
+      - name: 지정 장비 릴리스 게이트 로직 테스트
+        run: |
+          python3 smoke-harness/test_release_gate.py
+          for script in smoke-harness/run-backlog-suite.sh smoke-harness/run-release-gate.sh; do bash -n "$script"; done
+
+      - name: 공개 API 단건·배치 스모크
+        run: ./gradlew smokeHarness -Psmoke.args="--durability BOTH --mode BOTH --count 1000 --warmup 100 --repeat 1 --payload-bytes 256 --batch-size 100 --chunk-size 100 --max-in-flight 1000 --output build/smoke-harness/ci-smoke-report.json --work-dir build/smoke-harness/ci-smoke-work" --no-daemon --stacktrace
+
+      - name: JVM 강제 종료 후 복구 스모크
+        run: ./gradlew smokeHarness -Psmoke.args="recovery --durability BOTH --message-count 8 --lease-ms 150 --output build/smoke-harness/ci-recovery-report.json --work-dir build/smoke-harness/ci-recovery-work" --no-daemon --stacktrace
+
+      - name: 공개 API 스모크 및 복구 결과 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-smoke-harness-results
+          path: smoke-harness/build/smoke-harness/ci-*
+          if-no-files-found: ignore
+
       - name: PMD 리포트 업로드
         if: always()
         uses: actions/upload-artifact@v4
@@ -45,71 +64,12 @@ jobs:
           name: linux-spotbugs-report
           path: build/reports/spotbugs/main.html
 
-      # 고정 시드/프로파일 실패는 같은 SHA로 한 번 재실행하되 최초 산출물을 보존한다.
-      - name: 최초 무작위 스모크
-        id: smoke
-        continue-on-error: true
-        run: ./gradlew randomBenchSmoke --no-daemon --stacktrace
-
-      - name: 동일 조건으로 무작위 스모크 재실행
-        id: smoke-rerun
-        if: steps.smoke.outcome == 'failure'
-        continue-on-error: true
-        run: ./gradlew randomBenchSmoke -PrandomBenchSmokeOutDir=build/random-bench-rerun --no-daemon --stacktrace
-
-      - name: 스모크 증거 요약
-        if: always()
-        shell: bash
-        env:
-          INITIAL: ${{ steps.smoke.outcome }}
-          RERUN: ${{ steps.smoke-rerun.outcome }}
-          SHA: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          {
-            echo '## Linux smoke 증거'
-            echo
-            echo "- SHA: \`$SHA\`"
-            echo "- 프로파일/시드: smoke / 1, 2, 3, 4, 5, 6"
-            echo "- 최초 실행: $INITIAL"
-            echo "- 재실행: $RERUN (최초 실패일 때만 수행)"
-            echo "- 재현: \`git checkout $SHA && ./gradlew randomBenchSmoke --no-daemon --stacktrace\`"
-            echo "- 실행: $RUN_URL"
-            echo '- 원본과 재실행 산출물은 linux-random-bench-failures artifact에 있다.'
-            echo
-            echo '### JUnit test totals'
-            if compgen -G 'build/test-results/test/*.xml' > /dev/null; then
-              python3 - <<'PYTOTAL'
-          import glob, xml.etree.ElementTree as ET
-          totals = [0, 0, 0, 0]
-          for name in glob.glob('build/test-results/test/*.xml'):
-              root = ET.parse(name).getroot()
-              for i, key in enumerate(('tests', 'failures', 'errors', 'skipped')):
-                  totals[i] += int(root.attrib.get(key, 0))
-          print(f'tests={totals[0]} failures={totals[1]} errors={totals[2]} skipped={totals[3]}')
-          PYTOTAL
-            else
-              echo 'JUnit XML 없음 (check가 테스트 리포트 생성 전에 실패했을 수 있음).'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$INITIAL" = failure ]; then exit 1; fi
-
       - name: 테스트 리포트 업로드
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: linux-test-reports
           path: build/reports/tests
-          if-no-files-found: ignore
-
-      - name: 무작위 테스트 실패 파일 업로드
-        if: always() && steps.smoke.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-random-bench-failures
-          path: |
-            build/random-bench
-            build/random-bench-rerun
           if-no-files-found: ignore
 
   # 배포 테스트 (a): publishToMavenLocal로 올린 아티팩트를 외부 소비자 4개가 받아 쓴다. 시크릿은 쓰지 않는다.

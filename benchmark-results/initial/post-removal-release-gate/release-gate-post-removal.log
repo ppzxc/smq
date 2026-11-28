@@ -1,0 +1,684 @@
+> Task :build-logic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :build-logic:pluginDescriptors UP-TO-DATE
+> Task :build-logic:processResources UP-TO-DATE
+
+> Task :build-logic:compileKotlin
+w: file:///home/ppzxc/smq-spec258-ticket8/build-logic/src/main/kotlin/io/github/ppzxc/gradle/JavaQualityPlugin.kt:176:57 Condition is always 'false'.
+
+> Task :build-logic:compileJava NO-SOURCE
+> Task :build-logic:classes UP-TO-DATE
+> Task :build-logic:jar
+> Task :compileJava
+> Task :processResources NO-SOURCE
+> Task :classes
+> Task :jar UP-TO-DATE
+> Task :pmd-rules:compileJava UP-TO-DATE
+> Task :pmd-rules:processResources NO-SOURCE
+> Task :pmd-rules:classes UP-TO-DATE
+> Task :pmd-rules:jar UP-TO-DATE
+
+[Incubating] Problems report is available at: file:///home/ppzxc/smq-spec258-ticket8/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 27s
+8 actionable tasks: 3 executed, 5 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH DEFAULT EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH DEFAULT BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 31s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH MAX_DELIVERIES EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH MAX_DELIVERIES BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 30s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH SINGLE_ACTIVE_CONSUMER EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH SINGLE_ACTIVE_CONSUMER BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 31s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH LEASED_HEAD EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 PROCESS_CRASH LEASED_HEAD BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 41s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS DEFAULT EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS DEFAULT BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 32s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS MAX_DELIVERIES EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS MAX_DELIVERIES BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 33s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS SINGLE_ACTIVE_CONSUMER EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS SINGLE_ACTIVE_CONSUMER BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 33s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS LEASED_HEAD EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 1 POWER_LOSS LEASED_HEAD BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 43s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH DEFAULT EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH DEFAULT BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 32s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH MAX_DELIVERIES EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH MAX_DELIVERIES BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 31s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH SINGLE_ACTIVE_CONSUMER EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH SINGLE_ACTIVE_CONSUMER BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 32s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH LEASED_HEAD EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 PROCESS_CRASH LEASED_HEAD BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 39s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS DEFAULT EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS DEFAULT BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 36s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS MAX_DELIVERIES EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS MAX_DELIVERIES BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 35s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS SINGLE_ACTIVE_CONSUMER EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS SINGLE_ACTIVE_CONSUMER BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 33s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS LEASED_HEAD EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 2 POWER_LOSS LEASED_HEAD BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 43s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH DEFAULT EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH DEFAULT BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 30s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH MAX_DELIVERIES EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH MAX_DELIVERIES BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 32s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH SINGLE_ACTIVE_CONSUMER EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH SINGLE_ACTIVE_CONSUMER BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 34s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH LEASED_HEAD EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 PROCESS_CRASH LEASED_HEAD BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 42s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS DEFAULT EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS DEFAULT BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 34s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS MAX_DELIVERIES EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 14s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS MAX_DELIVERIES BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 34s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS SINGLE_ACTIVE_CONSUMER EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS SINGLE_ACTIVE_CONSUMER BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 32s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS LEASED_HEAD EMPTY
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+benchmark sample 3 POWER_LOSS LEASED_HEAD BACKLOG
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+smq backlog completed 1 measurements
+
+BUILD SUCCESSFUL in 44s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+aggregated 48 isolated samples into /home/ppzxc/smq-spec258-ticket8/build/release-benchmark/83efc61b254ec6f4520381927f9e15bc23e3a2c2/backlog-report.json
+aggregated report: /home/ppzxc/smq-spec258-ticket8/build/release-benchmark/83efc61b254ec6f4520381927f9e15bc23e3a2c2/backlog-report.json
+FAIL settle throughput regressed for PROCESS_CRASH/DEFAULT/BACKLOG: median 1670.000, minimum 3104.000
+FAIL median settle depth ratio below 70% for PROCESS_CRASH/DEFAULT: 28.2%
+FAIL settle throughput regressed for PROCESS_CRASH/MAX_DELIVERIES/BACKLOG: median 1720.000, minimum 4488.000
+FAIL median settle depth ratio below 70% for PROCESS_CRASH/MAX_DELIVERIES: 58.7%
+FAIL settle throughput regressed for PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/EMPTY: median 3440.000, minimum 4824.000
+FAIL delivery p99 latency regressed for PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/EMPTY: median 8832552534.000, maximum 7026564009.600
+FAIL settle throughput regressed for PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/BACKLOG: median 1880.000, minimum 3480.000
+FAIL settle throughput regressed for PROCESS_CRASH/LEASED_HEAD/EMPTY: median 4080.000, minimum 4784.000
+FAIL delivery p99 latency regressed for PROCESS_CRASH/LEASED_HEAD/EMPTY: median 7927607768.000, maximum 7154180817.600
+FAIL settle throughput regressed for PROCESS_CRASH/LEASED_HEAD/BACKLOG: median 3780.000, minimum 4456.000
+FAIL settle throughput regressed for POWER_LOSS/DEFAULT/BACKLOG: median 2700.000, minimum 3528.000
+FAIL median settle depth ratio below 70% for POWER_LOSS/DEFAULT: 61.2%
+FAIL settle throughput regressed for POWER_LOSS/MAX_DELIVERIES/BACKLOG: median 3510.000, minimum 3616.000
+FAIL settle throughput regressed for POWER_LOSS/SINGLE_ACTIVE_CONSUMER/BACKLOG: median 2950.000, minimum 3656.000
+FAIL median settle depth ratio below 70% for POWER_LOSS/SINGLE_ACTIVE_CONSUMER: 59.4%
+PASS publish throughput PROCESS_CRASH/DEFAULT/EMPTY: 18860.000
+PASS settle throughput PROCESS_CRASH/DEFAULT/EMPTY: 5850.000
+PASS delivery p99 latency PROCESS_CRASH/DEFAULT/EMPTY: 6936710066.000
+PASS publish throughput PROCESS_CRASH/DEFAULT/BACKLOG: 34120.000
+PASS publish throughput PROCESS_CRASH/MAX_DELIVERIES/EMPTY: 20470.000
+PASS settle throughput PROCESS_CRASH/MAX_DELIVERIES/EMPTY: 5080.000
+PASS delivery p99 latency PROCESS_CRASH/MAX_DELIVERIES/EMPTY: 7391179713.000
+PASS publish throughput PROCESS_CRASH/MAX_DELIVERIES/BACKLOG: 38660.000
+PASS publish throughput PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/EMPTY: 28650.000
+PASS publish throughput PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER/BACKLOG: 39390.000
+PASS median settle depth ratio PROCESS_CRASH/SINGLE_ACTIVE_CONSUMER: 82.6%
+PASS publish throughput PROCESS_CRASH/LEASED_HEAD/EMPTY: 21300.000
+PASS publish throughput PROCESS_CRASH/LEASED_HEAD/BACKLOG: 25510.000
+PASS median settle depth ratio PROCESS_CRASH/LEASED_HEAD: 95.3%
+PASS publish throughput POWER_LOSS/DEFAULT/EMPTY: 17330.000
+PASS settle throughput POWER_LOSS/DEFAULT/EMPTY: 4340.000
+PASS delivery p99 latency POWER_LOSS/DEFAULT/EMPTY: 7372981109.000
+PASS publish throughput POWER_LOSS/DEFAULT/BACKLOG: 19120.000
+PASS publish throughput POWER_LOSS/MAX_DELIVERIES/EMPTY: 16930.000
+PASS settle throughput POWER_LOSS/MAX_DELIVERIES/EMPTY: 4190.000
+PASS delivery p99 latency POWER_LOSS/MAX_DELIVERIES/EMPTY: 7353931591.000
+PASS publish throughput POWER_LOSS/MAX_DELIVERIES/BACKLOG: 17510.000
+PASS median settle depth ratio POWER_LOSS/MAX_DELIVERIES: 114.3%
+PASS publish throughput POWER_LOSS/SINGLE_ACTIVE_CONSUMER/EMPTY: 16060.000
+PASS settle throughput POWER_LOSS/SINGLE_ACTIVE_CONSUMER/EMPTY: 4810.000
+PASS delivery p99 latency POWER_LOSS/SINGLE_ACTIVE_CONSUMER/EMPTY: 6684115522.000
+PASS publish throughput POWER_LOSS/SINGLE_ACTIVE_CONSUMER/BACKLOG: 18980.000
+PASS publish throughput POWER_LOSS/LEASED_HEAD/EMPTY: 15580.000
+PASS settle throughput POWER_LOSS/LEASED_HEAD/EMPTY: 5370.000
+PASS delivery p99 latency POWER_LOSS/LEASED_HEAD/EMPTY: 6427756671.000
+PASS publish throughput POWER_LOSS/LEASED_HEAD/BACKLOG: 16930.000
+PASS settle throughput POWER_LOSS/LEASED_HEAD/BACKLOG: 4200.000
+PASS median settle depth ratio POWER_LOSS/LEASED_HEAD: 82.3%
+release gate: 33 passed, 15 failed

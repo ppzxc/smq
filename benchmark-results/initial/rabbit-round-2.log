@@ -1,0 +1,52 @@
+1fe1e13c1c90badea21d5cb9ce76b5c3ba5e843ea0a01c4ce762d2b8de11c8ff
+> Task :build-logic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :build-logic:compileKotlin UP-TO-DATE
+> Task :build-logic:compileJava NO-SOURCE
+> Task :build-logic:pluginDescriptors UP-TO-DATE
+> Task :build-logic:processResources UP-TO-DATE
+> Task :build-logic:classes UP-TO-DATE
+> Task :build-logic:jar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :pmd-rules:compileJava UP-TO-DATE
+> Task :pmd-rules:processResources NO-SOURCE
+> Task :pmd-rules:classes UP-TO-DATE
+> Task :pmd-rules:jar UP-TO-DATE
+
+[Incubating] Problems report is available at: file:///home/ppzxc/smq-spec258-ticket8/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2s
+8 actionable tasks: 8 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+RabbitMQ benchmark completed 120000 messages
+
+BUILD SUCCESSFUL in 2m 26s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+> Task :kafkaClientModuleJar UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :run
+RabbitMQ recovery scenarios completed 6 observations
+
+BUILD SUCCESSFUL in 1m 9s
+4 actionable tasks: 1 executed, 3 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+Reports: /home/ppzxc/smq-spec258-ticket8/smoke-harness/build/smoke-harness/rabbit-report.json and rabbit-recovery-report.json
+Container smq-rabbitmq-initial-r2 and Docker volume smq-rabbitmq-initial-r2-12ffb75 mounted at /var/lib/rabbitmq are left in place.

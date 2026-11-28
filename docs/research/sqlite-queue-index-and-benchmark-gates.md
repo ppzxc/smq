@@ -2,7 +2,7 @@
 
 - 조사일: 2026-11-23
 - 범위: [#166](https://github.com/ppzxc/smq/issues/166)의 저장 상태·부분 인덱스와 고정 벤치 판정. 1차 자료와 저장소의 기존 기준을 구분한다. 외부 문서는 smq의 실측 결과를 보증하지 않는다.
-- 관련 기록: [ADR 0019](../adr/0019-stored-state-and-promotion-for-sqlite-pull.md), [기준선 절차](../../benchmark/README.md), [벤치 설명](../benchmark.md).
+- 관련 기록: [ADR 0019](../adr/0019-stored-state-and-promotion-for-sqlite-pull.md), [현재 기준선 절차](../release.md), [구·신 기준 대응](../benchmark-transition.md).
 
 ## SQLite가 보장하거나 설명하는 것
 
@@ -16,7 +16,7 @@
 
 - Google Benchmark는 CPU 주파수 변화, 스케줄링, 캐시, SMT, NUMA 등을 반복 측정의 변동 원인으로 설명한다. OpenJDK는 Java 마이크로벤치마크에 초기화와 컴파일을 포함한 워밍업을 권한다. **추론:** 동일한 장비·부하·JDK·저장 설정, 워밍업과 반복 결과를 기록해야 작은 차이를 해석할 수 있다. 반복 중앙값은 잡음 완화 수단이지 통계적 확실성 보증은 아니다. [Google Benchmark: Reducing Variance](https://google.github.io/benchmark/reducing_variance.html), [OpenJDK MicroBenchmarks](https://wiki.openjdk.org/display/HotSpot/MicroBenchmarks)
 - SQLite WAL 문서는 `synchronous=FULL`과 `NORMAL`의 동기화 및 내구성 차이를 설명한다. **적용:** 모드가 다른 수치를 같은 성능 기준선으로 직접 비교하거나, 속도 개선을 위해 내구성 모드를 바꾸었다면 같은 보장으로 해석해서는 안 된다. [SQLite WAL](https://sqlite.org/wal.html)
-- 저장소의 기존 절차는 기준 장비에서의 반복 중앙값, 깊이 비율과 기존 기준선 대비 20% 초과 회귀 차단을 명시한다. #166은 새 깊은 조건과 스키마 변경 후 기준선 재측정을 요구하며 WSL2 단발 프로브는 문제 크기 설명용이라고 한정한다. **판단:** 새 인덱스는 깊은 큐 이득과 함께 얕은 큐의 발행·꺼내기·정산 비용을 기존 절차로 평가한다. 허용 범위를 벗어나면 스펙대로 인덱스 구성을 재검토하며, 프로브 값으로 게이트를 통과시키거나 기준선을 임의로 대체하지 않는다. [기준선 절차](../../benchmark/README.md), [#166](https://github.com/ppzxc/smq/issues/166)
+- 저장소의 전환 전 절차는 기준 장비에서의 반복 중앙값, 깊이 비율과 기준선 대비 회귀 차단을 명시했다. #166은 새 깊은 조건과 스키마 변경 후 기준선 재측정을 요구하며 WSL2 단발 프로브는 문제 크기 설명용이라고 한정한다. **판단:** 새 인덱스는 깊은 큐 이득과 함께 얕은 큐의 발행·꺼내기·정산 비용을 지정 장비 게이트로 평가한다. 허용 범위를 벗어나면 스펙대로 인덱스 구성을 재검토하며, 프로브 값으로 게이트를 통과시키거나 기준선을 임의로 대체하지 않는다. [현재 기준선 절차](../release.md), [#166](https://github.com/ppzxc/smq/issues/166)
 - 승격은 만료된 행 수에 비례하는 일괄 쓰기이므로 정상 상태 처리량 외에 한꺼번에 만료된 리스·지연의 다음 꺼내기 지연과 그때 다른 연산이 기다리는 시간도 관찰할 가치가 있다. 이는 설계에서 도출한 **추론**이며 #166의 프로브에서 보고한 약 120ms를 다른 환경의 예측값으로 쓰지 않는다. [#166](https://github.com/ppzxc/smq/issues/166)
 
 ## 미확인
@@ -42,4 +42,4 @@ SQLite `RETURNING`은 변경 결과를 메모리에 모은 뒤 전달한다. 이
 1. **게이트를 임의로 낮추지 않는다.** 이전 기준 `45186cf` 대비 현 후보는 ns0270 교차 비교에서 P1 깊은 큐 중앙값 −21.83%, P4 빈 큐 중앙값 −15.79%이나 P4 개별 표본 1회 FAIL이다. 프로젝트는 20% 경계와 단일 실패 규칙을 이미 정했다. 외부 문헌은 그 수치가 보편적 업계 표준이라고 말하지 않는다. [실측 기록](https://github.com/ppzxc/smq/issues/166#issuecomment-7101427478)
 2. **다음 실험은 P1 깊은 큐의 pull UPDATE/RETURNING과 인덱스 유지 비용을 타깃으로 한다.** 기준 장비의 진단에서 UPDATE+결과 읽기가 청크당 약 618–645µs였으나 계측 오버헤드와 예열이 섞인 값이다. 기존 FIFO·늦은 ACK·카운터·migration을 보존하는 설계 가설만 시험하고 정확성/쿼리 계획과 얕은·깊은 전체 gate를 함께 검증한다. [실측 기록](https://github.com/ppzxc/smq/issues/166#issuecomment-7101427478)
 3. **ACK 후보는 아이디어로 보존하고 통합을 미룬다.** `Long.MAX_VALUE` 토큰 중복 fallback을 포함한 후보가 단위·계약 검사와 일부 짧은 측정을 통과해도, 전체 기준 장비 gate는 아직 실패했다. [현재 구현](../../src/main/java/io/github/ppzxc/smq/storage/sqlite/SqliteStorage.java)
-4. 다음 성능 판단은 같은 장비에서 기준·후보를 교차 실행하고 각 표본과 median, 환경, JIT 워밍업, 큐 깊이, durability, 하네스 버전을 공개한다. #177의 6회 중앙값은 별도이며, 정확성 테스트가 통과하는 것만으로 성능 gate를 통과한 것은 아니다. [Google Benchmark variance](https://google.github.io/benchmark/reducing_variance.html), [프로젝트 기준선](../../benchmark/README.md)
+4. 다음 성능 판단은 같은 장비에서 기준·후보를 교차 실행하고 각 표본과 median, 환경, JIT 워밍업, 큐 깊이, durability, 하네스 버전을 공개한다. #177의 6회 중앙값은 별도이며, 정확성 테스트가 통과하는 것만으로 성능 gate를 통과한 것은 아니다. [Google Benchmark variance](https://google.github.io/benchmark/reducing_variance.html), [프로젝트 기준선 절차](../release.md)

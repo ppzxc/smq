@@ -29,7 +29,7 @@ class JavaQualityPlugin : Plugin<Project> {
 
         project.tasks.withType(Pmd::class.java).configureEach {
             if (!name.endsWith("Comments")) exclude("**/module-info.java")
-            if (name in setOf("pmdMain", "pmdTest", "pmdBenchmark")) {
+            if (name in setOf("pmdMain", "pmdTest")) {
                 inputs.property("policyReviewDate", java.time.LocalDate.now().toString())
                 incrementalAnalysis.set(false)
             }
@@ -72,7 +72,7 @@ class JavaQualityPlugin : Plugin<Project> {
 
         project.extensions.configure(SpotlessExtension::class.java) {
             java {
-                target("src/*/java/**/*.java", "deploy-test/**/src/**/*.java")
+                target("src/*/java/**/*.java", "deploy-test/**/src/**/*.java", "smoke-harness/src/**/*.java")
                 palantirJavaFormat("2.103.0")
             }
         }
@@ -194,7 +194,7 @@ class JavaQualityPlugin : Plugin<Project> {
 
     private companion object {
         const val PMD_VERSION = "7.29.0"
-        val PMD_SOURCE_SETS = setOf("main", "test", "benchmark")
+        val PMD_SOURCE_SETS = setOf("main", "test")
 
         val MUST_ERROR_PRONE_CHECKS = listOf(
             "ArrayEquals",

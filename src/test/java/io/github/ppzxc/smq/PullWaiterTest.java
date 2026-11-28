@@ -50,12 +50,14 @@ class PullWaiterTest {
         final RecordingHint second;
         final PullWaiter waiter;
         final long deadline;
+        final List<Long> wakeVersions;
         final String result;
         first = new RecordingHint();
         second = new RecordingHint();
         final var hints = new ArrayDeque<ChangeHint>(List.of(first, second));
         waiter = new PullWaiter(new RecordingHint(), false, true, hints::removeFirst);
         deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        wakeVersions = new ArrayList<>();
 
         result = waiter.await(
                 "first",
@@ -65,16 +67,19 @@ class PullWaiterTest {
                         deadline,
                         () -> {
                             waiter.wake("first");
-                            assertEquals(1, first.version(), "Version should match the expected value.");
-                            assertEquals(0, second.version(), "Version should match the expected value.");
+                            wakeVersions.add(first.version());
+                            wakeVersions.add(second.version());
                             waiter.wake();
-                            assertEquals(2, first.version(), "Version should match the expected value.");
-                            assertEquals(1, second.version(), "Version should match the expected value.");
+                            wakeVersions.add(first.version());
+                            wakeVersions.add(second.version());
                             return Attempt.found("found");
                         },
                         () -> "empty")),
                 () -> "empty");
-        assertEquals("found", result, "Result should match the expected value.");
+        assertEquals(
+                List.of("found", List.of(1L, 0L, 2L, 1L)),
+                List.of(result, wakeVersions),
+                "Wakeups should update only the intended queue versions.");
     }
 
     @Test

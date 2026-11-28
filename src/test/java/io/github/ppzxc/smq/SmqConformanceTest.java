@@ -58,8 +58,6 @@ abstract class SmqConformanceTest {
 
     private final List<Smq> opened = new ArrayList<>();
 
-    private static final int ROUNDS = 300;
-
     abstract StorageFactory factory();
 
     private Smq openWith(final BuilderSettings settings) {
@@ -9891,93 +9889,32 @@ abstract class SmqConformanceTest {
         }
     }
 
-    @Test
-    @DisplayName("여러 스레드가 동시에 발행해도 id는 겹치지 않고 모두 들어간다 — check 1")
-    @PolicyException(
-            rule = "PMD.CloseResource",
-            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
-            approvedBy = "ppzxc",
-            reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.CloseResource")
-    void evenIfMultipleThreadsArePublishedSimultaneouslyTheIDsDoNotOverlapAndAllOfThemAreIncludedCheck1()
-            throws Exception {
-        final Smq smq;
-        smq = this.open();
-        for (int round = 0; round < 300; round++) {
-            final Queue q;
-            final List<MessageId> ids;
-            final ThrowingRunnable publisher;
-            final int assertionValue1Argument2;
-            final String assertionValue1Argument3;
-            q = smq.declare("pub" + round, QueueOptions.defaults());
-            ids = Collections.synchronizedList(new ArrayList<>());
-            publisher = () -> ids.addAll(q.publish(List.of(msg("a"), msg("b"), msg("c"))));
-            runConcurrently(Collections.nCopies(4, publisher));
-            assertionValue1Argument2 = ids.size();
-            assertionValue1Argument3 = "round " + round;
-            Assertions.assertEquals(12, assertionValue1Argument2, assertionValue1Argument3);
-            evaluate(Set.copyOf(ids).size());
-            evaluate(new QueueCounts(12L, 0L, 0L));
-        }
-    }
+    record ConcurrentPublishSnapshot(int returnedIds, int uniqueIds, QueueCounts counts) {}
 
     @Test
-    @DisplayName("여러 스레드가 동시에 발행해도 id는 겹치지 않고 모두 들어간다 — check 2")
+    @DisplayName("여러 스레드가 동시에 발행해도 id는 겹치지 않고 모두 들어간다")
     @PolicyException(
             rule = "PMD.CloseResource",
             reason = "The fixture registers this Smq and closes it in closeAll after every test.",
             approvedBy = "ppzxc",
             reviewBy = "2027-11-26")
     @SuppressWarnings("PMD.CloseResource")
-    void evenIfMultipleThreadsArePublishedSimultaneouslyTheIDsDoNotOverlapAndAllOfThemAreIncludedCheck2()
-            throws Exception {
+    void evenIfMultipleThreadsArePublishedSimultaneouslyTheIDsDoNotOverlapAndAllOfThemAreIncluded() throws Exception {
         final Smq smq;
+        final ConcurrentPublishSnapshot expected;
         smq = this.open();
+        expected = new ConcurrentPublishSnapshot(12, 12, new QueueCounts(12L, 0L, 0L));
         for (int round = 0; round < 300; round++) {
             final Queue q;
             final List<MessageId> ids;
             final ThrowingRunnable publisher;
-            final int assertionValue2Argument2;
-            final String assertionValue2Argument3;
+            final ConcurrentPublishSnapshot actual;
             q = smq.declare("pub" + round, QueueOptions.defaults());
             ids = Collections.synchronizedList(new ArrayList<>());
             publisher = () -> ids.addAll(q.publish(List.of(msg("a"), msg("b"), msg("c"))));
             runConcurrently(Collections.nCopies(4, publisher));
-            assertionValue2Argument2 = Set.copyOf(ids).size();
-            assertionValue2Argument3 = "round " + round + " " + ids;
-            Assertions.assertEquals(12, assertionValue2Argument2, assertionValue2Argument3);
-            evaluate(new QueueCounts(12L, 0L, 0L));
-        }
-    }
-
-    @Test
-    @DisplayName("여러 스레드가 동시에 발행해도 id는 겹치지 않고 모두 들어간다 — check 3")
-    @PolicyException(
-            rule = "PMD.CloseResource",
-            reason = "The fixture registers this Smq and closes it in closeAll after every test.",
-            approvedBy = "ppzxc",
-            reviewBy = "2027-11-26")
-    @SuppressWarnings("PMD.CloseResource")
-    void evenIfMultipleThreadsArePublishedSimultaneouslyTheIDsDoNotOverlapAndAllOfThemAreIncludedCheck3()
-            throws Exception {
-        final Smq smq;
-        smq = this.open();
-        for (int round = 0; round < 300; round++) {
-            final Queue q;
-            final List<MessageId> ids;
-            final ThrowingRunnable publisher;
-            final QueueCounts assertionValue3Argument1;
-            final QueueCounts assertionValue3Argument2;
-            final String assertionValue3Argument3;
-            q = smq.declare("pub" + round, QueueOptions.defaults());
-            ids = Collections.synchronizedList(new ArrayList<>());
-            publisher = () -> ids.addAll(q.publish(List.of(msg("a"), msg("b"), msg("c"))));
-            runConcurrently(Collections.nCopies(4, publisher));
-            evaluate(Set.copyOf(ids).size());
-            assertionValue3Argument1 = new QueueCounts(12L, 0L, 0L);
-            assertionValue3Argument2 = q.counts();
-            assertionValue3Argument3 = "round " + round;
-            Assertions.assertEquals(assertionValue3Argument1, assertionValue3Argument2, assertionValue3Argument3);
+            actual = new ConcurrentPublishSnapshot(ids.size(), Set.copyOf(ids).size(), q.counts());
+            Assertions.assertEquals(expected, actual, "Concurrent publish result should match in round " + round);
         }
     }
 

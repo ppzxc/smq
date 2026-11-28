@@ -30,6 +30,9 @@ public final class Main {
         if (args.length > 0 && "backlog".equals(args[0])) {
             return BacklogCommand.execute(args);
         }
+        if (args.length > 0 && "kafka".equals(args[0])) {
+            return KafkaCommand.execute(args);
+        }
 
         Options options = null;
         final List<SmokeRunner.Sample> results = new ArrayList<>();

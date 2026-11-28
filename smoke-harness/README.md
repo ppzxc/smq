@@ -62,6 +62,35 @@
 
 이전 하네스의 [깊이 기준과 비교 방식](../docs/benchmark.md#비교-보고)은 S1의 100만 건 처리량이 빈 큐 처리량의 70% 이상인지 본다. 여기서는 `settleThroughput` 비율이 ACK 처리량에 가장 가까운 지표이며, 새 시나리오는 동시 프로듀서·컨슈머를 사용하므로 70%는 참고 기준이지 자동 합격 판정은 아니다. 이전 S3 지연 기준은 POWER_LOSS p99 10ms 이하였고, 새 `deliveryLatencyP99Nanos`는 같은 발행-꺼내기 경로를 보지만 배치 간격과 부하가 달라 직접적인 같은 조건 비교는 아니다. 이전 절대 처리량 floor(P1/P3/P7)는 이 시나리오의 메시지 배치 크기와 달라 적용하지 않는다.
 
+## Kafka 단일 노드 내구성 비교
+
+Kafka CLI의 계획은 Docker 없이 확인할 수 있다. 먼저 smq JAR을 만들고 `plan`을 실행한다.
+
+```sh
+./gradlew jar
+./gradlew -p smoke-harness run --args="kafka plan"
+```
+
+로컬 Docker가 실행 중일 때 아래 명령으로 단건·배치 발행 측정과 네 가지 강제 종료 시점의 복구 관찰을 수행한다. `kafka run`은 두 토픽 설정을 각각 별도 단일 브로커와 데이터 볼륨에서 실행한다.
+
+```sh
+./gradlew -p smoke-harness run --args="kafka run --count 1000 --warmup 100 --repeat 3 --batch-size 100 --payload-bytes 256 --port 19092 --work-dir smoke-harness/build/kafka-work --output smoke-harness/build/kafka-report.json"
+```
+
+두 설정 모두 토픽 복제 계수와 `min.insync.replicas`가 1이고, 발행자는 `acks=all`을 사용한다. 기본 설정은 토픽 `flush.messages`를 덮어쓰지 않아 브로커 기본값을 사용한다. 두 번째 설정은 토픽을 `flush.messages=1`로 만든다. 보고서의 `brokerConfigurations`와 `measurements[].topicConfiguration.settings`에는 AdminClient가 읽은 설정값, 설정 출처, 기본값 여부가 들어간다. `serverVersion`과 `clientVersion`은 실제 실행 버전이며 서버 이미지는 `apache/kafka:4.4.0`으로 고정되어 있다.
+
+측정 보고서에는 성공한 producer 응답 수, consumer-group `commitSync` 응답에 따른 정산 수와 지연, 측정 전·후 그룹 lag가 기록된다. 복구 시나리오는 publish 응답 직후, 전달 후 commit 전, commit 응답 직후, 응답이 오기 전 요청 진행 중에 브로커를 강제 종료하고 같은 Docker 볼륨과 `/var/lib/kafka/data`로 다시 시작한다. 보고서에는 재시작 후 노드·컨트롤러·파티션 leader·replica·ISR 확인 결과, 외부 완료 원장, 레코드와 그룹 offset 관찰이 포함된다. 요청 중 연결이 끊겨 응답을 받지 못한 발행은 `UNKNOWN`으로 집계한다. 재시작 뒤 레코드가 관찰되지 않더라도 그 사실만으로 요청이 적용되지 않았다고 판정하지 않는다.
+
+Docker 기반 CLI 테스트는 명시적으로 켰을 때만 브로커를 시작한다. 이 테스트는 기본 설정과 `flush.messages=1` 설정 모두를 실행한다.
+
+```sh
+SMQ_KAFKA_DOCKER_TESTS=true ./gradlew -p smoke-harness test --tests io.github.ppzxc.smq.harness.KafkaCliTest --rerun-tasks
+```
+
+테스트가 만든 컨테이너와 데이터 볼륨은 테스트 종료 때 제거된다. 결과 보고서와 외부 원장은 지정한 `--output` 및 `--work-dir` 경로에 남는다.
+
+하네스 실행에 쓰는 Kafka 클라이언트는 Gradle이 이름 있는 모듈로 올릴 수 있도록 `build/kafka-module/` 아래에 manifest만 보강한 빌드 전용 JAR로 준비한다. 이 JAR과 Kafka 의존성은 smq 배포 JAR이나 소스 JAR에 포함되지 않는다.
+
 루트의 `./gradlew check`는 smq JAR/소스 JAR에서 하네스와 그 의존성이 빠졌는지 검사하고 하네스 CLI 테스트도 실행한다. 이 테스트는 별도 JVM에서 배포 JAR을 이름 있는 JPMS 모듈로 실행한다.
 
 ## RabbitMQ 비교 (선택 실행)
